@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord } from './types';
 import { empty, emptyPlan, load, save, uid, todayStr, todayDow } from './store';
+import { workspaceColor } from './goalTasks';
 
 const emptyEntry: Omit<WorkspaceEntry, 'workspace'> = {
   plan: emptyPlan,
@@ -234,11 +235,37 @@ export function useStore() {
     updateWorkspace(wsId, e => ({ ...e, growthStageIndex: (e.growthStageIndex ?? 0) + 1 }));
   const setGrowthStageIndex = (wsId: string, idx: number) =>
     updateWorkspace(wsId, e => ({ ...e, growthStageIndex: Math.max(0, idx) }));
-  // 업무 영역 목표 달성 토글
+  // 업무 영역 목표 달성 토글 — 달성하면 여정 지도에 깃발 추가, 해제하면 제거
   const toggleAreaGoalAchieved = (wsId: string, areaId: string) =>
-    updateWorkspace(wsId, e => {
-      const cur = e.achievedAreaGoals ?? [];
-      return { ...e, achievedAreaGoals: cur.includes(areaId) ? cur.filter(x => x !== areaId) : [...cur, areaId] };
+    update(d => {
+      const entry = d.workspaces.find(e => e.workspace.id === wsId);
+      if (!entry) return d;
+      const cur = entry.achievedAreaGoals ?? [];
+      const isAchieved = cur.includes(areaId);
+      const area = (entry.plan.workAreas ?? []).find(a => a.id === areaId);
+      const workspaces = d.workspaces.map(e =>
+        e.workspace.id === wsId
+          ? { ...e, achievedAreaGoals: isAchieved ? cur.filter(x => x !== areaId) : [...cur, areaId] }
+          : e,
+      );
+      let flags = d.journeyFlags ?? [];
+      if (isAchieved) {
+        flags = flags.filter(f => !(f.wsId === wsId && f.areaId === areaId));
+      } else if (area) {
+        if (!flags.some(f => f.wsId === wsId && f.areaId === areaId)) {
+          flags = [...flags, {
+            id: uid(),
+            wsId,
+            wsName: entry.workspace.name,
+            areaId,
+            areaName: area.name,
+            goal: area.goal,
+            color: workspaceColor(d.workspaces, wsId),
+            achievedAt: new Date().toISOString(),
+          }];
+        }
+      }
+      return { ...d, workspaces, journeyFlags: flags };
     });
 
   // 오프 기간: fromDate(포함) 이후의 모든 일정 날짜를 days만큼 뒤로 밀기 (전체 사업)
@@ -536,6 +563,7 @@ export function useStore() {
     addProgram, updateProgram, deleteProgram, reorderPrograms,
     addProgramToWs, updateProgramInWs, deleteProgramInWs, reorderProgramsInWs,
     setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, shiftAllSchedulesAfter,
+    journeyFlags: appData.journeyFlags ?? [],
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo,
     offDays, isOffDay, toggleOffDay,
     areaOrder, moveArea, setAreaOrder,

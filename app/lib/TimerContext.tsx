@@ -16,6 +16,27 @@ function localDateStr(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+// 자정을 넘는 세션은 날짜별로 쪼개서 각 날짜에 초를 배분 (자정 이후 시간이 전날로 잘못 쌓이는 것 방지)
+function splitByDay(start: number, end: number): Record<string, number> {
+  const res: Record<string, number> = {};
+  let cur = start;
+  while (cur < end) {
+    const d = new Date(cur);
+    const dayStr = localDateStr(d);
+    const nextMid = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
+    const segEnd = Math.min(end, nextMid);
+    res[dayStr] = (res[dayStr] ?? 0) + Math.floor((segEnd - cur) / 1000);
+    cur = segEnd;
+  }
+  return res;
+}
+
+// dateStr(YYYY-MM-DD)의 로컬 자정 timestamp
+function dayStartMs(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+}
+
 type AllTimes = Record<string, Record<string, number>>;
 type ActiveSessions = Record<string, number>; // taskId -> startedAt(ms)
 
@@ -57,8 +78,9 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const activeSessionsRef = useRef<ActiveSessions>({});
   const focusStartRef = useRef<number | null>(null);
 
-  // 로드 + 진행 중이던 세션/집중창 복원
+  // 로드 + 진행 중이던 세션/집중창 복원 (마운트 시 localStorage → state, 의도된 초기화 패턴)
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) setAllTimes(JSON.parse(raw)); } catch { /* empty */ }
     try { const raw = localStorage.getItem(FOCUS_TIMES_KEY); if (raw) setFocusTimes(JSON.parse(raw)); } catch { /* empty */ }
     try { const raw = localStorage.getItem(SESSION_LOG_KEY); if (raw) setSessionLog(JSON.parse(raw)); } catch { /* empty */ }
@@ -84,6 +106,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       try { localStorage.setItem(FOCUS_START_KEY, JSON.stringify(focusStartRef.current)); } catch { /* empty */ }
     }
     setReady(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   useEffect(() => { if (ready) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allTimes)); } catch { /* empty */ } } }, [allTimes, ready]);
@@ -117,22 +140,29 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   // 순수 누적기 (functional setState — 부수효과 없음)
   const addTaskTime = useCallback((taskId: string, start: number, end: number) => {
-    const s = Math.floor((end - start) / 1000);
-    if (s <= 0) return;
-    const key = localDateStr(new Date(start));
+    if (end - start < 1000) return;
+    const perDay = splitByDay(start, end); // 자정 넘으면 날짜별로 배분
     setAllTimes(prev => {
-      const day = { ...(prev[key] ?? {}) };
-      day[taskId] = (day[taskId] ?? 0) + s;
-      return { ...prev, [key]: day };
+      const next = { ...prev };
+      for (const [key, s] of Object.entries(perDay)) {
+        if (s <= 0) continue;
+        const day = { ...(next[key] ?? {}) };
+        day[taskId] = (day[taskId] ?? 0) + s;
+        next[key] = day;
+      }
+      return next;
     });
     // 업무 시작/종료 시각 기록
     setSessionLog(prev => [...prev, { taskId, start, end }]);
   }, []);
   const addFocusTime = useCallback((start: number, end: number) => {
-    const s = Math.floor((end - start) / 1000);
-    if (s <= 0) return;
-    const key = localDateStr(new Date(start));
-    setFocusTimes(prev => ({ ...prev, [key]: (prev[key] ?? 0) + s }));
+    if (end - start < 1000) return;
+    const perDay = splitByDay(start, end);
+    setFocusTimes(prev => {
+      const next = { ...prev };
+      for (const [key, s] of Object.entries(perDay)) if (s > 0) next[key] = (next[key] ?? 0) + s;
+      return next;
+    });
   }, []);
 
   const persistFocusStart = (v: number | null) => {
@@ -207,13 +237,14 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const getDisplaySeconds = useCallback((dateStr: string, taskId: string) => {
     const base = (allTimes[dateStr] ?? {})[taskId] ?? 0;
     const st = activeSessions[taskId];
-    if (dateStr === today && st != null) return base + Math.floor((Date.now() - st) / 1000);
+    // 라이브 구간은 오늘 자정 이후만 카운트 (자정 넘겨 실행 중이어도 오늘분은 00:00부터)
+    if (dateStr === today && st != null) return base + Math.floor((Date.now() - Math.max(st, dayStartMs(today))) / 1000);
     return base;
   }, [allTimes, activeSessions, today]);
 
   const getDayTotalSeconds = useCallback((dateStr: string) => {
     const base = focusTimes[dateStr] ?? 0;
-    if (dateStr === today && focusStartRef.current != null) return base + Math.floor((Date.now() - focusStartRef.current) / 1000);
+    if (dateStr === today && focusStartRef.current != null) return base + Math.floor((Date.now() - Math.max(focusStartRef.current, dayStartMs(today))) / 1000);
     return base;
   }, [focusTimes, today]);
 

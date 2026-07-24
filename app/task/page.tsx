@@ -32,11 +32,13 @@ function toDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// 캘린더 셀의 작업시간 pill용 (M:SS)
-function mmss(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, '0')}`;
+// 캘린더 셀의 작업시간 pill용 — 시간 단위 (예: 1시간 20분 / 45분)
+function hoursLabel(s: number): string {
+  const totalMin = Math.round(s / 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0) return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+  return `${m}분`;
 }
 
 function calcDday(deadline: string): { label: string; urgent: boolean } {
@@ -270,9 +272,8 @@ export default function TaskPage() {
           <button
             onClick={() => {
               if (!t.done) stopTaskTimer(t.key);
-              t.recurring
-                ? store.toggleProgramTodoDate(t.wsId, t.programId, t.deadlineId, t.todoId, selDateStr)
-                : store.toggleProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, selDateStr);
+              if (t.recurring) store.toggleProgramTodoDate(t.wsId, t.programId, t.deadlineId, t.todoId, selDateStr);
+              else store.toggleProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, selDateStr);
             }}
             style={{ borderColor: t.done ? '#9DFE3B' : '#C7CEC7', backgroundColor: t.done ? '#9DFE3B' : 'transparent' }}
             className="w-[18px] h-[18px] rounded-full flex-shrink-0 border-2 transition-colors flex items-center justify-center"
@@ -383,7 +384,7 @@ export default function TaskPage() {
           {isPast
             ? (secs > 0 && (
                 <div className="flex justify-center">
-                  <span className="text-[11px] font-semibold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{mmss(secs)}</span>
+                  <span className="text-[11px] font-semibold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{hoursLabel(secs)}</span>
                 </div>
               ))
             : (

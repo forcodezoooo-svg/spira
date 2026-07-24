@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useChatContext, ChatSession } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
 import { AI_COPY, RECOMMENDED } from '../lib/ai/messages';
@@ -35,6 +35,7 @@ export default function AIChatButton() {
   const chat = useChatContext();
   const { chatOpen, toggleChat, chatDocked } = useUI();
   const pathname = usePathname();
+  const router = useRouter();
   const chips = RECOMMENDED[pathname] ?? RECOMMENDED.default;
   const [input, setInput] = useState('');
   const [isDesktop, setIsDesktop] = useState(true);
@@ -101,6 +102,22 @@ export default function AIChatButton() {
 
   return (
     <>
+      {/* 나의 여정 지도 — 채팅 아이콘 바로 위 스티키 FAB */}
+      {isDesktop && !panelVisible && (
+        <button
+          onClick={() => router.push('/journey')}
+          className="fixed bottom-[86px] right-6 z-40 w-[50px] h-[50px] rounded-full flex items-center justify-center transition-transform hover:scale-105"
+          style={{ backgroundColor: '#16211E', color: '#EDFF9F', boxShadow: 'var(--spira-glow-fab)' }}
+          aria-label="나의 여정 지도"
+          title="나의 여정 지도"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none">
+            <path d="M2 4.5l4-2 4 2 4-2v9l-4 2-4-2-4 2v-9z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+            <path d="M6 2.5v9M10 4.5v9" stroke="currentColor" strokeWidth="1.3" />
+          </svg>
+        </button>
+      )}
+
       {/* 우측 하단 플로팅 버튼 (데스크탑에서 채팅이 닫혀 있을 때 — 모바일은 헤더 버튼 사용) */}
       {isDesktop && !panelVisible && (
         <button

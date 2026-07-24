@@ -1271,19 +1271,22 @@ export default function PlanPage() {
   storeRef.current = store;
   selectedWsIdRef.current = selectedWsId;
 
-  // 초기 선택 워크스페이스 설정
+  // 초기 선택 워크스페이스 설정 — 마지막으로 보던 기획서(비즈니스)로 복원
   useEffect(() => {
     if (!store.ready) return;
-    const wsId = selectedWsId ?? store.data.workspace?.id ?? null;
+    const saved = localStorage.getItem('spira_plan_ws');
+    const validSaved = saved && store.allWorkspacesEntries.some(e => e.workspace.id === saved) ? saved : null;
+    const wsId = selectedWsId ?? validSaved ?? store.data.workspace?.id ?? null;
     setSelectedWsId(wsId);
     const entry = store.allWorkspacesEntries.find(e => e.workspace.id === wsId);
     setPlan(entry ? { ...entry.plan } : store.data.plan);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.ready]);
 
-  // 탭 전환 시 해당 워크스페이스 플랜 로드
+  // 탭 전환 시 해당 워크스페이스 플랜 로드 + 마지막 선택 저장
   useEffect(() => {
     if (!store.ready || !selectedWsId) return;
+    try { localStorage.setItem('spira_plan_ws', selectedWsId); } catch { /* empty */ }
     const entry = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
     if (entry) setPlan({ ...entry.plan });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1479,7 +1482,7 @@ export default function PlanPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
     {/* ── 왼쪽: 메인 ── */}
-    <div className="max-w-2xl min-w-0 pb-24">
+    <div className="min-w-0 pb-24">
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <h1 className="text-[28px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>Plan</h1>

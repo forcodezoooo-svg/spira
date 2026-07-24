@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from './lib/useStore';
 import { useUI } from './lib/UIContext';
-import { getGoalTasksForDate, getGoalDeadlines, GoalTask, programQuarters, workspaceColor } from './lib/goalTasks';
+import { getGoalTasksForDate, GoalTask, programQuarters, workspaceColor } from './lib/goalTasks';
 import TaskTimerButton from './components/TaskTimerButton';
 import TodoEditModal from './components/TodoEditModal';
 import MusicTimer from './components/MusicTimer';
@@ -33,15 +33,18 @@ export default function Home() {
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
+  const [showYesterday, setShowYesterday] = useState(false);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
+  // 마운트 시 localStorage에서 초기값 로드 (SSR 하이드레이션 불일치 방지 위해 effect에서 세팅 — 의도된 패턴)
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     try { setHomeOrder(JSON.parse(localStorage.getItem('spira_home_task_order') ?? '[]')); }
     catch { setHomeOrder([]); }
-    // 프로젝트 진행상황에서 마지막으로 고른 비즈니스 유지 (새로고침해도 그대로)
     const savedWs = localStorage.getItem('spira_home_progress_ws');
     if (savedWs) setProgressWsId(savedWs);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   // Home을 떠날 때 열려 있던 채팅 오버레이는 닫기
@@ -126,6 +129,23 @@ export default function Home() {
   const totalTasks = quickTasks.length + goalTasks.length;
   const doneTasks = quickTasks.filter(t => t.completed).length + goalTasks.filter(t => t.done).length;
 
+  // ── 어제 못한 업무 — 어제 예정이었는데 완료 안 한 업무를 '복구'하도록 보여줌 ──
+  const yDate = new Date(today); yDate.setDate(yDate.getDate() - 1);
+  const yStr = localDateStr(yDate);
+  const yDow = yDate.getDay();
+  // 오늘 목록에 이미 있는(자동 이월 등) 업무는 제외 → 중복 없음. 반복 업무는 '오늘로'가 의미 없어 제외.
+  const todayKeys = new Set([...goalTasks.map(t => t.key), ...quickTasks.map(t => `quick:${t.id}`)]);
+  const yGoalUndone = getGoalTasksForDate(store.allWorkspacesEntries, yStr, yDow)
+    .filter(t => !t.done && !t.recurring && !todayKeys.has(t.key));
+  const yQuickUndone = store.getQuickTasksForDate(yStr).filter(t => !t.completed && !todayKeys.has(`quick:${t.id}`));
+  const yesterdayUndoneCount = yGoalUndone.length + yQuickUndone.length;
+  // 오늘로 가져오기
+  const carryGoalToToday = (t: GoalTask) => {
+    const patch: Partial<ProgramTodo> = { date: dateStr };
+    if (!t.deadline || t.deadline < dateStr) patch.deadline = dateStr;
+    store.updateProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, patch);
+  };
+
   // 오늘의 업무 통합 목록 (목표 + 추가 업무) — 수동 순서 적용
   type TodayItem = { key: string; kind: 'goal' | 'quick'; goal?: GoalTask; quick?: typeof quickTasks[number] };
   const todayItems: TodayItem[] = [
@@ -179,30 +199,27 @@ export default function Home() {
   const netProfit = monthIncome - monthExpense - subTotal;
 
   // ── 업커밍 데드라인 (전체 워크스페이스) ──────────────────────────────────────
-  type Upcoming = { key: string; name: string; date: string; color: string; kind: '프로그램' | '업무'; wsName: string };
+  type Upcoming = { key: string; name: string; date: string; color: string; kind: '목표'; wsName: string };
   const upcoming: Upcoming[] = [];
   for (const entry of store.allWorkspacesEntries) {
+    // 전체 비즈니스의 목표(프로그램) 모두 표시. 기한 = 목표 기한 또는 데드라인 항목 중 가장 늦은 날. 별(마커) 색 = 비즈니스 색.
     for (const p of entry.programs) {
-      if (p.deadline && p.deadline >= dateStr) {
-        upcoming.push({ key: `p-${p.id}`, name: p.name, date: p.deadline, color: p.color || '#a78bfa', kind: '프로그램', wsName: entry.workspace.name });
+      const effDeadline = p.deadline || (p.deadlines ?? []).map(d => d.date).filter(Boolean).sort().slice(-1)[0];
+      if (effDeadline && effDeadline >= dateStr) {
+        upcoming.push({ key: `p-${p.id}`, name: p.name, date: effDeadline, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '목표', wsName: entry.workspace.name });
       }
-    }
-  }
-  // Goals의 데드라인(프로그램 내 데드라인 항목)
-  for (const dl of getGoalDeadlines(store.allWorkspacesEntries)) {
-    if (dl.date >= dateStr) {
-      upcoming.push({ key: `gdl-${dl.key}`, name: dl.name, date: dl.date, color: dl.color, kind: '업무', wsName: dl.wsName });
     }
   }
   upcoming.sort((a, b) => a.date.localeCompare(b.date));
   // 같은 날짜에 끝나는 여정은 한 점으로 묶기
   const journeyGroups: { date: string; items: Upcoming[] }[] = [];
   for (const u of upcoming) {
-    const g = journeyGroups.find(x => x.date === u.date);
+    // 같은 날짜 + 같은 비즈니스만 한 점으로 묶기 (다른 비즈니스면 각각 따로)
+    const g = journeyGroups.find(x => x.date === u.date && x.items[0].wsName === u.wsName);
     if (g) g.items.push(u);
     else journeyGroups.push({ date: u.date, items: [u] });
   }
-  const journey = journeyGroups.slice(0, 5);
+  const journey = journeyGroups.slice(0, 5); // 다가오는 목표 5개 고정
 
 
   // ── 프로젝트 진행상황 (전체 사업 중 현재 분기에 속한 프로그램) ──────────────────
@@ -286,9 +303,8 @@ export default function Home() {
         <button
           onClick={() => {
             if (!t.done) stopTaskTimer(t.key);
-            t.recurring
-              ? store.toggleProgramTodoDate(t.wsId, t.programId, t.deadlineId, t.todoId, dateStr)
-              : store.toggleProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, dateStr);
+            if (t.recurring) store.toggleProgramTodoDate(t.wsId, t.programId, t.deadlineId, t.todoId, dateStr);
+            else store.toggleProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, dateStr);
           }}
           style={{ borderColor: t.done ? '#9DFE3B' : '#C7CEC7', backgroundColor: t.done ? '#9DFE3B' : 'transparent' }}
           className="w-[18px] h-[18px] rounded-full flex-shrink-0 border-2 transition-colors flex items-center justify-center"
@@ -393,13 +409,13 @@ export default function Home() {
             <div className="relative">
               {/* 다이아몬드 중앙(마커 행 높이 24px의 절반)을 지나는 연결선 */}
               <div className="absolute left-0 right-0 top-3 h-px -translate-y-1/2" style={{ backgroundColor: 'var(--spira-border)' }} />
-              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${journey.slice(0, 4).length}, minmax(0, 1fr))` }}>
-                {journey.slice(0, 4).map(group => {
+              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${journey.length}, minmax(0, 1fr))` }}>
+                {journey.map(group => {
                   const dday = calcDday(group.date);
                   const first = group.items[0];
-                  const diamondColor = dday.urgent ? '#9DFE3B' : '#A78BFA';
+                  const diamondColor = first.color; // 비즈니스 색
                   return (
-                    <div key={group.date} className="min-w-0">
+                    <div key={`${group.date}-${first.wsName}`} className="min-w-0">
                       <div className="flex items-center gap-2 h-6 relative z-10">
                         <svg viewBox="0 0 15 15" className="w-3.5 h-3.5 flex-shrink-0"><path d="M7.3 14.61C5.33 11.75 2.85 9.27 0 7.31C2.86 5.34 5.34 2.86 7.3 0C9.27 2.86 11.75 5.34 14.6 7.3C11.74 9.27 9.26 11.75 7.3 14.6V14.61Z" fill={diamondColor} /></svg>
                         <span className="text-[12px] font-semibold rounded-full px-2.5 py-0.5 truncate" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{dday.label}</span>
@@ -444,6 +460,43 @@ export default function Home() {
           </div>
           <button onClick={() => router.push('/task')} className="text-[13px] transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>전체보기</button>
         </div>
+
+        {/* 어제 못한 업무 — 복구해서 보기 */}
+        {yesterdayUndoneCount > 0 && (
+          <div className="mb-4">
+            <button
+              onClick={() => setShowYesterday(s => !s)}
+              className="w-full flex items-center justify-between rounded-2xl px-4 py-3 transition-colors hover:brightness-[0.98]"
+              style={{ backgroundColor: '#FCF3E6' }}
+            >
+              <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: '#96631A' }}>
+                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.3" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.5V8l2.3 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                어제 못한 업무 {yesterdayUndoneCount}개
+              </span>
+              <svg className={`w-4 h-4 transition-transform ${showYesterday ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#C9A662' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            {showYesterday && (
+              <ul className="mt-2 space-y-2">
+                {yGoalUndone.map(t => (
+                  <li key={t.key} className="flex items-center gap-2.5 bg-white border rounded-2xl px-4 py-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                    <span className="text-[14px] truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{t.name}</span>
+                    <span className="text-[11px] flex-shrink-0" style={{ color: '#9AA39D' }}>{t.programName}</span>
+                    <button onClick={() => carryGoalToToday(t)} className="text-[12px] font-semibold rounded-full px-3 py-1 flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>오늘로</button>
+                  </li>
+                ))}
+                {yQuickUndone.map(t => (
+                  <li key={t.id} className="flex items-center gap-2.5 bg-white border rounded-2xl px-4 py-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#C4CCC4' }} />
+                    <span className="text-[14px] truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{t.name}</span>
+                    <span className="text-[11px] flex-shrink-0" style={{ color: '#9AA39D' }}>추가 업무</span>
+                    <button onClick={() => store.moveQuickTask(t.id, dateStr)} className="text-[12px] font-semibold rounded-full px-3 py-1 flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>오늘로</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* 태스크 목록 */}
         {totalTasks > 0 && (

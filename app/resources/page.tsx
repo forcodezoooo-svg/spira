@@ -269,7 +269,7 @@ export default function ResourcesPage() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
       {/* ── 왼쪽: 메인 ── */}
-      <div className="max-w-2xl min-w-0">
+      <div className="min-w-0">
         {/* 헤더 */}
         <h1 className="text-[28px] font-black tracking-[-0.02em] mb-3" style={{ color: '#16211E' }}>Resources</h1>
 

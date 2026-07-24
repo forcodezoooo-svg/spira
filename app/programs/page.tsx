@@ -316,6 +316,8 @@ export default function ProgramsPage() {
   // 1순위만 보기 (일괄 디데이 설정 화면)
   const [onlyPriority1, setOnlyPriority1] = useState(false);
   const [highlightProg, setHighlightProg] = useState<string | null>(null);
+  const [highlightKey, setHighlightKey] = useState<string | null>(null); // 좌측 항목 클릭 시 캘린더에서 강조할 막대 key
+  const [notPlaced, setNotPlaced] = useState<string | null>(null);       // 캘린더에 배치 안 된 항목 안내
 
   // 딥링크: Resources의 ?source=&ws= / Task의 ?ws=&prog=&y=&q= 로 넘어온 경우 처리 (URL은 정리)
   useEffect(() => {
@@ -387,6 +389,37 @@ export default function ProgramsPage() {
     const d = new Date(focus);
     if (!isNaN(d.getTime())) setCalMonth(new Date(d.getFullYear(), d.getMonth(), 1));
   }, [activeStart, activeEnd]);
+
+  // 좌측 항목 클릭 → 캘린더에서 그 막대를 화면 중앙으로 스크롤하고 잠시 강조
+  useEffect(() => {
+    if (!highlightKey) return;
+    const t = setTimeout(() => {
+      const container = weeksRef.current;
+      const el = container?.querySelector(`[data-cal-bar="${highlightKey}"]`) as HTMLElement | null;
+      if (container && el) {
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        container.scrollTop += (eRect.top - cRect.top) - (container.clientHeight / 2 - eRect.height / 2);
+      }
+    }, 60); // 달 변경 후 DOM 반영 대기
+    const clear = setTimeout(() => setHighlightKey(null), 2600);
+    return () => { clearTimeout(t); clearTimeout(clear); };
+  }, [highlightKey, calMonth, calLevel]);
+
+  // '배치 안 됨' 안내 자동 사라짐
+  useEffect(() => {
+    if (!notPlaced) return;
+    const t = setTimeout(() => setNotPlaced(null), 2800);
+    return () => clearTimeout(t);
+  }, [notPlaced]);
+
+  // 좌측 항목(목표/데드라인/업무) 클릭 → 해당 탭으로 전환 + 그 달로 이동 + 막대 강조. 미배치면 안내.
+  const focusCal = (level: CalLevel, key: string, start?: string, end?: string, name = '') => {
+    setCalLevel(level);
+    setPreviewTask({ start, end, name });
+    if (start || end) { setHighlightKey(key); setNotPlaced(null); }
+    else { setHighlightKey(null); setNotPlaced(name); }
+  };
 
   if (!store.ready) return null;
 
@@ -856,12 +889,12 @@ export default function ProgramsPage() {
     !allowedBounds || ((!allowedBounds.min || ds >= allowedBounds.min) && (!allowedBounds.max || ds <= allowedBounds.max));
 
   const CalendarPanel = (
-    <aside className="hidden xl:block flex-1 min-w-[360px] sticky top-8 space-y-4">
+    <aside className="hidden xl:flex flex-col flex-1 min-w-[360px] sticky top-8 gap-4 max-h-[calc(100vh-3rem)]">
       {/* 플레이바 + 공용 메모 (Home·Task와 동일) */}
-      <MusicTimer compact />
-      <MemoPanel />
+      <div className="flex-shrink-0"><MusicTimer compact /></div>
+      <div className="flex-shrink-0"><MemoPanel /></div>
 
-      <div className="bg-white border rounded-[24px] p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }} onDragEnter={() => setHtmlDragging(true)}>
+      <div className="bg-white border rounded-[24px] p-6 flex-1 min-h-0 flex flex-col" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }} onDragEnter={() => setHtmlDragging(true)}>
         {/* 월 네비 */}
         <div className="flex items-center justify-between mb-2.5">
           <button onClick={() => setCalMonth(new Date(calY, calMo - 1, 1))} className="w-9 h-9 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} title="이전 달">
@@ -911,6 +944,13 @@ export default function ProgramsPage() {
           ))}
         </div>
 
+        {/* 캘린더에 배치 안 된 항목 클릭 시 안내 */}
+        {notPlaced && (
+          <div className="mb-3 rounded-xl px-3 py-2 text-[12px] text-center leading-relaxed" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>
+            ‘{notPlaced}’은(는) 아직 캘린더에 배치되지 않았어요. 왼쪽 항목을 드래그해 날짜에 놓아보세요.
+          </div>
+        )}
+
         <div className="grid grid-cols-7 mb-2">
           {DOW.map(d => (
             <div key={d} className="text-center text-[12px] py-1 font-medium" style={{ color: '#9AA39D' }}>{d}</div>
@@ -919,7 +959,7 @@ export default function ProgramsPage() {
 
         {/* 단계별 기간을 드래그로 이동/조절 가능한 간트 막대로 표시 (주 단위) */}
         <div
-          className="relative"
+          className="relative flex-1 min-h-0 flex flex-col"
           onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }}
           onDrop={e => {
             e.preventDefault();
@@ -938,7 +978,7 @@ export default function ProgramsPage() {
         {calDrag && (
           <div className="absolute top-full left-0 right-0 mt-1 h-6 z-20 flex items-center justify-center text-[11px] font-semibold text-violet-700 bg-violet-100/95 rounded-lg border border-violet-200 pointer-events-none">▼ 아래로 끌면 다음 달 ({(calMo + 2) > 12 ? (calMo + 2 - 12) : calMo + 2}월)</div>
         )}
-        <div className="space-y-1.5" ref={weeksRef}>
+        <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1" ref={weeksRef}>
           {calWeeks.map((week, wi) => {
             const days = week.filter((d): d is string => !!d);
             if (!days.length) return <div key={wi} />;
@@ -1026,33 +1066,49 @@ export default function ProgramsPage() {
                 >
                   {realLanes.flatMap((lane, li) => lane.map((b, bi) => {
                     const dragging = calDrag?.key === b.r.key;
+                    const hot = b.r.key === highlightKey; // 좌측에서 클릭한 항목
                     return (
                       <div
                         key={`${li}-${bi}`}
+                        data-cal-bar={b.r.key}
                         style={{ gridColumn: `${b.sc + 1} / ${b.ec + 2}`, gridRow: li + 1 }}
                         className={`group/bar relative flex flex-col justify-start min-w-0 cursor-grab active:cursor-grabbing select-none ${dragging ? 'opacity-90' : ''}`}
                         onMouseDown={e => startCalDrag(b.r, 'move', e)}
                         title={`${b.r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
                       >
+                        {/* 클릭한 업무 강조 하이라이트 */}
+                        {hot && <span className="absolute -inset-x-1.5 -top-1 -bottom-1 rounded-lg animate-pulse pointer-events-none z-0" style={{ backgroundColor: b.r.color, opacity: 0.2, boxShadow: `0 0 0 2px ${b.r.color}` }} />}
                         {/* 얇은 기간 라인 */}
-                        <div className="relative h-[3px] mt-1 rounded-full" style={{ backgroundColor: b.r.color, opacity: dragging ? 1 : 0.9 }}>
-                          {b.startsHere && <span className="absolute -left-px -top-[2.5px] w-[7px] h-[7px] rounded-full" style={{ backgroundColor: b.r.color }} />}
-                          {b.endsHere && <span className="absolute -right-px -top-[2.5px] w-[7px] h-[7px] rounded-full" style={{ backgroundColor: b.r.color }} />}
+                        <div className="relative h-[3px] mt-2.5 rounded-full" style={{ backgroundColor: b.r.color, opacity: dragging || hot ? 1 : 0.9 }}>
+                          {/* 시작 그립 (드래그로 시작일 조절) */}
+                          {b.startsHere && (
+                            <div
+                              onMouseDown={e => startCalDrag(b.r, 'resize-start', e)}
+                              className="absolute -left-2 -top-2 w-4 h-[17px] flex items-center justify-center cursor-ew-resize z-20"
+                              title="시작일 조절"
+                            >
+                              <span className="w-[9px] h-[9px] rounded-full" style={{ backgroundColor: b.r.color, boxShadow: '0 0 0 2px #fff' }} />
+                            </div>
+                          )}
+                          {/* 끝 그립 (드래그로 기간 연장/단축) */}
+                          {b.endsHere && (
+                            <div
+                              onMouseDown={e => startCalDrag(b.r, 'resize-end', e)}
+                              className="absolute -right-2 -top-2 w-4 h-[17px] flex items-center justify-center cursor-ew-resize z-20"
+                              title="완료일 조절 (기간 연장)"
+                            >
+                              <span className="w-[9px] h-[9px] rounded-full" style={{ backgroundColor: b.r.color, boxShadow: '0 0 0 2px #fff' }} />
+                            </div>
+                          )}
                         </div>
                         {/* 라벨 (라인 아래, 중앙) */}
-                        <span className="mt-1 text-center text-[10px] leading-none truncate px-1" style={{ color: '#7A857E' }}>{b.r.name}</span>
-                        {/* 양끝 리사이즈 핸들 (투명 히트영역) */}
-                        {b.startsHere && (
-                          <div onMouseDown={e => startCalDrag(b.r, 'resize-start', e)} className="absolute left-0 top-0 h-3 w-2.5 cursor-ew-resize" />
-                        )}
-                        {b.endsHere && (
-                          <div onMouseDown={e => startCalDrag(b.r, 'resize-end', e)} className="absolute right-0 top-0 h-3 w-2.5 cursor-ew-resize" />
-                        )}
+                        <span className={`relative z-10 mt-1.5 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: hot ? '#16211E' : '#7A857E' }}>{b.r.name}</span>
+                        {/* X 삭제 — 호버 시 가운데 위에 표시 (양끝 그립과 겹치지 않게) */}
                         {b.endsHere && (
                           <button
                             onMouseDown={e => e.stopPropagation()}
                             onClick={e => { e.stopPropagation(); clearOneSchedule(b.r); }}
-                            className="absolute -right-1 -top-1 z-10 w-3.5 h-3.5 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[9px] opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer"
+                            className="absolute left-1/2 -translate-x-1/2 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer"
                             title="이 일정을 캘린더에서 삭제 (내용 유지)"
                           >×</button>
                         )}
@@ -1077,13 +1133,6 @@ export default function ProgramsPage() {
     <div className="max-w-2xl flex-1 min-w-0">
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-[28px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>Goals</h1>
-        <span className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: '#8D9A8D' }}>
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
-            <path d="M2 3.5C2 3 2.4 2.7 3 2.8L6.5 3.6 9.5 2.6 13 3.4C13.6 3.5 14 4 14 4.5V12.2C14 12.8 13.5 13.2 12.9 13.1L9.5 12.4 6.5 13.4 3.1 12.6C2.5 12.5 2 12 2 11.5V3.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-            <path d="M6.5 3.6V13.4M9.5 2.6V12.4" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-          나의 여정 지도 확인
-        </span>
       </div>
 
       {/* ── 사업 성장 단계 목표 (Plan 연동) ─────────────────────────────────── */}
@@ -1487,7 +1536,7 @@ export default function ProgramsPage() {
                             <button
                               draggable
                               onDragStart={e => startListDrag({ level: 'program', wsId: p.wsId, programId: p.id }, e)}
-                              onClick={() => setPreviewTask({ start: p.startDate, end: p.deadline, name: p.name })}
+                              onClick={() => { const pp = progPeriod(p); focusCal('program', `p-${p.id}`, pp?.start, pp?.end, p.name); }}
                               className="text-base font-semibold text-neutral-900 text-left hover:text-violet-700 hover:underline decoration-dotted underline-offset-4 transition-colors cursor-grab active:cursor-grabbing"
                               title="클릭: 캘린더에 기간 표시 · 드래그: 캘린더 날짜에 배치"
                             >
@@ -1602,8 +1651,9 @@ export default function ProgramsPage() {
                             <span
                               draggable
                               onDragStart={e => startListDrag({ level: 'deadline', wsId: p.wsId, programId: p.id, deadlineId: dl.id }, e)}
-                              className="text-sm font-semibold text-neutral-800 flex-1 min-w-0 truncate cursor-grab active:cursor-grabbing"
-                              title="드래그해서 캘린더 날짜에 이 데드라인을 배치"
+                              onClick={() => { const dp = dlPeriod(p, dl); focusCal('deadline', `d-${dl.id}`, dp?.start, dp?.end, dl.name); }}
+                              className="text-sm font-semibold text-neutral-800 flex-1 min-w-0 truncate cursor-grab active:cursor-grabbing hover:underline decoration-dotted underline-offset-2"
+                              title="클릭: 캘린더 '데드라인'에서 위치 표시 · 드래그: 캘린더 날짜에 배치"
                             >{dl.name}</span>
                             {dl.todos.length > 0 && (
                               <span className="text-[10px] text-neutral-400 flex-shrink-0">{doneCount}/{dl.todos.length}</span>
@@ -1702,8 +1752,8 @@ export default function ProgramsPage() {
                                   <span
                                     draggable
                                     onDragStart={e => startListDrag({ level: 'todo', wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id }, e)}
-                                    onClick={() => setPreviewTask({ start: t.date, end: effDeadline || undefined, name: t.name })}
-                                    title="클릭: 캘린더에 기간 표시 · 드래그: 캘린더 날짜에 배치"
+                                    onClick={() => focusCal('todo', `t-${t.id}`, t.date || t.deadline, t.deadline || t.date, t.name)}
+                                    title="클릭: 캘린더 '업무'에서 위치 표시 · 드래그: 캘린더 날짜에 배치"
                                     className={`text-sm transition-colors cursor-grab active:cursor-grabbing hover:underline decoration-dotted underline-offset-2 ${shownDone ? 'line-through text-neutral-400' : previewTask?.name === t.name && !editingTodoId ? 'text-violet-700 font-medium' : 'text-neutral-700'}`}
                                   >{t.name}</span>
                                   {!recurring && !t.date && !t.deadline && (

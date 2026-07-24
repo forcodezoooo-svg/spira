@@ -227,6 +227,18 @@ export interface WorkspaceEntry {
   timeRecords: TaskTimeRecord[];
 }
 
+// 나의 여정 지도 — 업무 영역 목표를 달성할 때마다 얻는 깃발
+export interface JourneyFlag {
+  id: string;
+  wsId: string;
+  wsName: string;
+  areaId: string;
+  areaName: string;
+  goal: string;
+  color: string;      // 소속 비즈니스 색
+  achievedAt: string; // ISO 날짜
+}
+
 export interface AppData {
   activeWorkspaceId: string | null;
   workspaces: WorkspaceEntry[];
@@ -234,4 +246,5 @@ export interface AppData {
   offDays?: string[]; // 출근 불가(오프) 날짜 목록 "YYYY-MM-DD" — 오프데이엔 가벼운 작업만 표시
   areaOrder?: string[]; // 업무 영역(이름) 표시 순서 — Goals에서 사용자가 조정
   calendarMemos?: Record<string, string>; // 월별("YYYY-MM") 간단 메모
+  journeyFlags?: JourneyFlag[]; // 나의 여정 지도 — 달성한 영역 목표 깃발 (전 비즈니스 통합)
 }
