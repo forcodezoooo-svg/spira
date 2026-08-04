@@ -74,7 +74,7 @@ export default function LoginPage() {
         {msg && <p className="text-[12px] text-center leading-relaxed" style={{ color: '#FF696C' }}>{msg}</p>}
 
         <p className="text-[11px] text-center leading-relaxed" style={{ color: '#C4CCC4' }}>
-          계속하면 서비스 이용약관과 개인정보 처리방침에<br />동의하는 것으로 간주됩니다.
+          계속하면 <a href="/terms" className="underline hover:text-neutral-500">서비스 이용약관</a>과 <a href="/privacy" className="underline hover:text-neutral-500">개인정보 처리방침</a>에<br />동의하는 것으로 간주됩니다.
         </p>
       </div>
     </div>

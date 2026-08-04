@@ -116,7 +116,11 @@ export default function LandingPage() {
             <img src="/logo.svg" alt="" className="w-5 h-auto opacity-70" />
             <span className="text-[13px]" style={{ color: '#9AA39D' }}>© 2026 Spira</span>
           </div>
-          <span className="text-[12px]" style={{ color: '#C4CCC4' }}>이용약관 · 개인정보 처리방침 (준비 중)</span>
+          <div className="flex items-center gap-3 text-[12px]" style={{ color: '#9AA39D' }}>
+            <Link href="/terms" className="transition-colors hover:text-[#5B6560]">이용약관</Link>
+            <span style={{ color: '#DDE3DD' }}>·</span>
+            <Link href="/privacy" className="transition-colors hover:text-[#5B6560]">개인정보처리방침</Link>
+          </div>
         </div>
       </footer>
     </div>
