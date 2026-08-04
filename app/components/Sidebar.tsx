@@ -185,7 +185,11 @@ export default function Sidebar() {
                     <p className="text-xs font-medium text-neutral-800 truncate">{displayName}</p>
                     <p className="text-[10px] text-neutral-500 truncate">{user.email}</p>
                   </div>
-                  <button onClick={() => { setUserOpen(false); setFeedbackOpen(true); }} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs text-neutral-600 hover:bg-neutral-100 transition-colors">
+                  <Link href="/pricing" onClick={() => setUserOpen(false)} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs font-semibold hover:bg-neutral-100 transition-colors" style={{ color: '#3E6B1F' }}>
+                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l1.9 4 4.1.4-3 2.8.8 4L8 10.6 4.2 12.7l.8-4-3-2.8 4.1-.4L8 1.5z" fill="currentColor" /></svg>
+                    Pro 업그레이드
+                  </Link>
+                  <button onClick={() => { setUserOpen(false); setFeedbackOpen(true); }} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs text-neutral-600 hover:bg-neutral-100 transition-colors border-t border-neutral-100">
                     <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M14 7.5a5.5 5.5 0 01-7.9 4.95L2.5 13.5l1.05-3.6A5.5 5.5 0 1114 7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     의견 보내기
                   </button>

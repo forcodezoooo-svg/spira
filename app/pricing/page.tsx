@@ -1,0 +1,118 @@
+'use client';
+import { useState } from 'react';
+import { useToast } from '../lib/ToastContext';
+
+// 요금제 페이지 (Free / Pro · 월·연). 결제(토스페이먼츠) 연동은 다음 단계에서 '구독하기' 버튼에 붙는다.
+type Cycle = 'monthly' | 'yearly';
+
+const PRICE = {
+  monthly: 9900,
+  yearly: 99000, // 연간 = 2개월치 할인
+};
+
+const FREE_FEATURES = [
+  '워크스페이스 1개',
+  '기본 AI 어시스턴트(Sparky)',
+  'Plan · Goals · Resources',
+  '나의 여정 지도',
+];
+
+const PRO_FEATURES = [
+  '워크스페이스 무제한',
+  'AI 어시스턴트 무제한 · 우선 응답',
+  '여정 지도 고해상도 이미지 추출',
+  '데이터 백업 · 우선 지원',
+];
+
+export default function PricingPage() {
+  const { toast } = useToast();
+  const [cycle, setCycle] = useState<Cycle>('yearly');
+  const fmt = (n: number) => n.toLocaleString('ko-KR');
+
+  const proPrice = PRICE[cycle];
+  const proPerMonth = cycle === 'yearly' ? Math.round(PRICE.yearly / 12) : PRICE.monthly;
+
+  const subscribe = () => {
+    // TODO(결제): 토스페이먼츠 자동결제(빌링) 연동 — 카드 등록 → 빌링키 → 서버 승인 → 구독 활성화
+    toast('결제 연동을 준비 중이에요. 곧 이용하실 수 있어요!', 'info');
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="text-center mb-8">
+        <h1 className="text-[26px] sm:text-[30px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>더 크게 성장할 준비가 되셨나요?</h1>
+        <p className="text-[14px] mt-2" style={{ color: '#5B6560' }}>Pro로 업그레이드하고 제한 없이 Spira를 활용하세요.</p>
+      </div>
+
+      {/* 월/연 토글 */}
+      <div className="flex items-center justify-center mb-8">
+        <div className="inline-flex items-center rounded-full p-1" style={{ backgroundColor: '#F1F1EB' }}>
+          {(['monthly', 'yearly'] as Cycle[]).map(c => {
+            const on = cycle === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setCycle(c)}
+                className="px-5 py-2 rounded-full text-[13px] font-bold transition-colors flex items-center gap-1.5"
+                style={on ? { backgroundColor: '#16211E', color: '#EDFF9F' } : { color: '#5B6560' }}
+              >
+                {c === 'monthly' ? '월간' : '연간'}
+                {c === 'yearly' && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: on ? '#9DFE3B' : '#DDF4C4', color: '#16211E' }}>2개월 무료</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+        {/* Free */}
+        <div className="bg-white border rounded-3xl p-7" style={{ borderColor: 'rgba(0,41,41,0.1)' }}>
+          <p className="text-[14px] font-bold mb-1" style={{ color: '#5B6560' }}>Free</p>
+          <p className="text-[30px] font-black mb-1" style={{ color: '#16211E' }}>₩0</p>
+          <p className="text-[13px] mb-6" style={{ color: '#9AA39D' }}>부담 없이 시작하기</p>
+          <ul className="space-y-2.5">
+            {FREE_FEATURES.map(f => (
+              <li key={f} className="flex items-start gap-2 text-[14px]" style={{ color: '#16211E' }}>
+                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                {f}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-7 py-3 rounded-2xl text-center text-[14px] font-bold" style={{ backgroundColor: '#F1F1EB', color: '#9AA39D' }}>현재 이용 중</div>
+        </div>
+
+        {/* Pro */}
+        <div className="rounded-3xl p-7 relative" style={{ backgroundColor: '#16211E', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+          <span className="absolute top-6 right-6 text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추천</span>
+          <p className="text-[14px] font-bold mb-1" style={{ color: '#9DFE3B' }}>Pro</p>
+          <div className="flex items-end gap-1.5 mb-1">
+            <p className="text-[30px] font-black" style={{ color: '#F8F8F8' }}>₩{fmt(proPrice)}</p>
+            <p className="text-[14px] mb-1.5" style={{ color: '#AEB8AE' }}>/ {cycle === 'monthly' ? '월' : '년'}</p>
+          </div>
+          <p className="text-[13px] mb-6" style={{ color: '#AEB8AE' }}>
+            {cycle === 'yearly' ? `월 ₩${fmt(proPerMonth)} 꼴 · 매년 청구` : '매월 청구 · 언제든 해지'}
+          </p>
+          <ul className="space-y-2.5">
+            {PRO_FEATURES.map(f => (
+              <li key={f} className="flex items-start gap-2 text-[14px]" style={{ color: '#F8F8F8' }}>
+                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" viewBox="0 0 12 12" fill="none" style={{ color: '#9DFE3B' }}><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                {f}
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={subscribe}
+            className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+          >
+            Pro 구독하기
+          </button>
+        </div>
+      </div>
+
+      <p className="text-center text-[12px] mt-6" style={{ color: '#C4CCC4' }}>
+        결제는 토스페이먼츠로 안전하게 처리됩니다. 구독은 언제든 해지할 수 있어요.
+      </p>
+    </div>
+  );
+}

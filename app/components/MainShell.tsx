@@ -8,7 +8,7 @@ export default function MainShell({ children }: { children: React.ReactNode }) {
   const { chatDocked } = useUI();
   const path = usePathname();
   // Home·Task·Goals·Resources·Plan은 우측 대시보드 상단에 타이머 pill을 자체적으로 렌더하므로 전역 상단 타이머 숨김.
-  const showGlobalTimer = path !== '/home' && path !== '/task' && path !== '/programs' && path !== '/resources' && path !== '/plan';
+  const showGlobalTimer = path !== '/home' && path !== '/task' && path !== '/programs' && path !== '/resources' && path !== '/plan' && path !== '/pricing';
   return (
     <main
       className={`ml-0 lg:ml-[104px] min-h-screen p-4 pt-20 lg:p-8 transition-[margin] duration-300 ${
