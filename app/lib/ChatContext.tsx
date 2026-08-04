@@ -289,6 +289,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, appContext: appContextRef.current }),
       });
 
+      if (res.status === 429) {
+        // 무료 플랜 하루 한도 초과 — 서버가 준 안내 문구를 채팅에 표시
+        const data = await res.json().catch(() => ({} as { error?: string }));
+        setMessages(prev => [...prev, { role: 'assistant', content: data.error ?? AI_COPY.error }]);
+        return;
+      }
       if (!res.ok || !res.body) throw new Error('응답 오류');
 
       const reader = res.body.getReader();
