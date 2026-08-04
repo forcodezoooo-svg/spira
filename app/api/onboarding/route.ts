@@ -1,6 +1,11 @@
 import OpenAI from 'openai';
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// 지연 초기화: 빌드 중 키 없이 모듈만 로드돼도 터지지 않도록, 요청 시 클라이언트 생성.
+let _client: OpenAI | null = null;
+function getClient() {
+  if (!_client) _client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _client;
+}
 
 // 온보딩 전용 — 사업 설명·첫 목표를 분석해 기획서 초안 + 분기별 목표 + 업무 영역을 JSON으로 반환.
 export async function POST(request: Request) {
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
   const user = `사업 이름: ${name || '(미입력)'}\n사업 설명: ${description || '(미입력)'}\n이루고 싶은 첫 목표: ${goal || '(미입력)'}`;
 
   try {
-    const res = await client.chat.completions.create({
+    const res = await getClient().chat.completions.create({
       model: 'gpt-4o',
       response_format: { type: 'json_object' },
       messages: [
