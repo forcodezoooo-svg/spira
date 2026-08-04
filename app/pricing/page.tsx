@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { loadTossPayments } from '@tosspayments/tosspayments-sdk';
 import { useToast } from '../lib/ToastContext';
 import { usePlan } from '../lib/usePlan';
@@ -33,6 +33,8 @@ export default function PricingPage() {
   const { toast } = useToast();
   const { plan, refresh } = usePlan();
   const { user } = useAuth();
+  const router = useRouter();
+  const goHome = () => router.push('/home');
   const [cycle, setCycle] = useState<Cycle>('yearly');
   const [busy, setBusy] = useState(false);
   const fmt = (n: number) => n.toLocaleString('ko-KR');
@@ -107,18 +109,18 @@ export default function PricingPage() {
     <div className="min-h-screen" style={{ backgroundColor: '#F8F8F8' }}>
       {/* 단독 헤더 — 좌: 로고(홈으로), 우: 프로필 */}
       <header className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/home" title="홈으로" className="flex items-center transition-transform hover:-translate-x-0.5">
+        <button onClick={goHome} title="홈으로" className="flex items-center transition-transform hover:-translate-x-0.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Spira" className="w-8 h-auto" />
-        </Link>
-        <Link href="/home" title={displayName} className="w-9 h-9 rounded-full overflow-hidden border border-neutral-200 flex items-center justify-center bg-white transition-transform hover:-translate-y-0.5">
+        </button>
+        <button onClick={goHome} title={displayName} className="w-9 h-9 rounded-full overflow-hidden border border-neutral-200 flex items-center justify-center bg-white transition-transform hover:-translate-y-0.5">
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt="프로필" className="w-full h-full object-cover" />
           ) : (
             <span className="w-full h-full flex items-center justify-center text-sm font-extrabold" style={{ background: 'var(--spira-grad-avatar)', color: '#16211E' }}>{displayName[0]?.toUpperCase() ?? 'S'}</span>
           )}
-        </Link>
+        </button>
       </header>
 
       <div className="max-w-4xl mx-auto px-6 pt-4 pb-16">
