@@ -1,6 +1,9 @@
 'use client';
 import { useState } from 'react';
+import { loadTossPayments } from '@tosspayments/tosspayments-sdk';
 import { useToast } from '../lib/ToastContext';
+import { usePlan } from '../lib/usePlan';
+import { createClient } from '../lib/supabase/client';
 
 // 요금제 페이지 (Free / Pro · 월·연). 결제(토스페이먼츠) 연동은 다음 단계에서 '구독하기' 버튼에 붙는다.
 type Cycle = 'monthly' | 'yearly';
@@ -26,15 +29,38 @@ const PRO_FEATURES = [
 
 export default function PricingPage() {
   const { toast } = useToast();
+  const { plan } = usePlan();
   const [cycle, setCycle] = useState<Cycle>('yearly');
+  const [busy, setBusy] = useState(false);
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
+  const isPro = plan.tier === 'pro';
   const proPrice = PRICE[cycle];
   const proPerMonth = cycle === 'yearly' ? Math.round(PRICE.yearly / 12) : PRICE.monthly;
 
-  const subscribe = () => {
-    // TODO(결제): 토스페이먼츠 자동결제(빌링) 연동 — 카드 등록 → 빌링키 → 서버 승인 → 구독 활성화
-    toast('결제 연동을 준비 중이에요. 곧 이용하실 수 있어요!', 'info');
+  const subscribe = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+      if (!clientKey) { toast('결제 설정이 아직 준비되지 않았어요.', 'error'); setBusy(false); return; }
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast('로그인이 필요해요.', 'error'); setBusy(false); return; }
+
+      const tossPayments = await loadTossPayments(clientKey);
+      const payment = tossPayments.payment({ customerKey: user.id });
+      // 카드 등록 창 → 성공 시 successUrl 로 이동(그 페이지에서 서버 승인 처리)
+      await payment.requestBillingAuth({
+        method: 'CARD',
+        successUrl: `${window.location.origin}/pricing/success?cycle=${cycle}`,
+        failUrl: `${window.location.origin}/pricing?billing=fail`,
+        customerEmail: user.email ?? undefined,
+      });
+    } catch {
+      // 사용자가 결제창을 닫은 경우 등 — 조용히 복구
+      setBusy(false);
+    }
   };
 
   return (
@@ -78,7 +104,7 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <div className="mt-7 py-3 rounded-2xl text-center text-[14px] font-bold" style={{ backgroundColor: '#F1F1EB', color: '#9AA39D' }}>현재 이용 중</div>
+          <div className="mt-7 py-3 rounded-2xl text-center text-[14px] font-bold" style={{ backgroundColor: '#F1F1EB', color: '#9AA39D' }}>{isPro ? '기본 플랜' : '현재 이용 중'}</div>
         </div>
 
         {/* Pro */}
@@ -100,13 +126,20 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <button
-            onClick={subscribe}
-            className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5"
-            style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
-          >
-            Pro 구독하기
-          </button>
+          {isPro ? (
+            <div className="mt-7 w-full py-3 rounded-2xl text-center text-[15px] font-bold" style={{ backgroundColor: 'rgba(157,254,59,0.15)', color: '#9DFE3B' }}>
+              ✓ 이용 중{plan.currentPeriodEnd ? ` · ~${new Date(plan.currentPeriodEnd).toLocaleDateString('ko-KR')}` : ''}
+            </div>
+          ) : (
+            <button
+              onClick={subscribe}
+              disabled={busy}
+              className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+              style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+            >
+              {busy ? '결제창 여는 중…' : 'Pro 구독하기'}
+            </button>
+          )}
         </div>
       </div>
 
