@@ -348,10 +348,10 @@ export default function ResourcesPage() {
         {/* ── 수익 / 비용 입력 + 목록 ── */}
         {(tab === 'income' || tab === 'expense') && (
           <>
-            {/* 입력 폼 (한 줄 pill, 날짜 자동 / Enter로 추가) */}
-            <div className="flex items-center gap-2 bg-white border rounded-full pl-6 pr-2 py-2 mb-4" style={{ borderColor: 'var(--spira-border-strong)' }}>
+            {/* 입력 폼 (모바일: 이름은 첫 줄 전체 폭, 금액·카테고리·버튼은 아래 줄로 자연스럽게 줄바꿈) */}
+            <div className="flex flex-wrap items-center gap-2 bg-white border rounded-3xl px-4 py-2.5 mb-4" style={{ borderColor: 'var(--spira-border-strong)' }}>
               <input
-                className="flex-1 min-w-0 bg-transparent text-[15px] outline-none placeholder-neutral-400"
+                className="w-full sm:flex-1 sm:w-auto min-w-0 bg-transparent text-[15px] outline-none placeholder-neutral-400 px-1"
                 style={{ color: '#16211E' }}
                 placeholder={`+ ${isIncome ? '수익' : '비용'} 이름`}
                 value={name}
@@ -360,7 +360,7 @@ export default function ResourcesPage() {
               />
               <input
                 type="text"
-                className="w-24 bg-transparent text-[15px] outline-none placeholder-neutral-400 text-right"
+                className="flex-1 sm:flex-none sm:w-24 min-w-0 bg-transparent text-[15px] outline-none placeholder-neutral-400 text-right px-1"
                 style={{ color: '#16211E' }}
                 placeholder="금액"
                 value={amount}
@@ -370,7 +370,7 @@ export default function ResourcesPage() {
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value)}
-                className="rounded-full pl-4 pr-3 py-2 text-[13px] font-semibold outline-none cursor-pointer flex-shrink-0"
+                className="rounded-full pl-3 pr-2 py-2 text-[13px] font-semibold outline-none cursor-pointer flex-shrink-0 max-w-[38vw] sm:max-w-none truncate"
                 style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}
               >
                 <option value="">카테고리</option>
@@ -408,7 +408,7 @@ export default function ResourcesPage() {
                           title="이 수익원과 관련된 Goals 프로젝트 보기"
                         >{r.source}</button>
                       )}
-                      <button onClick={() => store.deleteResourceInWs(r.wsId, r.id)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
+                      <button onClick={() => store.deleteResourceInWs(r.wsId, r.id)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
                     </div>
                   ))}
                 </div>
@@ -438,8 +438,8 @@ export default function ResourcesPage() {
                             <span className="text-[15px] truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{s.name}</span>
                             <span className="font-mono text-[15px] font-semibold tabular-nums flex-shrink-0" style={{ color: '#16211E' }}>-{fmt(s.amount)}원</span>
                             <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#EAF7DD', color: '#3E6B1F' }}>구독료 · 매월</span>
-                            <button onClick={() => { setEditingSubId(s.id); setEditSubName(s.name); setEditSubAmount(String(s.amount)); }} className="opacity-0 group-hover:opacity-100 text-[13px] transition-all flex-shrink-0" style={{ color: '#9AA39D' }}>편집</button>
-                            <button onClick={() => store.deleteSubscriptionInWs(s.wsId, s.id)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
+                            <button onClick={() => { setEditingSubId(s.id); setEditSubName(s.name); setEditSubAmount(String(s.amount)); }} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-[13px] transition-all flex-shrink-0" style={{ color: '#9AA39D' }}>편집</button>
+                            <button onClick={() => store.deleteSubscriptionInWs(s.wsId, s.id)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
                           </div>
                         )}
                       </div>
@@ -452,7 +452,7 @@ export default function ResourcesPage() {
                         {r.source && (
                           <span className="text-[13px] font-semibold px-3.5 py-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>{r.source}</span>
                         )}
-                        <button onClick={() => store.deleteResourceInWs(r.wsId, r.id)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
+                        <button onClick={() => store.deleteResourceInWs(r.wsId, r.id)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
                       </div>
                     ))}
                   </div>
