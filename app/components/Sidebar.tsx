@@ -84,7 +84,7 @@ export default function Sidebar() {
 
       <aside
         style={{ boxShadow: 'var(--spira-shadow-lg)', border: '1px solid var(--spira-border-subtle)' }}
-        className={`fixed top-4 h-[calc(100dvh-2rem)] z-50 w-[72px] py-6 bg-white rounded-full flex flex-col items-center overflow-y-auto transition-[left] duration-300 ease-in-out ${sidebarOpen ? 'left-4' : 'left-[-110px]'} lg:left-4`}
+        className={`fixed top-4 h-[calc(100dvh-2rem)] z-50 w-[72px] py-6 bg-white rounded-full flex flex-col items-center transition-[left] duration-300 ease-in-out ${sidebarOpen ? 'left-4' : 'left-[-110px]'} lg:left-4`}
       >
         {/* 로고 (클릭 → 워크스페이스 전환) */}
         <div className="relative pb-4" ref={wsRef}>
