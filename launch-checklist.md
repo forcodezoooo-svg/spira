@@ -270,7 +270,7 @@
 ## Production
 
 - [x] Production Build
-- [ ] Vercel 배포
+- [x] Vercel 배포 (spira-wcwm.vercel.app · main 브랜치 자동 배포 · Hobby 무료)
 - [ ] 도메인 연결
 - [ ] Analytics 연결
 

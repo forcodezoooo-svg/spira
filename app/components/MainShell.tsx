@@ -11,7 +11,7 @@ export default function MainShell({ children }: { children: React.ReactNode }) {
   const showGlobalTimer = path !== '/home' && path !== '/task' && path !== '/programs' && path !== '/resources' && path !== '/plan';
   return (
     <main
-      className={`ml-0 lg:ml-[104px] min-h-screen p-8 pt-20 lg:pt-8 transition-[margin] duration-300 ${
+      className={`ml-0 lg:ml-[104px] min-h-screen p-4 pt-20 lg:p-8 transition-[margin] duration-300 ${
         chatDocked ? 'mr-0 lg:mr-[420px]' : 'mr-0'
       }`}
     >
