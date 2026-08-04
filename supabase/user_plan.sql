@@ -7,6 +7,7 @@ create table if not exists public.user_plan (
   user_id            uuid primary key references auth.users(id) on delete cascade,
   tier               text not null default 'free' check (tier in ('free', 'pro')),
   cycle              text check (cycle in ('monthly', 'yearly')),
+  pending_cycle      text check (pending_cycle in ('monthly', 'yearly')), -- 다음 결제일에 적용할 주기(예약 변경)
   status             text not null default 'active' check (status in ('active', 'canceled', 'past_due')),
   current_period_end timestamptz,
   updated_at         timestamptz not null default now()

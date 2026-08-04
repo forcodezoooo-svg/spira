@@ -56,6 +56,25 @@ export default function PricingPage() {
       toast('네트워크 오류가 발생했어요.', 'error');
     }
   };
+  // 구독 주기 변경 '예약' (즉시 청구 X — 다음 결제일에 전환)
+  const changeCycle = async () => {
+    try {
+      const res = await fetch('/api/billing/change-cycle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cycle }) });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error ?? '변경에 실패했어요.', 'error'); return; }
+      toast(`다음 결제일부터 ${cycle === 'yearly' ? '연간' : '월간'}으로 전환돼요.`, 'success');
+      void refresh();
+    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
+  };
+  // 예약된 주기 변경 취소
+  const cancelPendingChange = async () => {
+    try {
+      const res = await fetch('/api/billing/change-cycle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cycle: plan.cycle }) });
+      if (res.ok) { toast('전환 예약을 취소했어요.', 'success'); void refresh(); }
+    } catch { /* noop */ }
+  };
+
+  const periodDate = plan.currentPeriodEnd ? new Date(plan.currentPeriodEnd).toLocaleDateString('ko-KR') : '';
   const proPrice = PRICE[cycle];
   const proPerMonth = cycle === 'yearly' ? Math.round(PRICE.yearly / 12) : PRICE.monthly;
 
@@ -165,7 +184,7 @@ export default function PricingPage() {
             ))}
           </ul>
           {!isPro ? (
-            // 미구독 → 구독하기
+            // 미구독 → 첫 구독(즉시 결제)
             <button
               onClick={subscribe}
               disabled={busy}
@@ -175,29 +194,45 @@ export default function PricingPage() {
               {busy ? '결제창 여는 중…' : 'Pro 구독하기'}
             </button>
           ) : viewingCurrentCycle ? (
-            // 구독 중인 주기를 보고 있음 → 이용 중 / 해지
+            // 구독 중인 주기를 보고 있음 → 이용 중 / 해지 / (예약된 전환 안내)
             <div className="mt-7">
               <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold" style={{ backgroundColor: 'rgba(157,254,59,0.15)', color: '#9DFE3B' }}>
-                {isCanceled ? '해지 예정' : '✓ 이용 중'}{plan.currentPeriodEnd ? ` · ${new Date(plan.currentPeriodEnd).toLocaleDateString('ko-KR')}까지` : ''}
+                {isCanceled ? '해지 예정' : '✓ 이용 중'}{periodDate ? ` · ${periodDate}까지` : ''}
               </div>
               {isCanceled ? (
                 <p className="text-center text-[12px] mt-2.5" style={{ color: '#AEB8AE' }}>기간이 끝나면 자동으로 Free로 전환돼요.</p>
+              ) : plan.pendingCycle ? (
+                <p className="text-center text-[12px] mt-2.5" style={{ color: '#AEB8AE' }}>
+                  {periodDate ? `${periodDate}부터 ` : '다음 결제일부터 '}{plan.pendingCycle === 'yearly' ? '연간' : '월간'}으로 전환 예정 · <button onClick={cancelPendingChange} className="underline hover:opacity-80">예약 취소</button>
+                </p>
               ) : (
                 <button onClick={cancelSubscription} className="w-full text-[13px] font-semibold py-2 mt-1 transition-colors hover:opacity-80" style={{ color: '#AEB8AE' }}>
                   구독 해지
                 </button>
               )}
             </div>
+          ) : plan.pendingCycle === cycle ? (
+            // 다른 주기를 보고 있는데 그게 '예약된' 주기 → 예약됨 표시
+            <div className="mt-7">
+              <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold" style={{ backgroundColor: 'rgba(157,254,59,0.15)', color: '#9DFE3B' }}>
+                {cycle === 'yearly' ? '연간' : '월간'} 전환 예약됨{periodDate ? ` · ${periodDate}부터` : ''}
+              </div>
+              <button onClick={cancelPendingChange} className="w-full text-[13px] font-semibold py-2 mt-1 transition-colors hover:opacity-80" style={{ color: '#AEB8AE' }}>
+                예약 취소
+              </button>
+            </div>
           ) : (
-            // 구독 중이지만 '다른 주기'를 보고 있음 → 그 주기로 변경/업그레이드
-            <button
-              onClick={subscribe}
-              disabled={busy}
-              className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50"
-              style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
-            >
-              {busy ? '결제창 여는 중…' : cycle === 'yearly' ? '연간으로 업그레이드' : '월간으로 변경'}
-            </button>
+            // 다른 주기 + 예약 없음 → 다음 결제일에 전환 '예약'(즉시 청구 X)
+            <div className="mt-7">
+              <button
+                onClick={changeCycle}
+                className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5"
+                style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+              >
+                {cycle === 'yearly' ? '연간으로 업그레이드' : '월간으로 변경'}
+              </button>
+              <p className="text-center text-[12px] mt-2.5" style={{ color: '#AEB8AE' }}>지금 청구되지 않고 다음 결제일에 전환돼요.</p>
+            </div>
           )}
         </div>
       </div>

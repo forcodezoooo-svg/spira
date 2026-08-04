@@ -5,6 +5,7 @@ import { createClient } from './supabase/client';
 export type Plan = {
   tier: 'free' | 'pro';
   cycle?: 'monthly' | 'yearly';
+  pendingCycle?: 'monthly' | 'yearly' | null; // 다음 결제일에 적용될 예약 주기
   status?: string;
   currentPeriodEnd?: string;
 };
@@ -22,13 +23,13 @@ export function usePlan() {
     if (!user) { setPlan({ tier: 'free' }); setLoading(false); return; }
     const { data } = await supabase
       .from('user_plan')
-      .select('tier, cycle, status, current_period_end')
+      .select('tier, cycle, pending_cycle, status, current_period_end')
       .eq('user_id', user.id)
       .maybeSingle();
     const active = data?.tier === 'pro'
       && (!data.current_period_end || new Date(data.current_period_end).getTime() > Date.now());
     if (active) {
-      setPlan({ tier: 'pro', cycle: data!.cycle, status: data!.status, currentPeriodEnd: data!.current_period_end });
+      setPlan({ tier: 'pro', cycle: data!.cycle, pendingCycle: data!.pending_cycle, status: data!.status, currentPeriodEnd: data!.current_period_end });
     } else {
       setPlan({ tier: 'free' });
     }
