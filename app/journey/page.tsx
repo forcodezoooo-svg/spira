@@ -1,6 +1,5 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { workspaceColor } from '../lib/goalTasks';
 
@@ -40,7 +39,6 @@ const midY = 380;    // 길의 세로 중심 (상단 겹침 방지 이동은 아
 
 export default function JourneyPage() {
   const store = useStore();
-  const router = useRouter();
   const captureRef = useRef<HTMLDivElement>(null);
   const entries = store.allWorkspacesEntries;
   const [selWsId, setSelWsId] = useState<string>(entries[0]?.workspace.id ?? '');
@@ -304,20 +302,16 @@ export default function JourneyPage() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/journey-bg.svg" alt="" aria-hidden className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-auto pointer-events-none select-none z-0" />
 
-      {/* 상단 바 */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} title="이전 페이지로 돌아가기"
-            className="w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:-translate-x-0.5" style={{ backgroundColor: '#002929', color: '#EDFF9F' }}>
-            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Spira" className="w-7 h-auto" />
+      {/* 상단 바 — 로고 + 워크스페이스 필터 (뒤로가기 제거, 추출은 하단 버튼으로) */}
+      <div className="absolute top-0 left-0 right-0 z-20 flex items-center gap-2.5 px-4 sm:px-6 py-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="Spira" className="w-7 h-auto flex-shrink-0" />
+        <div className="flex items-center gap-2 overflow-x-auto min-w-0 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
           {entries.map(e => {
             const sel = e.workspace.id === selEntry?.workspace.id;
             return (
               <button key={e.workspace.id} onClick={() => setSelWsId(e.workspace.id)}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-colors"
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-colors flex-shrink-0"
                 style={sel ? { backgroundColor: '#002929', color: '#EDFF9F' } : { backgroundColor: 'rgba(255,255,255,0.55)', color: '#16211E' }}>
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: workspaceColor(entries, e.workspace.id) }} />
                 {e.workspace.name}
@@ -325,11 +319,14 @@ export default function JourneyPage() {
             );
           })}
         </div>
-        <button onClick={generatePreview} disabled={exporting}
-          className="px-4 py-2 rounded-full text-[13px] font-semibold transition-transform hover:-translate-y-0.5 disabled:opacity-50" style={{ backgroundColor: '#002929', color: '#EDFF9F' }}>
-          {exporting ? '이미지 만드는 중…' : '이미지로 추출'}
-        </button>
       </div>
+
+      {/* 이미지로 추출 — 하단 중앙 플로팅 버튼 */}
+      <button onClick={generatePreview} disabled={exporting}
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 px-6 py-2.5 rounded-full text-[13px] font-semibold shadow-lg transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+        style={{ backgroundColor: '#002929', color: '#EDFF9F' }}>
+        {exporting ? '이미지 만드는 중…' : '이미지로 추출'}
+      </button>
 
       {/* 가로 스크롤만 — 세로는 화면 높이에 맞춰 축소(스크롤 없음). 배경은 뒤(고정)가 비치도록 투명 */}
       <div className="absolute inset-0 overflow-x-auto overflow-y-hidden z-10">
