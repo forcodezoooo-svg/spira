@@ -1,9 +1,11 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { loadTossPayments } from '@tosspayments/tosspayments-sdk';
 import { useToast } from '../lib/ToastContext';
 import { usePlan } from '../lib/usePlan';
 import { createClient } from '../lib/supabase/client';
+import { useAuth } from '../components/AuthProvider';
 
 // 요금제 페이지 (Free / Pro · 월·연). 결제(토스페이먼츠) 연동은 다음 단계에서 '구독하기' 버튼에 붙는다.
 type Cycle = 'monthly' | 'yearly';
@@ -30,12 +32,17 @@ const PRO_FEATURES = [
 export default function PricingPage() {
   const { toast } = useToast();
   const { plan, refresh } = usePlan();
+  const { user } = useAuth();
   const [cycle, setCycle] = useState<Cycle>('yearly');
   const [busy, setBusy] = useState(false);
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
+  const displayName = (user?.user_metadata?.full_name as string) || (user?.user_metadata?.name as string) || user?.email || '계정';
+  const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+
   const isPro = plan.tier === 'pro';
   const isCanceled = isPro && plan.status === 'canceled';
+  const viewingCurrentCycle = isPro && plan.cycle === cycle; // 지금 보고 있는 주기가 '구독 중인 주기'와 같은지
 
   const cancelSubscription = async () => {
     if (!window.confirm('구독을 해지할까요?\n남은 기간까지는 Pro를 계속 이용할 수 있어요.')) return;
@@ -78,7 +85,24 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen" style={{ backgroundColor: '#F8F8F8' }}>
+      {/* 단독 헤더 — 좌: 로고(홈으로), 우: 프로필 */}
+      <header className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+        <Link href="/home" title="홈으로" className="flex items-center transition-transform hover:-translate-x-0.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Spira" className="w-8 h-auto" />
+        </Link>
+        <Link href="/home" title={displayName} className="w-9 h-9 rounded-full overflow-hidden border border-neutral-200 flex items-center justify-center bg-white transition-transform hover:-translate-y-0.5">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="프로필" className="w-full h-full object-cover" />
+          ) : (
+            <span className="w-full h-full flex items-center justify-center text-sm font-extrabold" style={{ background: 'var(--spira-grad-avatar)', color: '#16211E' }}>{displayName[0]?.toUpperCase() ?? 'S'}</span>
+          )}
+        </Link>
+      </header>
+
+      <div className="max-w-4xl mx-auto px-6 pt-4 pb-16">
       <div className="text-center mb-8">
         <h1 className="text-[26px] sm:text-[30px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>더 크게 성장할 준비가 되셨나요?</h1>
         <p className="text-[14px] mt-2" style={{ color: '#5B6560' }}>Pro로 업그레이드하고 제한 없이 Spira를 활용하세요.</p>
@@ -140,7 +164,18 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          {isPro ? (
+          {!isPro ? (
+            // 미구독 → 구독하기
+            <button
+              onClick={subscribe}
+              disabled={busy}
+              className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+              style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+            >
+              {busy ? '결제창 여는 중…' : 'Pro 구독하기'}
+            </button>
+          ) : viewingCurrentCycle ? (
+            // 구독 중인 주기를 보고 있음 → 이용 중 / 해지
             <div className="mt-7">
               <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold" style={{ backgroundColor: 'rgba(157,254,59,0.15)', color: '#9DFE3B' }}>
                 {isCanceled ? '해지 예정' : '✓ 이용 중'}{plan.currentPeriodEnd ? ` · ${new Date(plan.currentPeriodEnd).toLocaleDateString('ko-KR')}까지` : ''}
@@ -154,13 +189,14 @@ export default function PricingPage() {
               )}
             </div>
           ) : (
+            // 구독 중이지만 '다른 주기'를 보고 있음 → 그 주기로 변경/업그레이드
             <button
               onClick={subscribe}
               disabled={busy}
               className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50"
               style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
             >
-              {busy ? '결제창 여는 중…' : 'Pro 구독하기'}
+              {busy ? '결제창 여는 중…' : cycle === 'yearly' ? '연간으로 업그레이드' : '월간으로 변경'}
             </button>
           )}
         </div>
@@ -169,6 +205,7 @@ export default function PricingPage() {
       <p className="text-center text-[12px] mt-6" style={{ color: '#C4CCC4' }}>
         결제는 토스페이먼츠로 안전하게 처리됩니다. 구독은 언제든 해지할 수 있어요.
       </p>
+      </div>
     </div>
   );
 }
