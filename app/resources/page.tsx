@@ -1,7 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
+import { workspaceColor } from '../lib/goalTasks';
+import { ListSkeleton } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
 import { useChatContext } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
 import { ResourceType } from '../lib/types';
@@ -12,6 +15,7 @@ import MemoPanel from '../components/MemoPanel';
 type Tab = ResourceType | 'manage';
 
 const COLORS = ['#ccff00','#a78bfa','#60a5fa','#34d399','#fb923c','#f472b6','#e879f9','#38bdf8'];
+const RECURRING_CAT = '구독료'; // 이 비용 카테고리로 추가하면 매월 반복(구독)으로 처리
 
 function currentYM(): string {
   const d = new Date();
@@ -32,11 +36,15 @@ function nextYM(ym: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 function recentMonths(n: number): string[] {
+  // 날짜 연산(setMonth) 대신 년/월만 감소 — 31일 등에서 달 오버플로로 같은 달이 중복되던 버그 방지
   const result: string[] = [];
-  const d = new Date();
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth(); // 0~11
   for (let i = 0; i < n; i++) {
-    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-    d.setMonth(d.getMonth() - 1);
+    result.push(`${y}-${String(m + 1).padStart(2, '0')}`);
+    m -= 1;
+    if (m < 0) { m = 11; y -= 1; }
   }
   return result;
 }
@@ -58,9 +66,7 @@ export default function ResourcesPage() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
 
-  // 구독료
-  const [subName, setSubName] = useState('');
-  const [subAmount, setSubAmount] = useState('');
+  // 구독료(비용 카테고리 '구독료'로 통합) — 목록 편집용 상태만 유지
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
   const [editSubName, setEditSubName] = useState('');
   const [editSubAmount, setEditSubAmount] = useState('');
@@ -70,6 +76,14 @@ export default function ResourcesPage() {
   const [newExpenseCat, setNewExpenseCat] = useState('');
   const [addOpen, setAddOpen] = useState<'income' | 'expense' | null>(null);
   const [editCat, setEditCat] = useState<{ type: 'income' | 'expense'; name: string } | null>(null);
+  // 카테고리 편집 팝오버: 바깥 클릭 시 닫기
+  const catPopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!editCat) return;
+    const h = (e: MouseEvent) => { if (catPopRef.current && !catPopRef.current.contains(e.target as Node)) setEditCat(null); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [editCat]);
 
   // 다음달 자산 목표 (칩 선택 후 % 입력)
   const [selGoalCat, setSelGoalCat] = useState<{ type: 'income' | 'expense'; name: string } | null>(null);
@@ -80,7 +94,7 @@ export default function ResourcesPage() {
     router.push(`/programs?source=${encodeURIComponent(src)}${wsId ? `&ws=${encodeURIComponent(wsId)}` : ''}`);
   };
 
-  if (!store.ready) return null;
+  if (!store.ready) return <ListSkeleton />;
 
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
@@ -89,12 +103,18 @@ export default function ResourcesPage() {
   // 비활성 워크스페이스에 저장된 예전 데이터도 여기서 보고 삭제할 수 있다. 각 항목은 소유 워크스페이스(wsId)를 갖는다.
   const allResources = store.allWorkspacesEntries.flatMap(e => e.resources.map(r => ({ ...r, wsId: e.workspace.id })));
   const subscriptions = store.allWorkspacesEntries.flatMap(e => (e.subscriptions ?? []).map(s => ({ ...s, wsId: e.workspace.id })));
-  const subTotal = subscriptions.reduce((s: number, r: { amount: number }) => s + r.amount, 0);
+  // 구독은 시작 월(startMonth)부터 매월 반영 — 시작 이전 달에는 미반영(startMonth 없으면 항상 반영: 구버전 호환)
+  const subActiveIn = (ym: string) => subscriptions.filter(s => !s.startMonth || s.startMonth <= ym);
+  const subTotalFor = (ym: string) => subActiveIn(ym).reduce((sum, r) => sum + r.amount, 0);
+  const monthSubscriptions = subActiveIn(month);
+  const subTotal = subTotalFor(month);
 
   // 카테고리·목표·비즈니스맵은 전 워크스페이스에서 합산 — 활성 워크스페이스가 바뀌어도
   // 예전에 만들어둔 카테고리가 사라지지 않도록. (거래·구독을 전 워크스페이스에서 보는 것과 동일)
   const incomeCats: string[] = Array.from(new Set(store.allWorkspacesEntries.flatMap(e => e.revenueSources ?? [])));
   const expenseCats: string[] = Array.from(new Set(store.allWorkspacesEntries.flatMap(e => e.expenseCategories ?? [])));
+  // 리포트/집계용 — '구독료'를 항상 포함하는 내장 비용 카테고리 목록 (구독은 별도 데이터라 여기서 합산)
+  const expenseCatsRep: string[] = [RECURRING_CAT, ...expenseCats.filter(c => c !== RECURRING_CAT)];
   const incomeTargets: Record<string, number> = Object.assign({}, ...store.allWorkspacesEntries.map(e => e.revenueSourceTargets ?? {}));
   const expenseTargets: Record<string, number> = Object.assign({}, ...store.allWorkspacesEntries.map(e => e.expenseCategoryTargets ?? {}));
   const bizMap: Record<string, string> = Object.assign({}, ...store.allWorkspacesEntries.map(e => e.revenueSourceBiz ?? {}));
@@ -102,6 +122,8 @@ export default function ResourcesPage() {
   // 카테고리 색상
   const catColor = (nm: string, type: 'income' | 'expense') => {
     if (!nm || nm === NO_SOURCE) return '#d4d4d4';
+    const bizId = bizMap[nm]; // 비즈니스가 지정된 카테고리는 그 비즈니스 컬러로
+    if (bizId) return workspaceColor(store.allWorkspacesEntries, bizId);
     const list = type === 'expense' ? expenseCats : incomeCats;
     const i = list.indexOf(nm);
     return COLORS[(i < 0 ? 0 : i) % COLORS.length];
@@ -127,14 +149,16 @@ export default function ResourcesPage() {
 
   // 카테고리별 목표/실제 비중 (수익 변화 / 비용 변화)
   const catChangeRows = (type: 'income' | 'expense') => {
-    const defined = type === 'expense' ? expenseCats : incomeCats;
+    const defined = type === 'expense' ? expenseCatsRep : incomeCats;
     const targets = type === 'expense' ? expenseTargets : incomeTargets;
     const entries = monthEntries.filter(r => r.type === type);
-    const total = entries.reduce((s, r) => s + r.amount, 0);
+    const subForRep = type === 'expense' ? subTotal : 0; // '구독료' 카테고리 금액 = 이번 달 구독 합계
+    const total = entries.reduce((s, r) => s + r.amount, 0) + subForRep;
     const names = [...new Set([...defined, ...entries.map(srcOf)])];
     return names
       .map(nm => {
-        const amt = entries.filter(r => srcOf(r) === nm).reduce((s, r) => s + r.amount, 0);
+        const base = entries.filter(r => srcOf(r) === nm).reduce((s, r) => s + r.amount, 0);
+        const amt = nm === RECURRING_CAT ? base + subForRep : base; // 구독료엔 구독 합계 포함
         const actual = total > 0 ? Math.round((amt / total) * 100) : 0;
         const target = targets[nm] ?? 0;
         return { name: nm, actual, target, amt };
@@ -147,7 +171,7 @@ export default function ResourcesPage() {
     const entries = allResources.filter(r => r.date.startsWith(ym));
     const inc = entries.filter(r => r.type === 'income').reduce((s, r) => s + r.amount, 0);
     const exp = entries.filter(r => r.type === 'expense').reduce((s, r) => s + r.amount, 0);
-    return { inc, exp, net: inc - exp - subTotal };
+    return { inc, exp, net: inc - exp - subTotalFor(ym) };
   };
   // 순이익 추이 (최근 6개월, 라인 차트)
   const chart6 = recentMonths(6).reverse().map(ym => ({ ym, ...monthStat(ym) }));
@@ -169,6 +193,12 @@ export default function ResourcesPage() {
     if (tab === 'manage') return;
     const n = Number(amount.replace(/,/g, ''));
     if (!n || !name.trim()) return;
+    // 비용 + '구독료' 카테고리 = 매월 반복되는 비용(구독)으로 등록
+    if (tab === 'expense' && category.trim() === RECURRING_CAT) {
+      store.addSubscription({ name: name.trim(), amount: n });
+      setName(''); setAmount('');
+      return;
+    }
     store.addResource({
       type: tab as ResourceType,
       amount: n,
@@ -177,12 +207,6 @@ export default function ResourcesPage() {
       ...(category.trim() ? { source: category.trim() } : {}),
     });
     setName(''); setAmount(''); // 카테고리는 연속 입력 편의를 위해 유지
-  };
-  const handleAddSub = () => {
-    const n = Number(subAmount.replace(/,/g, ''));
-    if (!n || !subName.trim()) return;
-    store.addSubscription({ name: subName.trim(), amount: n });
-    setSubName(''); setSubAmount('');
   };
   const handleSaveSub = (id: string) => {
     const n = Number(editSubAmount.replace(/,/g, ''));
@@ -232,8 +256,8 @@ export default function ResourcesPage() {
 
   const isIncome = tab === 'income';
 
-  // ── 카테고리 변화 카드 ───────────────────────────────────────────────────────
-  const ChangeCard = ({ type, title }: { type: 'income' | 'expense'; title: string }) => {
+  // ── 카테고리 변화 카드 (렌더 함수 — 컴포넌트로 만들면 매 렌더 재생성돼 리마운트됨) ──
+  const changeCard = (type: 'income' | 'expense', title: string) => {
     const rows = catChangeRows(type);
     return (
       <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
@@ -350,8 +374,17 @@ export default function ResourcesPage() {
                 style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}
               >
                 <option value="">카테고리</option>
-                {(isIncome ? incomeCats : expenseCats).map(c => <option key={c} value={c}>{c}</option>)}
+                {tab === 'expense' && <option value={RECURRING_CAT}>{RECURRING_CAT} (매월 반복)</option>}
+                {(isIncome ? incomeCats : expenseCats).filter(c => c !== RECURRING_CAT).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+              <button
+                onClick={handleAdd}
+                disabled={!amount || !name.trim()}
+                className="px-4 py-2 rounded-full text-[14px] font-semibold transition-transform hover:-translate-y-0.5 disabled:opacity-30 flex-shrink-0"
+                style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+              >
+                {isIncome ? '수익' : '비용'} 추가
+              </button>
             </div>
             {(isIncome ? incomeCats : expenseCats).length === 0 && (
               <p className="text-[12px] mb-4" style={{ color: '#9AA39D' }}>‘리포트’ 탭에서 {isIncome ? '수익' : '비용'} 카테고리를 먼저 만들 수 있어요.</p>
@@ -360,9 +393,7 @@ export default function ResourcesPage() {
             {/* 수익 목록 */}
             {isIncome && (
               filteredIncome.length === 0 ? (
-                <div className="border border-dashed rounded-full px-6 py-8 text-center" style={{ borderColor: 'var(--spira-border-strong)' }}>
-                  <p className="text-[14px]" style={{ color: '#9AA39D' }}>{fmtYM(month)} 수익 내역이 없어요</p>
-                </div>
+                <EmptyState compact title={`${fmtYM(month)} 수익 내역이 없어요`} description="위에서 이번 달 수익을 추가해보세요." />
               ) : (
                 <div className="space-y-2.5">
                   {filteredIncome.map(r => (
@@ -384,25 +415,16 @@ export default function ResourcesPage() {
               )
             )}
 
-            {/* 비용 목록 (일반 비용 + 월 구독료) */}
+            {/* 비용 목록 (일반 비용 + '구독료' 카테고리 = 매월 반복) */}
             {tab === 'expense' && (
               <>
-                <div className="bg-white border rounded-[24px] px-5 py-4 mb-4" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                  <p className="text-[13px] font-semibold mb-3" style={{ color: '#5B6560' }}>월 구독료 추가 <span className="font-normal" style={{ color: '#B7BEB8' }}>(매월 반복)</span></p>
-                  <div className="flex gap-2">
-                    <input className="flex-1 border rounded-full px-4 py-2 text-[14px] outline-none placeholder-neutral-400" style={{ backgroundColor: '#F7F7F2', borderColor: 'var(--spira-border)', color: '#16211E' }} placeholder="서비스명" value={subName} onChange={e => setSubName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSub()} />
-                    <input type="text" className="w-28 border rounded-full px-4 py-2 text-[14px] outline-none placeholder-neutral-400 text-right" style={{ backgroundColor: '#F7F7F2', borderColor: 'var(--spira-border)', color: '#16211E' }} placeholder="월 금액" value={subAmount} onChange={e => setSubAmount(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSub()} />
-                    <button onClick={handleAddSub} disabled={!subAmount || !subName.trim()} className="px-4 py-2 disabled:opacity-30 rounded-full text-[14px] font-semibold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
-                  </div>
-                </div>
+                <p className="text-[12px] mb-3" style={{ color: '#9AA39D' }}>카테고리를 <span className="font-semibold" style={{ color: '#5B6560' }}>구독료</span>로 추가하면 매월 반복 비용으로 등록돼요.</p>
 
-                {monthExpenseEntries.length === 0 && subscriptions.length === 0 ? (
-                  <div className="border border-dashed rounded-full px-6 py-8 text-center" style={{ borderColor: 'var(--spira-border-strong)' }}>
-                    <p className="text-[14px]" style={{ color: '#9AA39D' }}>{fmtYM(month)} 비용 내역이 없어요</p>
-                  </div>
+                {monthExpenseEntries.length === 0 && monthSubscriptions.length === 0 ? (
+                  <EmptyState compact title={`${fmtYM(month)} 비용 내역이 없어요`} description="위에서 이번 달 비용을 추가해보세요." />
                 ) : (
                   <div className="space-y-2.5">
-                    {subscriptions.map((s: { id: string; name: string; amount: number; wsId: string }) => (
+                    {monthSubscriptions.map((s: { id: string; name: string; amount: number; wsId: string }) => (
                       <div key={s.id} className="bg-white border rounded-full group transition-colors overflow-hidden" style={{ borderColor: 'var(--spira-border-strong)' }}>
                         {editingSubId === s.id ? (
                           <div className="flex gap-2 px-5 py-3">
@@ -415,7 +437,7 @@ export default function ResourcesPage() {
                           <div className="flex items-center gap-3 pl-6 pr-4 py-3.5">
                             <span className="text-[15px] truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{s.name}</span>
                             <span className="font-mono text-[15px] font-semibold tabular-nums flex-shrink-0" style={{ color: '#16211E' }}>-{fmt(s.amount)}원</span>
-                            <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>매월 구독</span>
+                            <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#EAF7DD', color: '#3E6B1F' }}>구독료 · 매월</span>
                             <button onClick={() => { setEditingSubId(s.id); setEditSubName(s.name); setEditSubAmount(String(s.amount)); }} className="opacity-0 group-hover:opacity-100 text-[13px] transition-all flex-shrink-0" style={{ color: '#9AA39D' }}>편집</button>
                             <button onClick={() => store.deleteSubscriptionInWs(s.wsId, s.id)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-400 text-sm transition-all flex-shrink-0">×</button>
                           </div>
@@ -425,6 +447,7 @@ export default function ResourcesPage() {
                     {monthExpenseEntries.map(r => (
                       <div key={r.id} className="flex items-center gap-3 pl-6 pr-4 py-3.5 bg-white border rounded-full group transition-colors" style={{ borderColor: 'var(--spira-border-strong)' }}>
                         <span className="text-[15px] truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{r.description}</span>
+                        <span className="text-[12px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{r.date.slice(5).replace('-', '.')}</span>
                         <span className="font-mono text-[15px] font-semibold tabular-nums flex-shrink-0" style={{ color: '#16211E' }}>-{fmt(r.amount)}원</span>
                         {r.source && (
                           <span className="text-[13px] font-semibold px-3.5 py-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>{r.source}</span>
@@ -459,16 +482,16 @@ export default function ResourcesPage() {
                 const yMin = Math.min(...nets, 0);
                 const range = (yMax - yMin) || 1;
                 const px = (i: number) => 8 + (i / 5) * 284;
-                const py = (v: number) => 12 + (1 - (v - yMin) / range) * 96;
+                const py = (v: number) => 8 + (1 - (v - yMin) / range) * 64; // viewBox 80 높이 기준(상·하 8 여백)
                 const zeroY = py(0);
                 const pts = chart6.map((x, i) => `${px(i)},${py(x.net)}`).join(' ');
                 return (
                   <>
-                    <svg viewBox="0 0 300 120" className="w-full h-32" preserveAspectRatio="none">
-                      <line x1="8" y1={zeroY} x2="292" y2={zeroY} stroke="#e5e5e5" strokeWidth="1" strokeDasharray="3 3" />
-                      <polyline points={pts} fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <svg viewBox="0 0 300 80" className="w-full h-auto">
+                      <line x1="8" y1={zeroY} x2="292" y2={zeroY} stroke="#e5e5e5" strokeWidth="0.7" strokeDasharray="3 3" />
+                      <polyline points={pts} fill="none" stroke="#34d399" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                       {chart6.map((x, i) => (
-                        <circle key={x.ym} cx={px(i)} cy={py(x.net)} r={x.ym === currentYM() ? 4 : 3} fill={x.net >= 0 ? '#34d399' : '#FF696C'} stroke="#fff" strokeWidth="1.5" />
+                        <circle key={x.ym} cx={px(i)} cy={py(x.net)} r={x.ym === currentYM() ? 2.6 : 2} fill={x.net >= 0 ? '#34d399' : '#FF696C'} stroke="#fff" strokeWidth="1" />
                       ))}
                     </svg>
                     <div className="flex justify-between mt-1 px-1">
@@ -490,7 +513,7 @@ export default function ResourcesPage() {
                   {incomeCats.map(s => {
                     const open = editCat?.type === 'income' && editCat.name === s;
                     return (
-                      <div key={s} className="relative">
+                      <div key={s} className="relative" ref={open ? catPopRef : undefined}>
                         <button onClick={() => setEditCat(open ? null : { type: 'income', name: s })} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-colors" style={{ backgroundColor: `${catColor(s, 'income')}1a`, color: catColor(s, 'income') }}>
                           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: catColor(s, 'income') }} />
                           {s}
@@ -533,10 +556,15 @@ export default function ResourcesPage() {
               <section className="bg-white border border-neutral-200 rounded-2xl p-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-3">비용 카테고리</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {expenseCats.map(s => {
+                  {/* 구독료 = 내장 카테고리(삭제 불가) — 클릭 시 편집/삭제 없음 */}
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full" style={{ backgroundColor: '#EAF7DD', color: '#3E6B1F' }} title="매월 반복 비용(구독)이 집계되는 내장 카테고리예요.">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#3E6B1F' }} />
+                    {RECURRING_CAT} · 매월
+                  </span>
+                  {expenseCats.filter(c => c !== RECURRING_CAT).map(s => {
                     const open = editCat?.type === 'expense' && editCat.name === s;
                     return (
-                      <div key={s} className="relative">
+                      <div key={s} className="relative" ref={open ? catPopRef : undefined}>
                         <button onClick={() => setEditCat(open ? null : { type: 'expense', name: s })} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-colors" style={{ backgroundColor: `${catColor(s, 'expense')}1a`, color: catColor(s, 'expense') }}>
                           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: catColor(s, 'expense') }} />
                           {s}
@@ -635,7 +663,7 @@ export default function ResourcesPage() {
                 <div>
                   <p className="text-[10px] text-rose-500 font-bold mb-2">비용</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {expenseCats.length === 0 ? <span className="text-[11px] text-neutral-300">카테고리 없음</span> : expenseCats.map(s => {
+                    {expenseCatsRep.map(s => {
                       const sel = selGoalCat?.type === 'expense' && selGoalCat.name === s;
                       return (
                         <button key={s} onClick={() => selectGoalCat('expense', s)} className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-all ${sel ? 'ring-2 ring-rose-400' : ''}`} style={{ backgroundColor: `${catColor(s, 'expense')}1a`, color: catColor(s, 'expense') }}>
@@ -696,8 +724,8 @@ export default function ResourcesPage() {
           </div>
         </div>
 
-        <ChangeCard type="income" title="수익 변화" />
-        <ChangeCard type="expense" title="비용 변화" />
+        {changeCard('income', '수익 변화')}
+        {changeCard('expense', '비용 변화')}
       </aside>
     </div>
   );

@@ -1,8 +1,23 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord } from './types';
 import { empty, emptyPlan, load, save, uid, todayStr, todayDow } from './store';
+
+// ── 전역 공유 스토어 ──────────────────────────────────────────────────────────
+// 모든 useStore() 인스턴스가 '같은' 데이터를 본다. (예전엔 컴포넌트마다 독립 useState라
+// 페이지·상주 컴포넌트 간 데이터가 어긋나고, 오래된 복사본이 삭제를 되살리는 버그가 있었음)
+let globalData: AppData = empty;
+let hydrated = false;
+const storeListeners = new Set<() => void>();
+const emitStore = () => { for (const l of storeListeners) l(); };
+const subscribeStore = (cb: () => void) => { storeListeners.add(cb); return () => { storeListeners.delete(cb); }; };
+const getClientData = () => globalData;
+const getServerData = () => empty;
+// 외부(SyncProvider)에서 서버/초기 데이터로 교체할 때 사용 — 모든 화면을 즉시 갱신
+export function setGlobalStoreData(d: AppData) { globalData = d; hydrated = true; emitStore(); }
 import { workspaceColor } from './goalTasks';
+import { useToast } from './ToastContext';
+import { ERR } from './copy';
 
 const emptyEntry: Omit<WorkspaceEntry, 'workspace'> = {
   plan: emptyPlan,
@@ -19,25 +34,27 @@ const emptyEntry: Omit<WorkspaceEntry, 'workspace'> = {
 };
 
 export function useStore() {
-  const [appData, setAppData] = useState<AppData>(empty);
-  const [ready, setReady] = useState(false);
+  const appData = useSyncExternalStore(subscribeStore, getClientData, getServerData);
+  const [ready, setReady] = useState(hydrated);
+  const { toast } = useToast();
 
   useEffect(() => {
-    setAppData(load());
-    setReady(true);
-  }, []);
+    // 최초 1회만 localStorage → 전역 스토어 로드 후 전체 갱신 (모든 인스턴스 공유)
+    if (!hydrated) { globalData = load(); hydrated = true; emitStore(); }
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
+    if (!ready) setReady(true);
+  }, [ready]);
 
   const update = useCallback((updater: (d: AppData) => AppData) => {
-    setAppData(prev => {
-      const next = updater(prev);
-      try {
-        save(next);
-      } catch (e) {
-        if (e instanceof Error) alert(e.message);
-      }
-      return next;
-    });
-  }, []);
+    const next = updater(globalData);
+    globalData = next;
+    try {
+      save(next);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : ERR.generic, 'error');
+    }
+    emitStore();
+  }, [toast]);
 
   const updateActive = useCallback((updater: (e: WorkspaceEntry) => WorkspaceEntry) => {
     update(d => ({
@@ -268,6 +285,43 @@ export function useStore() {
       return { ...d, workspaces, journeyFlags: flags };
     });
 
+  // 데드라인 끝내기 토글 — 완료 시 소요시간 기록 + 여정 지도에 깃발 증정, 해제 시 깃발 제거
+  const toggleDeadlineDone = (wsId: string, programId: string, deadlineId: string) =>
+    update(d => {
+      const entry = d.workspaces.find(e => e.workspace.id === wsId);
+      const prog = entry?.programs.find(p => p.id === programId);
+      const dl = prog?.deadlines?.find(x => x.id === deadlineId);
+      if (!entry || !prog || !dl) return d;
+      const willDone = !dl.done;
+      const now = new Date().toISOString();
+      const totalSeconds = (dl.todos ?? []).reduce((s, t) => s + (t.record?.seconds ?? 0), 0);
+      const workspaces = d.workspaces.map(e => e.workspace.id === wsId ? {
+        ...e,
+        programs: e.programs.map(p => p.id === programId ? {
+          ...p,
+          deadlines: (p.deadlines ?? []).map(x => x.id === deadlineId
+            ? (willDone ? { ...x, done: true, doneAt: now, totalSeconds } : { ...x, done: false, doneAt: undefined })
+            : x),
+        } : p),
+      } : e);
+      const area = (entry.plan.workAreas ?? []).find(a => a.id === prog.workAreaId);
+      let flags = d.journeyFlags ?? [];
+      if (willDone) {
+        if (!flags.some(f => f.deadlineId === deadlineId)) {
+          flags = [...flags, {
+            id: uid(), wsId, wsName: entry.workspace.name,
+            areaId: prog.workAreaId ?? '', areaName: area?.name ?? prog.name,
+            deadlineId, goal: dl.name, totalSeconds,
+            color: workspaceColor(d.workspaces, wsId),
+            achievedAt: now,
+          }];
+        }
+      } else {
+        flags = flags.filter(f => f.deadlineId !== deadlineId);
+      }
+      return { ...d, workspaces, journeyFlags: flags };
+    });
+
   // 오프 기간: fromDate(포함) 이후의 모든 일정 날짜를 days만큼 뒤로 밀기 (전체 사업)
   const addDaysStr = (ds: string, n: number) => {
     const d = new Date(ds); d.setDate(d.getDate() + n);
@@ -329,17 +383,28 @@ export function useStore() {
       };
     });
 
-  const addWorkspace = (name: string) => {
+  const addWorkspace = (name: string): string => {
     const ws: Workspace = { id: uid(), name };
     update(d => ({
       ...d,
       activeWorkspaceId: ws.id,
       workspaces: [...d.workspaces, { ...emptyEntry, workspace: ws }],
     }));
+    return ws.id;
   };
 
   const switchWorkspace = (id: string) =>
     update(d => ({ ...d, activeWorkspaceId: id }));
+
+  const deleteWorkspace = (id: string) =>
+    update(d => {
+      const remaining = d.workspaces.filter(e => e.workspace.id !== id);
+      return {
+        ...d,
+        workspaces: remaining,
+        activeWorkspaceId: d.activeWorkspaceId === id ? (remaining[0]?.workspace.id ?? '') : d.activeWorkspaceId,
+      };
+    });
 
   const updatePlan = (plan: PlanData) =>
     updateActive(e => ({ ...e, plan }));
@@ -409,20 +474,21 @@ export function useStore() {
       return { ...e, revenueSources: [...list, name] };
     });
 
+  // 카테고리는 전 워크스페이스 합산 표시라, 삭제/지정도 모든 워크스페이스에 적용해야 정합
   const deleteRevenueSource = (name: string) =>
-    updateActive(e => {
+    update(d => ({ ...d, workspaces: d.workspaces.map(e => {
       const biz = { ...(e.revenueSourceBiz ?? {}) };
       delete biz[name];
       return { ...e, revenueSources: (e.revenueSources ?? []).filter(s => s !== name), revenueSourceBiz: biz };
-    });
+    }) }));
 
-  // 수익원 -> 소속 비즈니스(workspace id) 지정 (빈 값이면 해제)
+  // 수익원 -> 소속 비즈니스(workspace id) 지정 (빈 값이면 해제) — 전 워크스페이스에 반영
   const setRevenueSourceBiz = (name: string, wsId: string) =>
-    updateActive(e => {
+    update(d => ({ ...d, workspaces: d.workspaces.map(e => {
       const biz = { ...(e.revenueSourceBiz ?? {}) };
       if (wsId) biz[name] = wsId; else delete biz[name];
       return { ...e, revenueSourceBiz: biz };
-    });
+    }) }));
 
   // 수익 카테고리 목표 비중(%)
   const setRevenueSourceTarget = (name: string, pct: number) =>
@@ -436,16 +502,19 @@ export function useStore() {
       return { ...e, expenseCategories: [...list, name] };
     });
   const deleteExpenseCategory = (name: string) =>
-    updateActive(e => {
+    update(d => ({ ...d, workspaces: d.workspaces.map(e => {
       const t = { ...(e.expenseCategoryTargets ?? {}) };
       delete t[name];
       return { ...e, expenseCategories: (e.expenseCategories ?? []).filter(s => s !== name), expenseCategoryTargets: t };
-    });
+    }) }));
   const setExpenseCategoryTarget = (name: string, pct: number) =>
     updateActive(e => ({ ...e, expenseCategoryTargets: { ...(e.expenseCategoryTargets ?? {}), [name]: pct } }));
 
-  const addSubscription = (s: Omit<Subscription, 'id'>) =>
-    updateActive(e => ({ ...e, subscriptions: [...(e.subscriptions ?? []), { ...s, id: uid() }] }));
+  const addSubscription = (s: Omit<Subscription, 'id'>) => {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    updateActive(e => ({ ...e, subscriptions: [...(e.subscriptions ?? []), { startMonth: ym, ...s, id: uid() }] }));
+  };
 
   const deleteSubscription = (id: string) =>
     updateActive(e => ({ ...e, subscriptions: (e.subscriptions ?? []).filter(x => x.id !== id) }));
@@ -557,12 +626,12 @@ export function useStore() {
   return {
     data, ready,
     allWorkspaces,
-    setWorkspace, addWorkspace, switchWorkspace,
+    setWorkspace, addWorkspace, switchWorkspace, deleteWorkspace,
     updatePlan,
     allWorkspacesEntries,
     addProgram, updateProgram, deleteProgram, reorderPrograms,
     addProgramToWs, updateProgramInWs, deleteProgramInWs, reorderProgramsInWs,
-    setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, shiftAllSchedulesAfter,
+    setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, toggleDeadlineDone, shiftAllSchedulesAfter,
     journeyFlags: appData.journeyFlags ?? [],
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo,
     offDays, isOffDay, toggleOffDay,

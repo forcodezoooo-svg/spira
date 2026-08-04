@@ -8,7 +8,8 @@ import { useUI } from '../lib/UIContext';
 
 const nav = [
   { href: '/', label: 'Home', icon: '/home_icon.svg' },
-  { href: '/task', label: 'Task', icon: '/task_icon.svg' },
+  // Task 메뉴 숨김 — 라우트/기능/데이터는 유지 (배포 전 완전 삭제 여부 확인 예정)
+  // { href: '/task', label: 'Task', icon: '/task_icon.svg' },
   { href: '/programs', label: 'Goals', icon: '/goals_icon.svg' },
   { href: '/resources', label: 'Resources', icon: '/resources_icon.svg' },
   { href: '/plan', label: 'Plan', icon: '/plan_icon.svg' },
@@ -147,6 +148,7 @@ export default function Sidebar() {
               <Link
                 key={href}
                 href={href}
+                data-teach={href === '/programs' ? 'nav-goals' : href === '/' ? 'nav-home' : undefined}
                 onClick={closeSidebar}
                 title={label}
                 aria-label={label}

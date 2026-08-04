@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
+import { useUI } from './UIContext';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER } from './ai/markers';
 import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
 
@@ -67,6 +68,7 @@ export type QuarterPlan = {
   programs: Array<{
     name: string;
     goal?: string;
+    workAreaId?: string; // 소속 업무 영역 id (있으면 그 영역 컨테이너로 들어감)
     deadlines?: Array<{ name: string; date: string; todos?: QuarterPlanTodo[] }>;
   }>;
 };
@@ -104,7 +106,14 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+  // 채팅 표시 상태는 UIContext(chatOpen)가 실제 패널을 제어하므로 그것과 하나로 묶는다.
+  // (예전엔 별도 useState라 chat.setOpen(true)로는 패널이 열리지 않았음)
+  const ui = useUI();
+  const open = ui.chatOpen;
+  const setOpen = useCallback((v: boolean | ((p: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(ui.chatOpen) : v;
+    if (next) ui.openChat(); else ui.closeChat();
+  }, [ui]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -251,10 +260,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loadingRef.current = true;
 
     try {
+      // Plan 페이지에서는 등록 타이밍과 무관하게 항상 기획(plan) 모드로 요청 (기획서 일괄 채우기 보장)
+      const onPlanRoute = typeof window !== 'undefined' && window.location.pathname === '/plan';
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current, routineMode: routineModeRef.current, appContext: appContextRef.current }),
+        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, appContext: appContextRef.current }),
       });
 
       if (!res.ok || !res.body) throw new Error('응답 오류');
@@ -433,7 +444,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       ? `[${label}]\n현재 내용:\n${content.trim()}\n\n이 내용에 대해 개선점이나 조언을 해줘.`
       : `[${label}]을 어떻게 작성하면 좋을지 알려줘.`;
     sendMessage(msg);
-  }, [sendMessage]);
+  }, [sendMessage, setOpen]);
 
   const registerPlanHandler = useCallback((handler: (patch: PlanPatch) => void) => {
     planHandlerRef.current = handler;

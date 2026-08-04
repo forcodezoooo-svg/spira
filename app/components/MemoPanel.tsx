@@ -1,30 +1,40 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { uid } from '../lib/store';
+import { useAuth } from './AuthProvider';
 
-const MEMO_KEY = 'spira_goals_memos';
+// 로그인 계정별로 메모를 분리 저장(공통 데이터 아님). 비로그인은 guest.
+const memoKey = (userId?: string | null) => `spira_goals_memos:${userId ?? 'guest'}`;
 interface MemoEntry { id: string; text: string; createdAt: string; }
 
 // 플레이바 아래에 따라다니는 접이식 메모 패널 (모든 페이지 공통)
 export default function MemoPanel() {
+  const { user } = useAuth();
+  const key = memoKey(user?.id);
   const [memos, setMemos] = useState<MemoEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
 
+  // 계정(키)이 바뀌면 그 계정의 메모를 로드 (새 계정이면 빈 상태)
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const raw = localStorage.getItem(MEMO_KEY);
-    if (raw) { setMemos(JSON.parse(raw)); return; }
-    // 예전 단일 메모 마이그레이션
-    const old = localStorage.getItem('spira_goals_memo');
-    if (old) {
-      const migrated: MemoEntry[] = [{ id: uid(), text: old, createdAt: new Date().toISOString() }];
-      setMemos(migrated);
-      localStorage.setItem(MEMO_KEY, JSON.stringify(migrated));
-      localStorage.removeItem('spira_goals_memo');
-    }
-  }, []);
+    try {
+      let raw = localStorage.getItem(key);
+      // 레거시 전역 메모(spira_goals_memos) 1회 복구: 로그인 계정의 개인 메모가 없고 아직 이관 전이면 이관
+      if (!raw && user?.id && !localStorage.getItem('spira_goals_memos_claimed')) {
+        const legacy = localStorage.getItem('spira_goals_memos');
+        if (legacy) {
+          localStorage.setItem(key, legacy);
+          localStorage.setItem('spira_goals_memos_claimed', user.id);
+          raw = legacy;
+        }
+      }
+      setMemos(raw ? JSON.parse(raw) : []);
+    } catch { setMemos([]); }
+  }, [key, user?.id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  const persist = (list: MemoEntry[]) => { setMemos(list); localStorage.setItem(MEMO_KEY, JSON.stringify(list)); };
+  const persist = (list: MemoEntry[]) => { setMemos(list); localStorage.setItem(key, JSON.stringify(list)); };
   const save = () => {
     const t = draft.trim();
     if (!t) return;

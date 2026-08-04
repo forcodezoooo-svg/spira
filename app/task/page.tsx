@@ -2,6 +2,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
+import { DashboardSkeleton } from '../components/Skeleton';
+import { EmptyState, SuccessState } from '../components/EmptyState';
 import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
 import MusicTimer from '../components/MusicTimer';
@@ -41,13 +43,13 @@ function hoursLabel(s: number): string {
   return `${m}분`;
 }
 
-function calcDday(deadline: string): { label: string; urgent: boolean } {
+function calcDday(deadline: string): { label: string; urgent: boolean; overdue: boolean } {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = new Date(deadline); end.setHours(0, 0, 0, 0);
   const diff = Math.round((end.getTime() - today.getTime()) / 86400000);
-  if (diff > 0) return { label: `D-${diff}`, urgent: diff <= 3 };
-  if (diff === 0) return { label: 'D-Day', urgent: true };
-  return { label: `D+${Math.abs(diff)}`, urgent: false };
+  if (diff > 0) return { label: `D-${diff}`, urgent: diff <= 3, overdue: false };
+  if (diff === 0) return { label: 'D-Day', urgent: true, overdue: false };
+  return { label: `D+${Math.abs(diff)}`, urgent: false, overdue: true };
 }
 
 function MonthPicker({
@@ -130,7 +132,7 @@ export default function TaskPage() {
   const quickInputRef = useRef<HTMLInputElement>(null);
 
 
-  if (!store.ready) return null;
+  if (!store.ready) return <DashboardSkeleton />;
 
   if (!store.data.workspace) {
     return (
@@ -291,7 +293,7 @@ export default function TaskPage() {
           <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.programName}</span>
           <span className="flex-1" />
           {(t.days?.length ?? 0) > 0 && <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#96852F', backgroundColor: '#F6EFC2' }}>매주</span>}
-          {dday && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : { color: '#5B6560', backgroundColor: '#F0F0EA' }}>{dday.label}</span>}
+          {dday && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{dday.label}</span>}
           <TaskTimerButton taskId={t.key} dateStr={selDateStr} done={t.done} />
           <button onClick={() => setMoveTarget(isMoving ? null : t.key)} className="text-[11px] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all" style={{ color: '#9AA39D' }} title="다른 날짜로 이동">이동</button>
           <button onClick={() => setEditTodoTarget(t)} className="text-[11px] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all" style={{ color: '#9AA39D' }} title="업무 편집">편집</button>
@@ -486,6 +488,14 @@ export default function TaskPage() {
               </div>
               <ul className="space-y-2">{quickTasks.map(renderQuickPill)}</ul>
             </div>
+          )}
+
+          {/* 빈/완료 상태 */}
+          {totalTasks === 0 && (
+            <EmptyState title="이 날은 등록된 업무가 없어요" description="위 입력창에 추가하거나, Goals에서 이 날짜로 업무를 배치해보세요." />
+          )}
+          {totalTasks > 0 && doneTasks === totalTasks && (
+            <SuccessState compact title="이 날의 업무를 모두 끝냈어요 🎉" description="수고했어요. 완료한 업무는 여정 지도에 별로 쌓여요." />
           )}
         </div>
       </div>

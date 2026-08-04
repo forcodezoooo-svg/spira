@@ -2,8 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from './lib/useStore';
+import { DashboardSkeleton } from './components/Skeleton';
+import { EmptyState, SuccessState } from './components/EmptyState';
 import { useUI } from './lib/UIContext';
-import { getGoalTasksForDate, GoalTask, programQuarters, workspaceColor } from './lib/goalTasks';
+import { getGoalTasksForDate, GoalTask, workspaceColor } from './lib/goalTasks';
 import TaskTimerButton from './components/TaskTimerButton';
 import TodoEditModal from './components/TodoEditModal';
 import MusicTimer from './components/MusicTimer';
@@ -13,13 +15,13 @@ import { ProgramTodo } from './lib/types';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
-function calcDday(deadline: string): { label: string; urgent: boolean } {
+function calcDday(deadline: string): { label: string; urgent: boolean; overdue: boolean } {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = new Date(deadline); end.setHours(0, 0, 0, 0);
   const diff = Math.round((end.getTime() - today.getTime()) / 86400000);
-  if (diff > 0) return { label: `D-${diff}`, urgent: diff <= 3 };
-  if (diff === 0) return { label: 'D-Day', urgent: true };
-  return { label: `D+${Math.abs(diff)}`, urgent: false };
+  if (diff > 0) return { label: `D-${diff}`, urgent: diff <= 3, overdue: false };
+  if (diff === 0) return { label: 'D-Day', urgent: true, overdue: false };
+  return { label: `D+${Math.abs(diff)}`, urgent: false, overdue: true };
 }
 
 export default function Home() {
@@ -62,7 +64,7 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', handler);
   }, [progressMenuOpen]);
 
-  if (!store.ready) return null;
+  if (!store.ready) return <DashboardSkeleton />;
 
   // ── 온보딩: 워크스페이스가 하나도 없을 때 ──────────────────────────────────
   if (!store.data.workspace) {
@@ -117,8 +119,6 @@ export default function Home() {
   };
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
-  // 현재 분기 키 (홈은 현재 분기 업무/프로젝트만 표시)
-  const curQuarterKey = `${today.getFullYear()}-${Math.floor(today.getMonth() / 3) + 1}`;
 
   // ── 오늘의 업무 (현재 분기 프로그램만) ────────────────────────────────────────
   const isOffToday = store.isOffDay(dateStr);
@@ -195,18 +195,20 @@ export default function Home() {
   const allResources = store.allWorkspacesEntries.flatMap(e => e.resources);
   const monthIncome = allResources.filter(r => r.type === 'income' && r.date.startsWith(ym)).reduce((s, r) => s + r.amount, 0);
   const monthExpense = allResources.filter(r => r.type === 'expense' && r.date.startsWith(ym)).reduce((s, r) => s + r.amount, 0);
-  const subTotal = store.allWorkspacesEntries.flatMap(e => e.subscriptions ?? []).reduce((s, r) => s + r.amount, 0);
+  // 구독은 시작 월(startMonth)부터 반영 — 이번 달 기준으로 합산
+  const subTotal = store.allWorkspacesEntries.flatMap(e => e.subscriptions ?? []).filter(s => !s.startMonth || s.startMonth <= ym).reduce((s, r) => s + r.amount, 0);
   const netProfit = monthIncome - monthExpense - subTotal;
 
   // ── 업커밍 데드라인 (전체 워크스페이스) ──────────────────────────────────────
-  type Upcoming = { key: string; name: string; date: string; color: string; kind: '목표'; wsName: string };
+  type Upcoming = { key: string; name: string; date: string; color: string; kind: '데드라인'; wsName: string };
   const upcoming: Upcoming[] = [];
   for (const entry of store.allWorkspacesEntries) {
-    // 전체 비즈니스의 목표(프로그램) 모두 표시. 기한 = 목표 기한 또는 데드라인 항목 중 가장 늦은 날. 별(마커) 색 = 비즈니스 색.
+    // 전체 비즈니스의 '데드라인' 항목을 표시(제목 = 데드라인 이름). 별(마커) 색 = 비즈니스 색.
     for (const p of entry.programs) {
-      const effDeadline = p.deadline || (p.deadlines ?? []).map(d => d.date).filter(Boolean).sort().slice(-1)[0];
-      if (effDeadline && effDeadline >= dateStr) {
-        upcoming.push({ key: `p-${p.id}`, name: p.name, date: effDeadline, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '목표', wsName: entry.workspace.name });
+      if (!p.workAreaId) continue; // '미분류' 제외 (Goals와 정합)
+      for (const dl of p.deadlines ?? []) {
+        if (dl.enabled === false || !dl.date || dl.date < dateStr) continue;
+        upcoming.push({ key: `d-${dl.id}`, name: dl.name, date: dl.date, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '데드라인', wsName: entry.workspace.name });
       }
     }
   }
@@ -222,31 +224,29 @@ export default function Home() {
   const journey = journeyGroups.slice(0, 5); // 다가오는 목표 5개 고정
 
 
-  // ── 프로젝트 진행상황 (전체 사업 중 현재 분기에 속한 프로그램) ──────────────────
+  // ── 프로젝트 진행상황 (업무 영역 안의 '데드라인' 단위 — 각 데드라인의 할일 진행률) ──
   const projectProgress = store.allWorkspacesEntries
-    .flatMap(e => e.programs.map(p => ({ p, wsId: e.workspace.id, wsName: e.workspace.name })))
-    .filter(({ p }) => programQuarters(p).includes(curQuarterKey))
-    .map(({ p, wsId, wsName }) => {
-      const goalTodos = (p.deadlines ?? []).flatMap(d => d.todos ?? []);
-      let pct: number | null = null;
-      let label = '진행 중';
-      if (goalTodos.length > 0) {
-        const done = goalTodos.filter(t => t.done).length;
-        pct = Math.round((done / goalTodos.length) * 100);
-        label = `${done}/${goalTodos.length} 할일 완료`;
-      } else if (p.startDate && p.deadline) {
-        const start = new Date(p.startDate).getTime();
-        const end = new Date(p.deadline).getTime();
-        const now = today.getTime();
-        pct = end > start ? Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100))) : 0;
-        label = '기간 경과';
-      }
-      // 목표 기한이 없으면 데드라인 항목 중 가장 늦은 날짜를 기한으로 사용
-      const effDeadline = p.deadline || (p.deadlines ?? []).map(d => d.date).filter(Boolean).sort().slice(-1)[0];
-      const dday = effDeadline ? calcDday(effDeadline) : null;
-      return { id: p.id, name: p.name, color: workspaceColor(store.allWorkspacesEntries, wsId), pct, label, dday, deadline: effDeadline, wsName, wsId };
-    })
-    // 디데이 임박 순 (기한 있는 항목 먼저, 없으면 뒤로)
+    .flatMap(e => e.programs
+      .filter(p => p.workAreaId) // 미분류 제외
+      .flatMap(p => (p.deadlines ?? [])
+        .filter(dl => dl.date && dl.enabled !== false && !dl.done) // 날짜 있고 진행 중인 데드라인
+        .map(dl => {
+          const todos = dl.todos ?? [];
+          let pct: number | null = null;
+          if (todos.length > 0) pct = Math.round((todos.filter(t => t.done).length / todos.length) * 100);
+          const dday = dl.date ? calcDday(dl.date) : null;
+          return {
+            id: dl.id,
+            name: dl.name,
+            color: workspaceColor(store.allWorkspacesEntries, e.workspace.id),
+            pct,
+            dday,
+            deadline: dl.date,
+            wsName: e.workspace.name,
+            wsId: e.workspace.id,
+          };
+        })))
+    // 디데이 임박 순
     .sort((a, b) => {
       if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
       if (a.deadline) return -1;
@@ -328,7 +328,7 @@ export default function Home() {
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#96852F', backgroundColor: '#F6EFC2' }}>매주</span>
         )}
         {dday && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : { color: '#5B6560', backgroundColor: '#F0F0EA' }}>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>
             {dday.label}
           </span>
         )}
@@ -349,15 +349,13 @@ export default function Home() {
         >
           편집
         </button>
-        {!t.recurring && (
-          <button
-            onClick={() => store.hideTodoFromHome(t.key)}
-            title="홈에서 숨기기 (Task에서 복구 가능)"
-            className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
-          >
-            ×
-          </button>
-        )}
+        <button
+          onClick={() => store.hideTodoFromHome(t.key)}
+          title={t.recurring ? '오늘 홈에서 숨기기' : '홈에서 숨기기 (Task에서 복구 가능)'}
+          className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+        >
+          ×
+        </button>
       </li>
     );
   };
@@ -395,6 +393,13 @@ export default function Home() {
           내일 ↪
         </button>
       )}
+      <button
+        onClick={() => store.deleteQuickTask(t.id)}
+        title="추가 업무 삭제"
+        className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+      >
+        ×
+      </button>
     </li>
     );
   };
@@ -458,7 +463,8 @@ export default function Home() {
               <span className="text-[12px] font-semibold rounded-full px-2.5 py-0.5" style={{ color: '#96852F', backgroundColor: '#F6EFC2' }}>☕ 오프데이</span>
             )}
           </div>
-          <button onClick={() => router.push('/task')} className="text-[13px] transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>전체보기</button>
+          {/* Task 페이지 숨김 — '전체보기' 진입점 제거 (라우트/기능 유지, 배포 전 완전 삭제 여부 확인 예정)
+          <button onClick={() => router.push('/task')} className="text-[13px] transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>전체보기</button> */}
         </div>
 
         {/* 어제 못한 업무 — 복구해서 보기 */}
@@ -498,15 +504,26 @@ export default function Home() {
           </div>
         )}
 
-        {/* 태스크 목록 */}
-        {totalTasks > 0 && (
-          <ul className="space-y-3">
-            {orderedItems.map(item =>
-              item.kind === 'goal'
-                ? renderGoalTask(item.goal!)
-                : renderQuickTask(item.quick!)
+        {/* 태스크 목록 · 빈/완료 상태 */}
+        {totalTasks === 0 ? (
+          <EmptyState
+            title="오늘은 예정된 업무가 없어요"
+            description="Goals에서 목표·업무를 이 날짜에 배치하면 여기에 나타나요."
+            action={<button onClick={() => router.push('/programs')} className="px-4 py-2 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>Goals에서 배치하기</button>}
+          />
+        ) : (
+          <>
+            {doneTasks === totalTasks && (
+              <div className="mb-4"><SuccessState compact title="오늘 할 일을 모두 끝냈어요 🎉" description="깔끔하게 마무리했어요. 내일도 이 흐름을 이어가요." /></div>
             )}
-          </ul>
+            <ul className="space-y-3">
+              {orderedItems.map(item =>
+                item.kind === 'goal'
+                  ? renderGoalTask(item.goal!)
+                  : renderQuickTask(item.quick!)
+              )}
+            </ul>
+          </>
         )}
       </div>
 
@@ -612,7 +629,7 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-2.5">
                     <button onClick={() => goToGoals(p.wsId)} className="text-[14px] truncate text-left transition-colors hover:opacity-70" style={{ color: '#16211E' }}>{p.name}</button>
                     {p.dday ? (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2" style={p.dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : { color: '#5B6560', backgroundColor: '#F0F0EA' }}>{p.dday.label}</span>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2" style={p.dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : p.dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{p.dday.label}</span>
                     ) : p.pct !== null ? (
                       <span className="font-mono text-[12px] tabular-nums flex-shrink-0 ml-2" style={{ color: '#9AA39D' }}>{p.pct}%</span>
                     ) : null}

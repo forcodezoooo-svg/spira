@@ -59,10 +59,29 @@ export default function AIChatButton() {
     if (view === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, view]);
 
+  // 티칭 프리필: 채팅 입력창에 안내 문구를 미리 채워두고 채팅을 연다
+  useEffect(() => {
+    const onPrefill = (e: Event) => {
+      const text = (e as CustomEvent).detail as string;
+      if (!text) return;
+      setView('chat');
+      setInput(text);
+      inputRef.current?.focus();
+    };
+    window.addEventListener('spira-chat-prefill', onPrefill);
+    return () => window.removeEventListener('spira-chat-prefill', onPrefill);
+  }, []);
+
   const send = async () => {
     const text = input.trim();
     if (!text || loading || !chat) return;
     setInput('');
+    // Plan에서 "채워줘/작성해줘" 류 요청은 확정적으로 필드에 반영되도록 마커 지시를 덧붙여 전송(표시는 원문)
+    if (pathname === '/plan' && /(채워|작성해|만들어|채워 줘|채워줘)/.test(text)) {
+      const api = `${text}\n\n(위 요청대로 기획서의 해당 또는 모든 항목을 지금 사업 정보에 맞게 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 필드를 출력해서 시스템에 바로 반영되게 해줘.)`;
+      await chat.sendMessage(api, text);
+      return;
+    }
     await chat.sendMessage(text);
   };
 
@@ -121,6 +140,7 @@ export default function AIChatButton() {
       {/* 우측 하단 플로팅 버튼 (데스크탑에서 채팅이 닫혀 있을 때 — 모바일은 헤더 버튼 사용) */}
       {isDesktop && !panelVisible && (
         <button
+          data-teach="sparky"
           onClick={toggleChat}
           className="fixed bottom-6 right-6 z-40 w-[50px] h-[50px] rounded-full flex items-center justify-center transition-transform hover:scale-105"
           style={{ backgroundColor: '#5FD93A', color: '#16211E', boxShadow: 'var(--spira-glow-fab)' }}
@@ -141,6 +161,7 @@ export default function AIChatButton() {
       {/* dim 배경 없이, 채팅 패널만 그림자와 함께 페이지 위에 떠 있게 한다 */}
       {panelVisible && (
         <aside
+          data-teach="sparky-panel"
           className={panelClasses}
           style={{
             background: 'rgba(255,255,255,0.85)',

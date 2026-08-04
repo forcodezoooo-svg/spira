@@ -16,8 +16,6 @@ export default function TodoEditModal({ initial, onSave, onClose }: Props) {
   const [date, setDate] = useState(initial.date ?? '');
   const [days, setDays] = useState<number[]>(initial.days ?? []);
   const [deadline, setDeadline] = useState(initial.deadline ?? '');
-  const [light, setLight] = useState(!!initial.light);
-  const [startTime, setStartTime] = useState(initial.startTime ?? '');
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -36,8 +34,6 @@ export default function TodoEditModal({ initial, onSave, onClose }: Props) {
       date: weekly ? undefined : (date || undefined),
       days: weekly ? days : undefined,
       deadline: deadline || undefined,
-      light,
-      startTime: startTime || undefined,
     });
     onClose();
   };
@@ -88,29 +84,6 @@ export default function TodoEditModal({ initial, onSave, onClose }: Props) {
             {deadline && <button onClick={() => setDeadline('')} className="text-neutral-400 hover:text-red-400 text-xs flex-shrink-0">×</button>}
           </div>
           {mode === 'date' && !date && <p className="text-[10px] text-neutral-400 mt-1">‘당일’은 시작 날짜를 먼저 선택하면 사용할 수 있어요</p>}
-        </div>
-
-        {/* 시작 예정 시각 */}
-        <div>
-          <label className="text-xs text-neutral-500 mb-1.5 block">시작 예정 시각 (선택)</label>
-          <div className="flex items-center gap-2">
-            <input type="time" className={`${inputCls} flex-1`} value={startTime} onChange={e => setStartTime(e.target.value)} />
-            {startTime && <button onClick={() => setStartTime('')} className="text-neutral-400 hover:text-red-400 text-xs flex-shrink-0">×</button>}
-          </div>
-        </div>
-
-        {/* 작업 강도 */}
-        <div>
-          <label className="text-xs text-neutral-500 mb-1.5 block">작업 강도</label>
-          <div className="flex gap-1">
-            <button onClick={() => setLight(false)} className={`flex-1 px-2.5 py-2 rounded-lg text-xs border transition-colors ${!light ? 'bg-neutral-900 border-neutral-900 text-white' : 'border-neutral-200 text-neutral-500'}`}>
-              🏢 무거운 작업 (작업실)
-            </button>
-            <button onClick={() => setLight(true)} className={`flex-1 px-2.5 py-2 rounded-lg text-xs border transition-colors ${light ? 'bg-amber-400 border-amber-400 text-neutral-900' : 'border-neutral-200 text-neutral-500'}`}>
-              ☕ 가벼운 작업 (외부 가능)
-            </button>
-          </div>
-          <p className="text-[10px] text-neutral-400 mt-1">오프데이(출근 불가)에는 가벼운 작업만 표시됩니다.</p>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">

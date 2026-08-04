@@ -89,6 +89,9 @@ export interface ProgramDeadline {
   startDate?: string; // 기간의 시작(캘린더 스케줄링용). 없으면 할일 시작일/목표 시작일에서 추론
   todos: ProgramTodo[];
   enabled?: boolean; // 개별 on/off (false면 Task/오늘의 업무에 미반영). 기본 on
+  done?: boolean;        // 데드라인 완료(끝내기) 여부 — 완료 시 여정 깃발 증정
+  doneAt?: string;       // 완료 시각 ISO
+  totalSeconds?: number; // 완료 시점까지 이 데드라인 할일들에 기록된 총 소요시간(초)
 }
 
 export interface Program {
@@ -149,6 +152,7 @@ export interface Subscription {
   id: string;
   name: string;
   amount: number; // monthly amount
+  startMonth?: string; // 구독 시작 월 "YYYY-MM" — 이 달부터 매월 비용에 반영(이전 달엔 미반영)
 }
 
 export interface QuickTask {
@@ -237,6 +241,8 @@ export interface JourneyFlag {
   goal: string;
   color: string;      // 소속 비즈니스 색
   achievedAt: string; // ISO 날짜
+  deadlineId?: string; // 데드라인 완료로 얻은 깃발이면 그 데드라인 id (영역 깃발과 구분)
+  totalSeconds?: number; // 데드라인 완료 소요시간(초)
 }
 
 export interface AppData {

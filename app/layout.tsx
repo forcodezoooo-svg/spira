@@ -5,6 +5,7 @@ import AppFrame from './components/AppFrame';
 import { ChatProvider } from './lib/ChatContext';
 import { TimerProvider } from './lib/TimerContext';
 import { UIProvider } from './lib/UIContext';
+import { ToastProvider } from './lib/ToastContext';
 import AuthProvider from './components/AuthProvider';
 import SyncProvider from './components/SyncProvider';
 
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tomorrow:wght@500;600;700&display=swap" />
       </head>
       <body className="bg-[#F8F8F8] text-neutral-900 antialiased font-sans">
+        <ToastProvider>
         <AuthProvider>
         <SyncProvider>
         <TimerProvider>
@@ -34,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </TimerProvider>
         </SyncProvider>
         </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

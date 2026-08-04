@@ -70,6 +70,7 @@ export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, 
   for (const e of entries) {
     for (const p of e.programs) {
       if (p.enabled === false) continue;          // off된 목표는 미반영
+      if (!p.workAreaId) continue;                // '미분류'(영역 미지정) 컨테이너는 Goals에서 숨김 → Task/Home도 미표시(정합성)
       // 분기·우선순위 필터 없음 — 배치된 모든 업무를 그 날짜에 표시(홈/Task 동일).
       // 특정 날짜에 배치된 업무는 프로그램의 분기/우선순위 설정과 무관하게 그 날짜에 노출된다.
       for (const dl of p.deadlines ?? []) {
@@ -160,6 +161,7 @@ export function getGoalDeadlines(entries: WorkspaceEntry[]): GoalDeadlineMilesto
   const out: GoalDeadlineMilestone[] = [];
   for (const e of entries) {
     for (const p of e.programs) {
+      if (!p.workAreaId) continue; // '미분류' 컨테이너 제외 (Goals와 정합)
       for (const dl of p.deadlines ?? []) {
         if (!dl.date) continue;
         out.push({

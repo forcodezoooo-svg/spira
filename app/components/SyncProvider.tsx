@@ -1,8 +1,12 @@
 'use client';
 import { useEffect, useRef, useState, ReactNode } from 'react';
 import { useAuth } from './AuthProvider';
+import { useToast } from '../lib/ToastContext';
+import { ERR } from '../lib/copy';
+import BrandLoader from './BrandLoader';
 import { createClient } from '../lib/supabase/client';
 import { load, writeLocalRaw, setServerPusher, empty } from '../lib/store';
+import { setGlobalStoreData } from '../lib/useStore';
 import { pullAppData, upsertAppData } from '../lib/appDataSync';
 import type { AppData } from '../lib/types';
 
@@ -14,11 +18,14 @@ const UID_KEY = 'spira_uid';
 // - 이후 모든 변경은 디바운스로 서버에 자동 저장
 export default function SyncProvider({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const { toastOnce, dismiss } = useToast();
   const [supabase] = useState(() => createClient());
   const [synced, setSynced] = useState(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (loading) return;
     if (!user) {
       setSynced(false);
@@ -29,33 +36,53 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       const uid = user.id;
-      const server = await pullAppData(supabase, uid);
+      let server: AppData | null = null;
+      let pullOk = true;
+      try { server = await pullAppData(supabase, uid); }
+      catch { pullOk = false; toastOnce('sync-fail', ERR.sync, 'error'); }
       if (cancelled) return;
 
       if (server && Array.isArray(server.workspaces) && server.workspaces.length > 0) {
-        // 서버가 정본 — 로컬을 서버 데이터로 교체
+        // 서버가 정본 — 로컬을 서버 데이터로 교체 후 전역 스토어도 갱신(마이그레이션 포함)
         try { writeLocalRaw(server); } catch { /* 용량 초과여도 서버 데이터 기준으로 진행 */ }
         localStorage.setItem(UID_KEY, uid);
-      } else {
+        setGlobalStoreData(load());
+      } else if (pullOk) {
         // 서버 비어 있음
         const prevUid = localStorage.getItem(UID_KEY);
         const localData = load();
         const localHasData = (localData.workspaces?.length ?? 0) > 0;
         if (localHasData && (!prevUid || prevUid === uid)) {
           // 이 사용자의 기존 로컬 데이터(로그인 전 포함)를 서버로 이전
-          await upsertAppData(supabase, uid, localData);
+          try { await upsertAppData(supabase, uid, localData); } catch { toastOnce('save-fail', ERR.initSave, 'error'); }
           localStorage.setItem(UID_KEY, uid);
+          setGlobalStoreData(localData);
         } else {
           // 다른 사용자의 로컬이거나 로컬도 비어 있음 → 빈 상태로 시작
           try { writeLocalRaw(empty); } catch { /* ignore */ }
           localStorage.setItem(UID_KEY, uid);
+          setGlobalStoreData(load());
         }
       }
+
+      // 서버 저장(실패 시 토스트 + 자동 재시도, 복구되면 토스트 해제)
+      const save = async (d: AppData, attempt = 0) => {
+        try {
+          await upsertAppData(supabase, uid, d);
+          dismiss('save-fail');
+        } catch {
+          toastOnce('save-fail', ERR.save, 'error');
+          if (attempt < 6 && !cancelled) {
+            if (retryTimer.current) clearTimeout(retryTimer.current);
+            retryTimer.current = setTimeout(() => { void save(d, attempt + 1); }, 4000);
+          }
+        }
+      };
 
       // 이후 변경사항을 디바운스(800ms)로 서버에 저장
       setServerPusher((d: AppData) => {
         if (pushTimer.current) clearTimeout(pushTimer.current);
-        pushTimer.current = setTimeout(() => { upsertAppData(supabase, uid, d); }, 800);
+        pushTimer.current = setTimeout(() => { void save(d); }, 800);
       });
 
       if (!cancelled) setSynced(true);
@@ -65,20 +92,14 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       setServerPusher(null);
       if (pushTimer.current) clearTimeout(pushTimer.current);
+      if (retryTimer.current) clearTimeout(retryTimer.current);
     };
-  }, [user, loading, supabase]);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [user, loading, supabase, toastOnce, dismiss]);
 
   // 인증 확인 중이거나, 로그인했지만 아직 동기화 전 → 로딩 화면
   if (loading || (user && !synced)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F8F8' }}>
-        <div className="flex flex-col items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Spira" className="w-9 h-auto animate-pulse" />
-          <p className="text-[13px]" style={{ color: '#9AA39D' }}>불러오는 중…</p>
-        </div>
-      </div>
-    );
+    return <BrandLoader label={loading ? '불러오는 중…' : '동기화하는 중…'} />;
   }
 
   return <>{children}</>;

@@ -42,6 +42,7 @@ export default function TaskTimerButton({ taskId, dateStr, done }: { taskId: str
         <span className="text-[10px] text-neutral-600 font-medium tabular-nums flex-shrink-0">{fmtTaskTime(secs)}</span>
       )}
       <button
+        data-teach="today-timer"
         onClick={() => toggleTaskTimer(taskId)}
         className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
           active ? 'bg-violet-600 text-neutral-900' : 'text-neutral-600 opacity-0 group-hover:opacity-100 hover:text-neutral-900'

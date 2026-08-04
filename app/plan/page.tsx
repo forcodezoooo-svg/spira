@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useRef, forwardRef } from 'react';
 import { useStore } from '../lib/useStore';
+import { useToast } from '../lib/ToastContext';
+import { ListSkeleton } from '../components/Skeleton';
 import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea } from '../lib/types';
 import TargetCustomerModal, { Avatar } from '../components/TargetCustomerModal';
 import { uid } from '../lib/store';
@@ -8,6 +10,7 @@ import { useChatContext } from '../lib/ChatContext';
 import { buildValuePropPrompt, buildSolutionsPrompt, buildRevenuePrompt, buildBrandingPrompt, buildPersonasPrompt, buildGrowthStagesPrompt, buildWorkAreasPrompt } from '../lib/ai/prompts';
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
+import FlagAward from '../components/FlagAward';
 
 // 사업 고유 컬러 팔레트 (Goals 등 서비스 전체에서 사용)
 const BUSINESS_COLORS = ['#8B5CF6', '#6366F1', '#3B82F6', '#06B6D4', '#10B981', '#84CC16', '#F59E0B', '#F97316', '#EF4444', '#EC4899'];
@@ -30,6 +33,7 @@ function Hint({ text }: { text: string }) {
   return (
     <div className="relative" ref={ref}>
       <button
+        data-teach="plan-help"
         onClick={() => setOpen(o => !o)}
         className="w-4 h-4 rounded-full bg-neutral-200 hover:bg-neutral-300 text-neutral-500 text-[10px] font-bold flex items-center justify-center transition-colors"
       >
@@ -91,6 +95,7 @@ function SectionHeader({
     <div className="flex items-center justify-between mb-2">
       <div className="flex items-center gap-2">
         <div
+          data-teach={onAskAI ? 'plan-fill' : undefined}
           className={onAskAI ? 'flex items-center gap-1 cursor-pointer group' : 'flex items-center'}
           onClick={onAskAI}
           title={onAskAI ? 'AI에게 이 항목 묻기' : undefined}
@@ -138,8 +143,14 @@ function TextSection({
 
   const handleEdit = () => { setDraft(value); setIsEditing(true); };
   const handleSave = () => { onChange(draft); setIsEditing(false); };
+  // 다이아몬드 = 이 항목을 실제로 '채우기' (조언이 아니라 필드 반영)
   const handleAskAI = chat && !chat.loading
-    ? () => chat.openWithContext(label, value)
+    ? () => {
+        chat.setOpen(true);
+        // API엔 상세 명령(마커 지시), 화면 말풍선엔 자연어만 표시
+        const api = `기획서의 '${label}' 항목을 지금 사업 정보에 맞게 ${(value ?? '').trim() ? '보완해서 다시 ' : ''}작성해줘. 조언만 하지 말고 추가 질문 없이, 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 '${label}'에 해당하는 필드가 담긴 JSON을 출력해서 바로 반영되게 해줘.`;
+        chat.sendMessage(api, `${label} 항목을 채워줘`);
+      }
     : undefined;
 
   return (
@@ -784,7 +795,7 @@ function BrandImageSection({
 // ── Growth stages section (사업 성장 단계) ──────────────────────────────────────
 
 function GrowthStagesSection({
-  stages, onAdd, onUpdate, onRemove, onMove, onGenerate,
+  stages, onAdd, onUpdate, onRemove, onMove, onGenerate, currentIndex = 0, onComplete,
 }: {
   stages: GrowthStage[];
   onAdd: (s: GrowthStage) => void;
@@ -792,6 +803,8 @@ function GrowthStagesSection({
   onRemove: (id: string) => void;
   onMove: (idx: number, dir: -1 | 1) => void;
   onGenerate?: () => void;
+  currentIndex?: number;           // 현재 진행 중인 단계 인덱스 (이보다 앞선 단계 = 달성 완료)
+  onComplete?: (index: number) => void; // 해당 단계 달성 처리 (깃발 증정)
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -856,7 +869,7 @@ function GrowthStagesSection({
   );
 
   return (
-    <section>
+    <section id="growth-stages" className="scroll-mt-8">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <div
@@ -909,6 +922,11 @@ function GrowthStagesSection({
                   <div className="flex-1 min-w-0 bg-white border border-neutral-200 rounded-xl px-4 py-3">
                     <div className="flex items-start gap-2">
                       <p className="text-sm font-semibold text-neutral-900 flex-1 leading-relaxed">{s.title}</p>
+                      {onComplete && i < currentIndex && (
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 flex items-center gap-0.5" style={{ color: '#3E6B1F', backgroundColor: '#EAF7DD' }} title="달성 완료">
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>달성
+                        </span>
+                      )}
                       <button onClick={() => startEdit(s)} className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/stage:opacity-100 flex-shrink-0">수정</button>
                     </div>
                     {s.metric && (
@@ -932,6 +950,18 @@ function GrowthStagesSection({
                             </li>
                           ))}
                         </ul>
+                      </div>
+                    )}
+                    {onComplete && i === currentIndex && (
+                      <div className="mt-2.5 pt-2.5 border-t border-neutral-100">
+                        <button
+                          onClick={() => onComplete(i)}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-white bg-neutral-900 hover:bg-neutral-800 transition-colors"
+                          title="이 단계를 달성하고 여정 깃발 받기"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M3 1v10M3 2h6l-1.4 1.9L9 5.8H3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          단계 완료
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1263,9 +1293,47 @@ const HINTS: Record<string, string> = {
 
 export default function PlanPage() {
   const store = useStore();
+  const { toast } = useToast();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const h = (e: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [moreOpen]);
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
+  const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string } | null>(null); // 성장 단계 달성 깃발 오버레이
   const chat = useChatContext();
+
+  // 현재 진행 중인 성장 단계 인덱스 (선택된 사업 기준)
+  const growthIdx = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId)?.growthStageIndex ?? 0;
+
+  // Goals의 'Plan에서 보기'로 #growth-stages 해시와 함께 진입하면 해당 섹션으로 스크롤
+  useEffect(() => {
+    if (!plan || window.location.hash !== '#growth-stages') return;
+    const el = document.getElementById('growth-stages');
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      history.replaceState(null, '', window.location.pathname); // 해시 정리(재진입/스크롤 반복 방지)
+    });
+  }, [plan]);
+
+  // 성장 단계 달성 처리 — 다음 단계로 넘기고 여정 깃발 증정
+  const handleCompleteStage = (index: number) => {
+    if (!selectedWsId) return;
+    const stage = (plan?.growthStages ?? [])[index];
+    if (!stage) return;
+    if (!window.confirm(`'${stage.title}' 단계를 달성하고 다음 단계로 넘어갈까요?`)) return;
+    store.setGrowthStageIndex(selectedWsId, index + 1);
+    setFlagAward({
+      flagSrc: '/flag-goal-hero.svg',
+      heading: '성장 단계 달성! 🎉\n목표 깃발을 획득했어요',
+      sub: `‘${stage.title}’ 단계를 달성했어요.`,
+    });
+  };
   const storeRef = useRef(store);
   const selectedWsIdRef = useRef(selectedWsId);
   storeRef.current = store;
@@ -1353,11 +1421,20 @@ export default function PlanPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!store.ready || !plan || !selectedWsId) return null;
+  if (!store.ready || !plan || !selectedWsId) return <ListSkeleton />;
 
   const selectedWs = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId)?.workspace;
   const selectedWsName = selectedWs?.name ?? '';
   const selectedWsColor = selectedWs?.color;
+
+  const isLastBusiness = store.allWorkspacesEntries.length <= 1;
+  const handleDeleteBusiness = () => {
+    if (isLastBusiness) { toast('마지막 사업은 삭제할 수 없어요. 최소 하나는 있어야 해요.', 'info'); return; }
+    if (!window.confirm(`'${selectedWsName}' 사업을 정말 삭제할까요?\n\n이 사업의 기획서·목표·업무·수익 등 모든 데이터가 영구 삭제되며 되돌릴 수 없습니다.`)) return;
+    const nextId = store.allWorkspacesEntries.find(e => e.workspace.id !== selectedWsId)?.workspace.id ?? null;
+    store.deleteWorkspace(selectedWsId);
+    setSelectedWsId(nextId);
+  };
 
   const update = (patch: Partial<PlanData>) => {
     const next = { ...plan, ...patch };
@@ -1428,47 +1505,27 @@ export default function PlanPage() {
     plan.revenueModel.length && `수익 구조:\n${plan.revenueModel.map(r => `- ${r.title}${r.memo ? `: ${r.memo}` : ''}`).join('\n')}`,
   ].filter(Boolean).join('\n') || '(아직 사업 정보가 없습니다)';
 
-  const handleGenerateValueProp = () => {
+  // 항목별 채우기 — API엔 상세 명령(마커 지시) 전송, 화면 말풍선엔 자연어만 표시
+  const genField = (apiPrompt: string, display: string) => {
     if (!chat || chat.loading) return;
     chat.setOpen(true);
-    chat.sendMessage(buildValuePropPrompt(buildContext()));
+    chat.sendMessage(apiPrompt, display);
   };
+  const handleGenerateValueProp = () => genField(buildValuePropPrompt(buildContext()), '핵심 가치 제안을 채워줘');
+  const handleGenerateSolutions = () => genField(buildSolutionsPrompt(buildContext()), '솔루션/제품을 제안해줘');
+  const handleGenerateRevenueModel = () => genField(buildRevenuePrompt(buildContext()), '수익 구조를 제안해줘');
+  const handleGenerateBrandingKeywords = () => genField(buildBrandingPrompt(buildContext()), '브랜딩 키워드를 만들어줘');
+  const handleGeneratePersonas = () => genField(buildPersonasPrompt(buildContext()), '타겟 고객 페르소나를 만들어줘');
+  const handleGenerateGrowthStages = () => genField(buildGrowthStagesPrompt(buildContext()), '사업 성장 단계를 설계해줘');
+  const handleGenerateWorkAreas = () => genField(buildWorkAreasPrompt(buildContext()), '업무 영역을 정리해줘');
+  const handleGenerateProblems = () => genField(
+    `아래 사업 정보를 바탕으로 이 사업이 해결하려는 고객의 핵심 문제를 2~3개로 구체적으로 정의해줘. 조언만 하지 말고, 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 problems 배열이 담긴 JSON을 출력해줘.\n\n${buildContext()}`,
+    '문제 정의를 작성해줘');
 
-  const handleGenerateSolutions = () => {
-    if (!chat || chat.loading) return;
-    chat.setOpen(true);
-    chat.sendMessage(buildSolutionsPrompt(buildContext()));
-  };
-
-  const handleGenerateRevenueModel = () => {
-    if (!chat || chat.loading) return;
-    chat.setOpen(true);
-    chat.sendMessage(buildRevenuePrompt(buildContext()));
-  };
-
-  const handleGenerateBrandingKeywords = () => {
-    if (!chat || chat.loading) return;
-    chat.setOpen(true);
-    chat.sendMessage(buildBrandingPrompt(buildContext()));
-  };
-
-  const handleGeneratePersonas = () => {
-    if (!chat || chat.loading) return;
-    chat.setOpen(true);
-    chat.sendMessage(buildPersonasPrompt(buildContext()));
-  };
-
-  const handleGenerateGrowthStages = () => {
-    if (!chat || chat.loading) return;
-    chat.setOpen(true);
-    chat.sendMessage(buildGrowthStagesPrompt(buildContext()));
-  };
-
-  const handleGenerateWorkAreas = () => {
-    if (!chat || chat.loading) return;
-    chat.setOpen(true);
-    chat.sendMessage(buildWorkAreasPrompt(buildContext()));
-  };
+  // 기획서 전체 일괄 채우기 (모든 필드)
+  const handleFillAll = () => genField(
+    `아래 사업 정보를 바탕으로 기획서의 '모든 항목'(tagline, mission, vision, concept, problems, solutions, revenueModel, brandingKeywords, valueProposition, targetCustomers, growthStages, workAreas)을 한 번에 채워줘. 비어 있는 항목까지 전부 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 모든 필드를 출력해줘.\n\n${buildContext()}`,
+    '기획서 전체를 채워줘');
 
   const handlePrint = () => {
     const brandName = selectedWsName;
@@ -1486,16 +1543,6 @@ export default function PlanPage() {
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <h1 className="text-[28px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>Plan</h1>
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full border bg-white text-[13px] font-medium transition-colors hover:-translate-y-0.5 flex-shrink-0"
-          style={{ borderColor: 'var(--spira-border-strong)', color: '#5B6560' }}
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-            <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          문서 저장
-        </button>
       </div>
 
       {/* 비즈니스 버튼 (기획서 선택) */}
@@ -1526,7 +1573,7 @@ export default function PlanPage() {
         </button>
       </div>
 
-      {/* 사업 고유 컬러 설정 */}
+      {/* 사업 고유 컬러 설정 + 더보기 */}
       <div className="flex items-center gap-1.5 mb-8">
         <span className="text-[12px] mr-1" style={{ color: '#9AA39D' }}>사업 컬러</span>
         {BUSINESS_COLORS.map(c => (
@@ -1540,6 +1587,33 @@ export default function PlanPage() {
             }`}
           />
         ))}
+        <div className="relative flex-shrink-0 ml-auto" ref={moreRef}>
+          <button
+            onClick={() => setMoreOpen(o => !o)}
+            className="w-8 h-8 rounded-full border bg-white flex items-center justify-center transition-colors hover:bg-neutral-50"
+            style={{ borderColor: 'var(--spira-border-strong)', color: '#5B6560' }}
+            title="더보기"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.4" /><circle cx="8" cy="8" r="1.4" /><circle cx="8" cy="13" r="1.4" /></svg>
+          </button>
+          {moreOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border rounded-2xl shadow-lg py-1.5 z-30" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+              <button onClick={() => { setMoreOpen(false); handleFillAll(); }} disabled={!chat || chat.loading} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-semibold text-left hover:bg-neutral-50 transition-colors disabled:opacity-40" style={{ color: '#16211E' }}>
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                AI로 전체 채우기
+              </button>
+              <div className="my-1 h-px" style={{ backgroundColor: 'var(--spira-border-subtle)' }} />
+              <button onClick={() => { setMoreOpen(false); handlePrint(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-left hover:bg-neutral-50 transition-colors" style={{ color: '#16211E' }}>
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                문서 저장
+              </button>
+              <button onClick={() => { setMoreOpen(false); handleDeleteBusiness(); }} disabled={isLastBusiness} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-left hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ color: '#C24B4B' }} title={isLastBusiness ? '마지막 사업은 삭제할 수 없어요' : undefined}>
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3.5a1 1 0 011-1h1a1 1 0 011 1v1M5.5 4.5l.4 8a1 1 0 001 .95h2.2a1 1 0 001-.95l.4-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                사업 삭제
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -1571,6 +1645,7 @@ export default function PlanPage() {
           onAdd={v => addItem('problems', v)}
           onRemove={i => removeItem('problems', i)}
           placeholder="해결하려는 문제를 입력하세요."
+          onGenerate={chat && !chat.loading ? handleGenerateProblems : undefined}
         />
 
         <TextSection
@@ -1640,6 +1715,8 @@ export default function PlanPage() {
           onRemove={removeGrowthStage}
           onMove={moveGrowthStage}
           onGenerate={chat && !chat.loading ? handleGenerateGrowthStages : undefined}
+          currentIndex={growthIdx}
+          onComplete={handleCompleteStage}
         />
 
         <WorkAreasSection
@@ -1657,6 +1734,8 @@ export default function PlanPage() {
       <MusicTimer compact />
       <MemoPanel />
     </aside>
+
+    {flagAward && <FlagAward {...flagAward} onClose={() => setFlagAward(null)} />}
     </div>
   );
 }

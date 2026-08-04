@@ -132,15 +132,29 @@ export default function JourneyPage() {
     penX = left + r.exit[0]; penY = top + r.exit[1];
   };
   // 브리지: 별 우 → (상승 길4→길1 / 하강 길2→길3) → 다음 별 좌.
-  // 진폭 범위 ±2 SWING으로 확대 + 같은 방향 연속(런) 허용 → 위아래로 크고 불규칙하게.
-  const BAND = SWING; // 진폭 ±SWING — innerH를 화면보다 작게 유지(축소 없이 원래 크기)
-  let runDir: 'up' | 'down' = 'down';
+  // 런(run) 방식: 한 방향으로 1~N칸을 랜덤 길이로 이어 붙인 뒤 방향 전환 → 길이가 제각각인 언덕(비규칙).
+  // 다음 길을 '랜덤하게' 이어붙임: 방향을 시드 랜덤(+화면 밖으로 안 나가게 중앙 복귀 편향)으로 정하고,
+  // 같은 방향으로 1~RUN_MAX칸 랜덤 길이만큼 이어붙임 → 규칙적 지그재그가 아니라 유기적 굴곡. (그래픽 원본 그대로)
+  const RUN_MAX = 1;                 // 진폭 = RUN_MAX·SWING. 1=원래 크기(봉우리 높이 균일, 방향은 랜덤). 크게 할수록 높낮이 다양↑·지도↓
+  const BAND = RUN_MAX * SWING;
+  let runDir: 'up' | 'down' = rnd(seed0 + 3.3) < 0.5 ? 'up' : 'down';
+  let runLeft = 0;
   const bridge = (seed: number) => {
-    if (penY <= midY - BAND + 4) runDir = 'down';
-    else if (penY >= midY + BAND - 4) runDir = 'up';
-    else if (rnd(seed0 + seed) < 0.4) runDir = runDir === 'up' ? 'down' : 'up'; // 40%만 전환 → 연속 상승/하강으로 큰 굴곡
+    if (runLeft <= 0) {
+      if (penY <= midY - BAND + 4) runDir = 'down';            // 위 끝 → 하강
+      else if (penY >= midY + BAND - 4) runDir = 'up';         // 아래 끝 → 상승
+      else {
+        const bias = (penY - midY) / BAND;                    // 중앙보다 아래면 up 확률↑ (경계 밖 방지)
+        runDir = rnd(seed0 + seed) < 0.5 + bias * 0.5 ? 'up' : 'down';
+      }
+      const room = runDir === 'up'
+        ? Math.round((penY - (midY - BAND)) / SWING)
+        : Math.round(((midY + BAND) - penY) / SWING);
+      runLeft = Math.max(1, Math.min(1 + Math.floor(rnd(seed0 + seed * 1.7 + 5) * RUN_MAX), room || 1));
+    }
     if (runDir === 'up') { putTile('road4'); putTile('road1'); }
     else { putTile('road2'); putTile('road3'); }
+    runLeft--;
   };
   for (let mi = 0; mi < milestones.length; mi++) {
     // 깃발(별 내장) — 들어온 길(우)=별 좌팔, 나갈 길(좌)=별 우팔. 가로 팔: 데드라인 13G, 목표 좌29G·우27G.

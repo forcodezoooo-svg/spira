@@ -1,11 +1,15 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
+import { DashboardSkeleton } from '../components/Skeleton';
+import { EmptyState } from '../components/EmptyState';
 import { Program } from '../lib/types';
 import { uid } from '../lib/store';
 import { useChatContext, QuarterPlan, AreaAssignment } from '../lib/ChatContext';
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
+import FlagAward from '../components/FlagAward';
 
 type ProgramWithWs = Program & { wsId: string; wsName: string };
 
@@ -34,6 +38,7 @@ function calcDday(deadline: string): { label: string; cls: string } | null {
 
 export default function ProgramsPage() {
   const store = useStore();
+  const router = useRouter();
   const chat = useChatContext();
 
   // AI 분기 계획 핸들러는 항상 최신 클로저를 가리키도록 ref 사용
@@ -80,7 +85,7 @@ export default function ProgramsPage() {
   // 우측 캘린더: 3단계(목표/데드라인/업무) 중 하나로 기간 표시
   type CalLevel = 'program' | 'deadline' | 'todo';
   const [calMonth, setCalMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
-  const [calLevel, setCalLevel] = useState<CalLevel>('deadline');
+  const [calLevel, setCalLevel] = useState<CalLevel>('todo');
   // 오프 기간 설정 (전면 스탑 → 이후 모든 일정 밀기)
   const [offOpen, setOffOpen] = useState(false);
   const [offStart, setOffStart] = useState('');
@@ -249,6 +254,7 @@ export default function ProgramsPage() {
     const entry = store.allWorkspacesEntries.find(e => e.workspace.id === payload.wsId);
     const prog = entry?.programs.find(p => p.id === payload.programId);
     if (!prog) return;
+    setCalLevel(payload.level); // 방금 배치한 항목이 보이도록 해당 단계 탭으로 전환
     if (payload.level === 'program') {
       store.updateProgramInWs(payload.wsId, { ...prog, startDate: date, deadline: prog.deadline || date });
       return;
@@ -263,14 +269,14 @@ export default function ProgramsPage() {
         if (max && day > max) day = max;
         return { ...dl, startDate: day, date: day };
       }
-      // 업무: 조준한 날짜에 시작일·완수기한을 모두 맞춤 (상위 데드라인 기간 안으로 제한)
-      const b = deadlineBounds(payload.wsId, payload.programId, payload.deadlineId);
-      let day = date;
-      if (b.min && day < b.min) day = b.min;
-      if (b.max && day > b.max) day = b.max;
+      // 업무: 조준한 날짜에 '그대로' 배치. 데드라인 기간 밖이면 데드라인을 늘려서 포함한다.
+      const newDlDate = dl.date && dl.date > date ? dl.date : date;            // 완수기한이 드롭보다 이르면 드롭 날짜까지 연장
+      const newStartDate = dl.startDate && date < dl.startDate ? date : dl.startDate; // 시작일보다 이르면 시작일을 당김
       return {
         ...dl,
-        todos: dl.todos.map(t => (t.id === payload.todoId ? { ...t, date: day, deadline: day } : t)),
+        date: newDlDate,
+        startDate: newStartDate,
+        todos: dl.todos.map(t => (t.id === payload.todoId ? { ...t, date, deadline: date } : t)),
       };
     });
     store.updateProgramInWs(payload.wsId, { ...prog, deadlines });
@@ -311,6 +317,7 @@ export default function ProgramsPage() {
 
   // 사업 필터 (null = 모든 사업)
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
+  const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string; foot?: string } | null>(null); // 깃발 증정 오버레이
   // 수익원 필터 (Resources에서 카테고리 클릭 시 진입)
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
   // 1순위만 보기 (일괄 디데이 설정 화면)
@@ -350,15 +357,17 @@ export default function ProgramsPage() {
   useEffect(() => {
     if (!highlightProg) return;
     const targetSec = areaSections.find(s => s.items.some(({ p }) => p.id === highlightProg));
-    if (targetSec) setExpandedAreas(prev => (prev.has(targetSec.key) ? prev : new Set([...prev, targetSec.key])));
-    // 영역 펼침 → 카드 렌더 후 스크롤
+    if (!targetSec) return; // 데이터가 아직 안 실렸으면 다음 렌더(deps 변화)에서 재시도
+    setExpandedAreas(prev => (prev.has(targetSec.key) ? prev : new Set([...prev, targetSec.key])));
+    // 영역 펼침 → 카드 렌더 후 스크롤 + 잠시 강조
     const t1 = setTimeout(() => {
       document.getElementById(`prog-${highlightProg}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 320);
     const t2 = setTimeout(() => setHighlightProg(null), 3000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
+  // 데이터 로드(ready·엔트리 수) 시 재실행되도록 deps에 포함
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightProg]);
+  }, [highlightProg, store.ready, store.allWorkspacesEntries.length]);
 
   // 데드라인 / 할일 입력
   const [addDeadlineFor, setAddDeadlineFor] = useState<string | null>(null);
@@ -421,7 +430,7 @@ export default function ProgramsPage() {
     else { setHighlightKey(null); setNotPlaced(name); }
   };
 
-  if (!store.ready) return null;
+  if (!store.ready) return <DashboardSkeleton />;
 
   const wsId = store.data.workspace?.id;
   if (!wsId) {
@@ -520,11 +529,20 @@ export default function ProgramsPage() {
     list
       .filter(p => !filterWsId || p.wsId === filterWsId)
       .filter(p => !sourceFilter || p.revenueSource === sourceFilter);
-  const quarterProgramsAll = applyWsFilter(programsFor(year, quarter)); // 모든 우선순위
-  const quarterPrograms = onlyPriority1
-    ? quarterProgramsAll.filter(p => (p.priority ?? 1) === 1)
-    : quarterProgramsAll;
-  const countByQuarter = (q: number) => applyWsFilter(programsFor(year, q)).length;
+  // 업무 영역 컨테이너 전체(분기 무관). 데드라인은 카드 안에서 분기별로 필터한다.
+  const allContainers = () =>
+    store.allWorkspacesEntries.flatMap(e =>
+      e.programs.map(p => ({ ...p, wsId: e.workspace.id, wsName: e.workspace.name, isContinued: false })));
+  // (연도,분기)에 속한 데드라인만 — 데드라인 날짜 기준
+  const dlInQuarter = (p: { deadlines?: Program['deadlines'] }, y: number, q: number) =>
+    (p.deadlines ?? []).filter(dl => {
+      if (!dl.date) return false;
+      const d = new Date(dl.date);
+      return d.getFullYear() === y && Math.floor(d.getMonth() / 3) + 1 === q;
+    });
+  const quarterPrograms = applyWsFilter(allContainers());
+  const countByQuarter = (q: number) =>
+    applyWsFilter(allContainers()).reduce((s, p) => s + dlInQuarter(p, year, q).length, 0);
 
   const nextOrder = () =>
     store.allWorkspacesEntries.flatMap(e => e.programs).reduce((m, p) => Math.max(m, p.order ?? 0), 0) + 1;
@@ -549,6 +567,7 @@ export default function ProgramsPage() {
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
     let order = nextOrder();
+    const touchedAreas = new Set<string>(); // 생성된 영역만 펼치기 위한 키(영역명 또는 미분류)
     for (const plan of plans) {
       const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
       const py = plan.year ?? year;
@@ -556,10 +575,14 @@ export default function ProgramsPage() {
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
       for (const prog of plan.programs ?? []) {
         if (!prog?.name) continue;
+        // 유효한 업무 영역이면 그 영역에 배정 → 이후 로드 시 해당 영역 컨테이너로 병합됨
+        const area = prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined;
+        touchedAreas.add(area?.name ?? NONE);
         store.addProgramToWs(targetWs, {
           name: prog.name,
           goal: prog.goal ?? '',
           color: businessColor(targetWs),
+          workAreaId: area?.id,
           year: py,
           quarter: pq,
           quarters: [qKey(py, pq)],
@@ -567,7 +590,8 @@ export default function ProgramsPage() {
           deadlines: (prog.deadlines ?? []).map(d => ({
             id: uid(),
             name: d.name,
-            date: d.date,
+            // 과거/누락 날짜는 완료처럼 보이고 오늘에 드롭이 막히므로 오늘 이후(분기말)로 보정
+            date: d.date && d.date >= todayKey ? d.date : getQuarterEndDate(py, pq),
             // 할일은 문자열 또는 {name, days?, light?} (매주 반복/가벼운 작업)
             todos: (d.todos ?? []).map(t => typeof t === 'string'
               ? { id: uid(), name: t, done: false }
@@ -576,8 +600,9 @@ export default function ProgramsPage() {
         });
       }
     }
-    // 적용된 첫 분기로 화면 이동
+    // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
+    if (touchedAreas.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas]));
   };
 
   // AI가 배정한 영역을 각 목표에 적용 (유효한 영역 id만, 같은 사업 내에서만)
@@ -673,6 +698,27 @@ export default function ProgramsPage() {
   const toggleDeadlineEnabled = (p: ProgramWithWs, dlId: string) =>
     updateProg(p, (p.deadlines ?? []).map(d => d.id === dlId ? { ...d, enabled: d.enabled === false } : d));
 
+  // 소요시간 포맷 (초 → N시간 M분)
+  const fmtDur = (s: number) => {
+    if (!s) return '0분';
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h > 0 ? (m > 0 ? `${h}시간 ${m}분` : `${h}시간`) : (m > 0 ? `${m}분` : `${s}초`);
+  };
+  // 데드라인 끝내기 — 완료 시 여정 깃발 증정 오버레이 표시
+  const finishDeadline = (p: ProgramWithWs, dl: NonNullable<Program['deadlines']>[number]) => {
+    const wasDone = dl.done;
+    store.toggleDeadlineDone(p.wsId, p.id, dl.id);
+    if (!wasDone) {
+      const seconds = (dl.todos ?? []).reduce((s, t) => s + (t.record?.seconds ?? 0), 0);
+      setFlagAward({
+        flagSrc: '/flag-deadline-hero.svg',
+        heading: '데드라인 완료! 🎉\n데드라인 깃발을 획득했어요',
+        sub: `‘${dl.name}’을(를) 끝냈어요.`,
+        foot: `총 소요시간 ${fmtDur(seconds)}`,
+      });
+    }
+  };
+
   const addDeadline = (p: ProgramWithWs) => {
     if (!dlName.trim() || !dlDate) return;
     updateProg(p, [...(p.deadlines ?? []), { id: uid(), name: dlName.trim(), date: dlDate, todos: [] }]);
@@ -765,13 +811,22 @@ export default function ProgramsPage() {
       const i = order.indexOf(name);
       return i === -1 ? Number.MAX_SAFE_INTEGER : i;
     };
-    return [...groups.values()].sort((a, b) => {
-      if (a.key === NONE) return 1;
-      if (b.key === NONE) return -1;
-      const ra = rank(a.name), rb = rank(b.name);
-      if (ra !== rb) return ra - rb;
-      return a.name.localeCompare(b.name);
-    });
+    // 각 영역의 '가장 가까운(미완료·오늘 이후) 데드라인' — 이게 빠른 영역이 위로 올라옴
+    const nearest = (sec: AreaSection) => {
+      const ds = sec.items.flatMap(({ p }) => (p.deadlines ?? [])
+        .filter(dl => !dl.done && dl.date && dl.date >= todayKey)
+        .map(dl => dl.date as string));
+      return ds.length ? ds.sort()[0] : '9999-12-31'; // 임박 데드라인 없으면 맨 아래
+    };
+    return [...groups.values()]
+      .filter(s => s.key !== NONE) // '미분류' 섹션은 표시하지 않음
+      .sort((a, b) => {
+        const na = nearest(a), nb = nearest(b);
+        if (na !== nb) return na.localeCompare(nb);      // 데드라인 가까운 영역 우선(위로)
+        const ra = rank(a.name), rb = rank(b.name);      // 동률이면 저장된 순서 → 이름
+        if (ra !== rb) return ra - rb;
+        return a.name.localeCompare(b.name);
+      });
   };
   const areaSections = buildAreaSections();
   const toggleAreaCollapsed = (key: string) =>
@@ -812,7 +867,9 @@ export default function ProgramsPage() {
       const pColor = businessColor(p.wsId);
       if (calLevel === 'program') {
         const pp = progPeriod(p);
-        if (pp) real.push({ key: `p-${p.id}`, level: 'program', ...pp, name: p.name, wsId: p.wsId, programId: p.id, color: pColor });
+        // 업무 영역 레벨: 막대 라벨은 업무 영역 이름(디자인/개발/기획…)으로
+        const areaName = programArea(p)?.name ?? p.name ?? '미분류';
+        if (pp) real.push({ key: `p-${p.id}`, level: 'program', ...pp, name: areaName, wsId: p.wsId, programId: p.id, color: pColor });
       } else if (calLevel === 'deadline') {
         // 데드라인 보기: 상위 라인 없이 소속 목표 색으로만 구분
         for (const dl of dls) {
@@ -852,7 +909,7 @@ export default function ProgramsPage() {
     const prog = entry?.programs.find(p => p.id === r.programId);
     if (!prog) return;
     if (r.level === 'program') {
-      if (!window.confirm(`'${r.name}' 목표의 일정을 캘린더에서 삭제할까요?\n하위 데드라인·업무 일정도 함께 사라집니다. (내용은 유지)`)) return;
+      if (!window.confirm(`'${r.name}' 업무 영역의 일정을 캘린더에서 삭제할까요?\n하위 데드라인·업무 일정도 함께 사라집니다. (내용은 유지)`)) return;
       store.updateProgramInWs(r.wsId, {
         ...prog, startDate: undefined, deadline: undefined,
         deadlines: (prog.deadlines ?? []).map(dl => ({ ...dl, date: '', startDate: undefined, todos: clearTodoDates(dl.todos) })),
@@ -889,7 +946,7 @@ export default function ProgramsPage() {
     !allowedBounds || ((!allowedBounds.min || ds >= allowedBounds.min) && (!allowedBounds.max || ds <= allowedBounds.max));
 
   const CalendarPanel = (
-    <aside className="hidden xl:flex flex-col flex-1 min-w-[360px] sticky top-8 gap-4 max-h-[calc(100vh-3rem)]">
+    <aside data-teach="calendar" className="hidden xl:flex flex-col flex-1 min-w-[360px] sticky top-8 gap-4 max-h-[calc(100vh-3rem)]">
       {/* 플레이바 + 공용 메모 (Home·Task와 동일) */}
       <div className="flex-shrink-0"><MusicTimer compact /></div>
       <div className="flex-shrink-0"><MemoPanel /></div>
@@ -932,7 +989,7 @@ export default function ProgramsPage() {
 
         {/* 3단계 보기 탭 */}
         <div className="flex gap-1 mb-5 rounded-full p-1" style={{ backgroundColor: '#F1F1EB' }}>
-          {([['program', '목표'], ['deadline', '데드라인'], ['todo', '업무']] as [CalLevel, string][]).map(([lv, label]) => (
+          {([['program', '업무 영역'], ['deadline', '데드라인'], ['todo', '업무']] as [CalLevel, string][]).map(([lv, label]) => (
             <button
               key={lv}
               onClick={() => setCalLevel(lv)}
@@ -963,8 +1020,13 @@ export default function ProgramsPage() {
           onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }}
           onDrop={e => {
             e.preventDefault();
-            const payload = dragPayloadRef.current;
-            const date = dragOverDateRef.current;
+            // ref가 전역 drop 핸들러에 의해 먼저 비워질 수 있으므로 dataTransfer를 폴백으로 사용
+            let payload = dragPayloadRef.current;
+            if (!payload) {
+              try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ }
+            }
+            // 스크롤 컨테이너에서 셀 dragover가 누락돼도 드롭 좌표로 날짜를 다시 찾음(폴백)
+            const date = dragOverDateRef.current || dateFromPoint(e.clientX, e.clientY);
             if (payload && date) dropOnDate(payload, date);
             setDragOverDate(null);
             dragPayloadRef.current = null;
@@ -978,7 +1040,7 @@ export default function ProgramsPage() {
         {calDrag && (
           <div className="absolute top-full left-0 right-0 mt-1 h-6 z-20 flex items-center justify-center text-[11px] font-semibold text-violet-700 bg-violet-100/95 rounded-lg border border-violet-200 pointer-events-none">▼ 아래로 끌면 다음 달 ({(calMo + 2) > 12 ? (calMo + 2 - 12) : calMo + 2}월)</div>
         )}
-        <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1" ref={weeksRef}>
+        <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pr-1" ref={weeksRef}>
           {calWeeks.map((week, wi) => {
             const days = week.filter((d): d is string => !!d);
             if (!days.length) return <div key={wi} />;
@@ -1014,8 +1076,7 @@ export default function ProgramsPage() {
                 <div className="grid grid-cols-7">
                   {week.map((ds, di) => {
                     const isOver = !!ds && ds === dragOverDate;
-                    const allowedOn = showAllowed && !!ds && inAllowed(ds);   // 배치 가능 범위
-                    const allowedOff = showAllowed && !!ds && !inAllowed(ds); // 범위 밖(비활성)
+                    const allowedOn = showAllowed && !!ds && inAllowed(ds);   // 배치 가능 범위(강조)
                     return (
                     <div
                       key={di}
@@ -1025,7 +1086,7 @@ export default function ProgramsPage() {
                         isOver ? 'bg-violet-100 ring-2 ring-violet-400'
                         : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300'
                         : ''
-                      } ${allowedOff ? 'opacity-25' : ''}`}
+                      }`}
                       style={{ minHeight: cellMinH }}
                     >
                       {ds && (
@@ -1135,9 +1196,11 @@ export default function ProgramsPage() {
         <h1 className="text-[28px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>Goals</h1>
       </div>
 
-      {/* ── 사업 성장 단계 목표 (Plan 연동) ─────────────────────────────────── */}
+      {/* ── 사업 성장 단계 목표 (Plan 연동) — '전체'일 땐 안내 문구, 특정 사업이면 그 사업 목표 ─── */}
       <section className="bg-white border rounded-[24px] px-6 py-5 mb-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-        {growthStages.length === 0 ? (
+        {!filterWsId ? (
+          <p className="text-[14px]" style={{ color: '#9AA39D' }}>특정 <span className="font-medium" style={{ color: '#5B6560' }}>비즈니스</span>를 선택하면 그 사업의 <span className="font-medium" style={{ color: '#5B6560' }}>성장 목표</span>가 여기에 표시돼요.</p>
+        ) : growthStages.length === 0 ? (
           <p className="text-[14px]" style={{ color: '#9AA39D' }}>Plan 페이지에서 <span className="font-medium" style={{ color: '#5B6560' }}>사업 성장 단계</span>를 먼저 설정하세요.</p>
         ) : currentStage ? (
           <div className="flex items-start justify-between gap-4">
@@ -1163,13 +1226,13 @@ export default function ProgramsPage() {
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
-                onClick={() => { if (window.confirm(`'${currentStage.title}' 단계를 달성하고 다음 단계로 넘어갈까요?`)) store.advanceGrowthStage(goalWsId); }}
-                className="flex flex-col items-center justify-center gap-1 rounded-2xl px-4 py-2.5 transition-transform hover:-translate-y-0.5"
+                onClick={() => { store.switchWorkspace(goalWsId); router.push('/plan#growth-stages'); }}
+                className="flex items-center gap-1.5 rounded-2xl px-4 py-2.5 transition-transform hover:-translate-y-0.5"
                 style={{ backgroundColor: '#F0F0EA' }}
-                title="이 단계를 달성하고 다음 단계로"
+                title="Plan에서 성장 단계 관리 · 달성 처리하기"
               >
-                <img src="/flag.svg" alt="" className="w-5 h-auto" />
-                <span className="text-[12px] font-bold" style={{ color: '#16211E' }}>완료</span>
+                <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>Plan에서 보기</span>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none" style={{ color: '#5B6560' }}><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
             </div>
           </div>
@@ -1263,25 +1326,6 @@ export default function ProgramsPage() {
 
       {/* ── 분기 프로그램 ───────────────────────────────────────────────── */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <button
-            onClick={() => setOnlyPriority1(v => !v)}
-            className="text-[13px] font-medium px-3.5 py-1.5 rounded-full border transition-colors"
-            style={onlyPriority1
-              ? { backgroundColor: '#9DFE3B', borderColor: '#9DFE3B', color: '#16211E' }
-              : { backgroundColor: '#fff', borderColor: 'var(--spira-border-strong)', color: '#5B6560' }}
-            title="1순위 목표만 모아 보고, 완수 기한을 일괄 설정"
-          >
-            1순위만
-          </button>
-          <button
-            onClick={openAddProgram}
-            className="text-[14px] font-medium transition-colors hover:opacity-70"
-            style={{ color: '#5B6560' }}
-          >
-            {showAddProgram ? '취소' : '목표 추가'}
-          </button>
-        </div>
 
         {showAddProgram && (
           <div className="bg-white border border-neutral-200 rounded-xl p-3 mb-3 space-y-2">
@@ -1379,26 +1423,30 @@ export default function ProgramsPage() {
         )}
 
         {quarterPrograms.length === 0 ? (
-          <div className="bg-neutral-50 border border-dashed border-neutral-200 rounded-xl px-5 py-10 text-center">
-            <p className="text-sm text-neutral-500">이 분기에 등록된 프로그램이 없어요</p>
+          <div className="bg-white border rounded-2xl" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+            <EmptyState title="아직 업무 영역이 없어요" description="Plan 페이지에서 업무 영역을 추가하면, 각 영역에 데드라인과 업무를 등록할 수 있어요." />
           </div>
         ) : (() => {
           const renderProgramCard = (p: (typeof quarterPrograms)[number], idx: number) => {
-              // 이어서 진행(지난 분기→이번 분기)인 경우, 이미 완료된 데드라인은 이월하지 않음
-              const deadlines = [...(p.deadlines ?? [])]
-                .filter(dl => !(p.isContinued && isDeadlineComplete(dl)))
-                .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+              // 이 분기 데드라인 + '미배치(날짜 없음)' 데드라인 — 캘린더에서 일정만 지워도 항목은 목록에 남게.
+              // (미배치는 현재 실제 분기 뷰에서만 노출해 탭마다 중복되지 않게)
+              const curQ = Math.floor(now.getMonth() / 3) + 1;
+              const showUnscheduled = year === now.getFullYear() && quarter === curQ;
+              const deadlines = [
+                ...dlInQuarter(p, year, quarter).sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+                ...(showUnscheduled ? (p.deadlines ?? []).filter(dl => !dl.date) : []),
+              ];
               const isEditing = editingProgramId === p.id;
               const goalDday = p.deadline ? calcDday(p.deadline) : null;
               const area = programArea(p);
               const isOff = p.enabled === false;
               const priority = p.priority ?? 1;
               return (
-                <div key={p.id} id={`prog-${p.id}`} className={`bg-white border rounded-2xl overflow-hidden transition-all ${isOff ? 'border-neutral-200 opacity-60' : 'border-neutral-200'} ${highlightProg === p.id ? 'ring-2 ring-violet-500 ring-offset-2' : ''}`}>
+                <div key={p.id} id={`prog-${p.id}`} data-teach={idx === 0 ? 'goal-card' : undefined} className={`bg-white border rounded-2xl overflow-hidden transition-all ${isOff ? 'border-neutral-200 opacity-60' : 'border-neutral-200'} ${highlightProg === p.id ? 'ring-2 ring-violet-500 ring-offset-2' : ''}`}>
                   <div className="h-1" style={{ backgroundColor: isOff ? '#d4d4d4' : businessColor(p.wsId) }} />
 
-                  {/* 프로그램 헤더 (depth 1) */}
-                  <div className="px-5 pt-4 pb-3">
+                  {/* (목표 헤더 제거 — 업무영역이 상위 컨테이너이므로 영역 섹션 헤더가 제목 역할) */}
+                  <div className="hidden">
                     {isEditing ? (
                       <div className="space-y-2">
                         <input
@@ -1618,7 +1666,7 @@ export default function ProgramsPage() {
                     )}
 
                     {deadlines.map(dl => {
-                      const dday = calcDday(dl.date);
+                      const dday = dl.date ? calcDday(dl.date) : null;
                       const doneCount = dl.todos.filter(t => t.done).length;
                       const dlOff = dl.enabled === false;
                       return (
@@ -1652,14 +1700,27 @@ export default function ProgramsPage() {
                               draggable
                               onDragStart={e => startListDrag({ level: 'deadline', wsId: p.wsId, programId: p.id, deadlineId: dl.id }, e)}
                               onClick={() => { const dp = dlPeriod(p, dl); focusCal('deadline', `d-${dl.id}`, dp?.start, dp?.end, dl.name); }}
-                              className="text-sm font-semibold text-neutral-800 flex-1 min-w-0 truncate cursor-grab active:cursor-grabbing hover:underline decoration-dotted underline-offset-2"
+                              className={`text-sm font-semibold flex-1 min-w-0 truncate cursor-grab active:cursor-grabbing hover:underline decoration-dotted underline-offset-2 ${dl.done ? 'line-through text-neutral-400' : 'text-neutral-800'}`}
                               title="클릭: 캘린더 '데드라인'에서 위치 표시 · 드래그: 캘린더 날짜에 배치"
                             >{dl.name}</span>
                             {dl.todos.length > 0 && (
                               <span className="text-[10px] text-neutral-400 flex-shrink-0">{doneCount}/{dl.todos.length}</span>
                             )}
-                            {dday && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${dday.cls}`}>{dday.label}</span>}
-                            <span className="text-[10px] text-neutral-400 tabular-nums flex-shrink-0">{dl.date?.slice(5).replace('-', '.')}</span>
+                            {dl.done && (dl.totalSeconds ?? 0) > 0 && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#EAF7DD', color: '#3E6B1F' }} title="완료까지 총 소요시간">⏱ {fmtDur(dl.totalSeconds!)}</span>
+                            )}
+                            {!dl.done && dday && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${dday.cls}`}>{dday.label}</span>}
+                            {dl.date
+                              ? <span className="text-[10px] text-neutral-400 tabular-nums flex-shrink-0">{dl.date.slice(5).replace('-', '.')}</span>
+                              : <span className="text-[10px] font-medium text-amber-700 bg-amber-100 rounded-full px-1.5 py-0.5 flex-shrink-0" title="아직 캘린더에 배치되지 않은 데드라인이에요. 이름을 캘린더로 드래그해 날짜를 지정하세요.">📅 미배치</span>}
+                            <button
+                              onClick={() => finishDeadline(p, dl)}
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 transition-colors ${dl.done ? 'text-[#3E6B1F]' : 'text-white hover:opacity-90'}`}
+                              style={dl.done ? { backgroundColor: '#DFF9C4' } : { backgroundColor: '#16211E' }}
+                              title={dl.done ? '완료됨 — 클릭해 취소' : '이 데드라인을 끝내고 여정 깃발 받기'}
+                            >
+                              {dl.done ? '완료' : '끝내기'}
+                            </button>
                             <button
                               onClick={() => toggleDeadlineEnabled(p, dl.id)}
                               className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 transition-colors ${dlOff ? 'bg-neutral-200 text-neutral-500 hover:bg-neutral-300' : 'bg-violet-100 text-violet-700 hover:bg-violet-200'}`}
@@ -1750,6 +1811,7 @@ export default function ProgramsPage() {
                                     )}
                                   </button>
                                   <span
+                                    data-teach="todo-item"
                                     draggable
                                     onDragStart={e => startListDrag({ level: 'todo', wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id }, e)}
                                     onClick={() => focusCal('todo', `t-${t.id}`, t.date || t.deadline, t.deadline || t.date, t.name)}
@@ -1828,25 +1890,20 @@ export default function ProgramsPage() {
               );
           };
 
-          // 1순위 보기이거나 영역 미정의면 평면 목록, 아니면 영역별 접이식 박스
-          if (onlyPriority1 || !groupByArea || !anyAreasDefined) {
-            return (
-              <div className="space-y-4">
-                {quarterPrograms.map((p, idx) => renderProgramCard(p, idx))}
-              </div>
-            );
-          }
+          // 항상 업무 영역별 접이식 박스로 렌더 (업무영역 > 데드라인 > 업무)
           return (
             <div className="space-y-3">
               {areaSections.map(sec => {
                 const expanded = expandedAreas.has(sec.key);
+                // 이 영역의 '이번 분기' 데드라인들 (컨테이너의 데드라인을 분기로 필터)
+                const secDeadlines = sec.items.flatMap(({ p }) => dlInQuarter(p, year, quarter).map(dl => ({ dl, p })));
                 return (
                   <div key={sec.key} className="rounded-3xl overflow-hidden" style={{ backgroundColor: '#F1F1EB' }}>
                     <div className="w-full flex items-center gap-3 px-5 py-4">
                       <div onClick={() => toggleAreaCollapsed(sec.key)} className="flex flex-col gap-1 flex-1 min-w-0 cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0">
                           <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{sec.name}</h3>
-                          <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#E1E1DA', color: '#5B6560' }}>{sec.items.length}</span>
+                          <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#E1E1DA', color: '#5B6560' }}>{secDeadlines.length}</span>
                         </div>
                       </div>
                       {sec.key !== NONE && !filterWsId && (
@@ -1863,27 +1920,19 @@ export default function ProgramsPage() {
                         <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
                     </div>
-                    {/* 접힌 상태에서도 소속 목표를 텍스트로 미리보기 */}
-                    {!expanded && sec.items.length > 0 && (
+                    {/* 접힌 상태에서도 이번 분기 데드라인을 텍스트로 미리보기 */}
+                    {!expanded && secDeadlines.length > 0 && (
                       <div onClick={() => toggleAreaCollapsed(sec.key)} className="px-3 pb-3 cursor-pointer">
                         <div className="rounded-2xl px-4 py-3 flex flex-wrap gap-x-4 gap-y-2" style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}>
-                          {sec.items.map(({ p }) => {
-                            const todos = (p.deadlines ?? []).flatMap(d => d.todos ?? []);
-                            const done = todos.filter(t => t.done).length;
-                            const prio = p.priority ?? 1;
-                            const off = p.enabled === false;
+                          {secDeadlines.map(({ dl, p }) => {
+                            const done = (dl.todos ?? []).filter(t => t.done).length;
+                            const off = dl.enabled === false;
                             return (
-                              <span key={p.id} className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: off ? '#9AA39D' : '#44514B' }}>
-                                <span
-                                  className="w-4 h-4 flex items-center justify-center text-[10px] font-bold rounded-full flex-shrink-0 tabular-nums"
-                                  style={prio === 1 ? { backgroundColor: '#9DFE3B', color: '#16211E' } : { backgroundColor: '#E1E1DA', color: '#8D9A8D' }}
-                                  title={`${prio}순위${prio === 1 ? ' — 오늘의 업무에 반영' : ''}`}
-                                >
-                                  {prio}
-                                </span>
+                              <span key={dl.id} className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: off ? '#9AA39D' : '#44514B' }}>
                                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
-                                <span className={`truncate max-w-[220px] ${off ? 'line-through' : ''}`}>{p.name}</span>
-                                {todos.length > 0 && <span className="text-[12px] tabular-nums" style={{ color: '#9AA39D' }}>{done}/{todos.length}</span>}
+                                <span className={`truncate max-w-[220px] ${off ? 'line-through' : ''}`}>{dl.name}</span>
+                                {dl.date && <span className="text-[12px] tabular-nums" style={{ color: '#9AA39D' }}>{dl.date.slice(5).replace('-', '.')}</span>}
+                                {(dl.todos?.length ?? 0) > 0 && <span className="text-[12px] tabular-nums" style={{ color: '#9AA39D' }}>{done}/{dl.todos.length}</span>}
                               </span>
                             );
                           })}
@@ -1904,6 +1953,7 @@ export default function ProgramsPage() {
       </section>
     </div>
     {CalendarPanel}
+    {flagAward && <FlagAward flagSrc={flagAward.flagSrc} heading={flagAward.heading} sub={flagAward.sub} foot={flagAward.foot} onClose={() => setFlagAward(null)} />}
     </div>
   );
 }

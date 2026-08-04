@@ -1,6 +1,53 @@
-import { AppData, PlanData, PlanItem, Program } from './types';
+import { AppData, PlanData, PlanItem, Program, RoutineSystem } from './types';
+import { ERR } from './copy';
 
 const KEY = 'spira';
+
+// 목표(Program) 레벨 제거 마이그레이션 — 업무 영역별 1개의 "컨테이너 프로그램"으로 합친다.
+// 데드라인·할일 내용은 100% 보존(목표 안의 내용이 영역 밖으로 나오는 형태). 멱등(재실행해도 동일).
+// 구조: 업무 영역 > 데드라인 > 업무.  각 컨테이너 id = 해당 영역 id(1:1), 미분류는 합성 id.
+function collapseToAreas(
+  programs: Program[],
+  plan: PlanData,
+  routineSystems: RoutineSystem[],
+  wsId: string,
+): { programs: Program[]; routineSystems: RoutineSystem[] } {
+  const areas = plan.workAreas ?? [];
+  const validAreaIds = new Set(areas.map(a => a.id));
+  const NONE = `__unassigned__:${wsId}`;
+  const containers = new Map<string, Program>();
+  const remap = new Map<string, string>(); // 옛 programId → 컨테이너 id (루틴 재매핑용)
+
+  const containerFor = (areaId?: string): Program => {
+    const valid = !!areaId && validAreaIds.has(areaId);
+    const cid = valid ? areaId! : NONE;
+    let c = containers.get(cid);
+    if (!c) {
+      const area = valid ? areas.find(a => a.id === areaId) : undefined;
+      c = { id: cid, name: area?.name ?? '미분류', goal: '', color: area?.color ?? '', workAreaId: valid ? areaId : undefined, enabled: true, priority: 1, deadlines: [] };
+      containers.set(cid, c);
+    }
+    return c;
+  };
+
+  // 정의된 모든 영역에 컨테이너 보장(빈 영역에도 데드라인을 추가할 수 있도록)
+  for (const a of areas) containerFor(a.id);
+  // 기존 프로그램의 데드라인을 소속 영역 컨테이너로 이관
+  for (const p of programs) {
+    const c = containerFor(p.workAreaId);
+    remap.set(p.id, c.id);
+    c.deadlines = [...(c.deadlines ?? []), ...(p.deadlines ?? [])];
+  }
+  // 루틴 시스템의 programId 재매핑(끊긴 참조 방지)
+  const newRoutines = routineSystems.map(rs =>
+    rs.programId && remap.has(rs.programId) ? { ...rs, programId: remap.get(rs.programId)! } : rs,
+  );
+  // 영역 정의 순서대로, 미분류는 마지막
+  const ordered: Program[] = [];
+  for (const a of areas) { const c = containers.get(a.id); if (c) ordered.push(c); }
+  const none = containers.get(NONE); if (none) ordered.push(none);
+  return { programs: ordered, routineSystems: newRoutines };
+}
 
 export const emptyPlan: PlanData = {
   brandImages: [],
@@ -67,14 +114,19 @@ export function load(): AppData {
         plan.solutions = toItems(plan.solutions);
         plan.revenueModel = toItems(plan.revenueModel);
         // 프로그램에 연도/분기/데드라인 기본값 부여 (기존 데이터 보존)
-        const programs = (e.programs ?? []).map((p: Program) => {
+        const programs0 = (e.programs ?? []).map((p: Program) => {
           const ref = p.deadline || p.startDate;
           const refDate = ref ? new Date(ref) : new Date();
           const year = p.year ?? refDate.getFullYear();
           const quarter = p.quarter ?? (Math.floor(refDate.getMonth() / 3) + 1);
           return { ...p, year, quarter, deadlines: p.deadlines ?? [] };
         });
-        return { ...e, plan, programs, subscriptions: e.subscriptions ?? [], events: e.events ?? [], annualGoals: e.annualGoals ?? {}, revenueTarget: e.revenueTarget };
+        // 목표 레벨 제거: 업무 영역 컨테이너로 병합 (데드라인·할일 보존)
+        const { programs, routineSystems } = collapseToAreas(programs0, plan, e.routineSystems ?? [], e.workspace?.id ?? '');
+        // 구독: startMonth 없는 기존 구독은 '이번 달'부터 반영되도록 보정(이전 달 소급 방지)
+        const nowYM = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        const subscriptions = (e.subscriptions ?? []).map((s: Record<string, unknown>) => s.startMonth ? s : { ...s, startMonth: nowYM });
+        return { ...e, plan, programs, routineSystems, subscriptions, events: e.events ?? [], annualGoals: e.annualGoals ?? {}, revenueTarget: e.revenueTarget };
       });
     }
 
@@ -112,7 +164,7 @@ export function writeLocalRaw(data: AppData): void {
     } catch {
       // 그래도 실패하면 무시
     }
-    throw new Error('이미지가 너무 커서 저장에 실패했습니다. 이미지 없이 저장되었습니다.');
+    throw new Error(ERR.imageTooLarge);
   }
 }
 
