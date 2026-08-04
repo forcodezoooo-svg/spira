@@ -5,7 +5,7 @@ export default function MobileHeader() {
   const { toggleSidebar } = useUI();
 
   return (
-    <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white/90 backdrop-blur-sm border-b border-neutral-200 flex items-center justify-between px-4 z-30">
+    <div className="lg:hidden fixed top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-30 pointer-events-none [&>*]:pointer-events-auto">
       <button
         onClick={toggleSidebar}
         className="w-9 h-9 flex flex-col items-center justify-center gap-1.5"
