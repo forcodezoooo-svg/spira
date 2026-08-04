@@ -10,31 +10,32 @@ export type Plan = {
 };
 
 // 현재 로그인 사용자의 구독 플랜을 읽는다(기본 free). user_plan 테이블은 서버만 쓰고, 사용자는 읽기만 가능.
+// Pro 판정 = tier가 pro이고, 만료일(current_period_end)이 없거나 아직 지나지 않음.
+// status는 'active'(갱신 예정) / 'canceled'(해지 — 남은 기간까지만 유지)를 구분하기 위한 표시용.
 export function usePlan() {
   const [plan, setPlan] = useState<Plan>({ tier: 'free' });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { if (!cancelled) { setPlan({ tier: 'free' }); setLoading(false); } return; }
-      const { data } = await supabase
-        .from('user_plan')
-        .select('tier, cycle, status, current_period_end')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (cancelled) return;
-      if (data && data.tier === 'pro' && data.status === 'active') {
-        setPlan({ tier: 'pro', cycle: data.cycle, status: data.status, currentPeriodEnd: data.current_period_end });
-      } else {
-        setPlan({ tier: 'free' });
-      }
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  const load = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setPlan({ tier: 'free' }); setLoading(false); return; }
+    const { data } = await supabase
+      .from('user_plan')
+      .select('tier, cycle, status, current_period_end')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const active = data?.tier === 'pro'
+      && (!data.current_period_end || new Date(data.current_period_end).getTime() > Date.now());
+    if (active) {
+      setPlan({ tier: 'pro', cycle: data!.cycle, status: data!.status, currentPeriodEnd: data!.current_period_end });
+    } else {
+      setPlan({ tier: 'free' });
+    }
+    setLoading(false);
+  };
 
-  return { plan, loading };
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  return { plan, loading, refresh: load };
 }

@@ -29,12 +29,26 @@ const PRO_FEATURES = [
 
 export default function PricingPage() {
   const { toast } = useToast();
-  const { plan } = usePlan();
+  const { plan, refresh } = usePlan();
   const [cycle, setCycle] = useState<Cycle>('yearly');
   const [busy, setBusy] = useState(false);
   const fmt = (n: number) => n.toLocaleString('ko-KR');
 
   const isPro = plan.tier === 'pro';
+  const isCanceled = isPro && plan.status === 'canceled';
+
+  const cancelSubscription = async () => {
+    if (!window.confirm('구독을 해지할까요?\n남은 기간까지는 Pro를 계속 이용할 수 있어요.')) return;
+    try {
+      const res = await fetch('/api/billing/cancel', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { toast(data.error ?? '해지에 실패했어요.', 'error'); return; }
+      toast('구독을 해지했어요. 남은 기간까지 Pro가 유지돼요.', 'success');
+      void refresh();
+    } catch {
+      toast('네트워크 오류가 발생했어요.', 'error');
+    }
+  };
   const proPrice = PRICE[cycle];
   const proPerMonth = cycle === 'yearly' ? Math.round(PRICE.yearly / 12) : PRICE.monthly;
 
@@ -127,8 +141,17 @@ export default function PricingPage() {
             ))}
           </ul>
           {isPro ? (
-            <div className="mt-7 w-full py-3 rounded-2xl text-center text-[15px] font-bold" style={{ backgroundColor: 'rgba(157,254,59,0.15)', color: '#9DFE3B' }}>
-              ✓ 이용 중{plan.currentPeriodEnd ? ` · ~${new Date(plan.currentPeriodEnd).toLocaleDateString('ko-KR')}` : ''}
+            <div className="mt-7">
+              <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold" style={{ backgroundColor: 'rgba(157,254,59,0.15)', color: '#9DFE3B' }}>
+                {isCanceled ? '해지 예정' : '✓ 이용 중'}{plan.currentPeriodEnd ? ` · ${new Date(plan.currentPeriodEnd).toLocaleDateString('ko-KR')}까지` : ''}
+              </div>
+              {isCanceled ? (
+                <p className="text-center text-[12px] mt-2.5" style={{ color: '#AEB8AE' }}>기간이 끝나면 자동으로 Free로 전환돼요.</p>
+              ) : (
+                <button onClick={cancelSubscription} className="w-full text-[13px] font-semibold py-2 mt-1 transition-colors hover:opacity-80" style={{ color: '#AEB8AE' }}>
+                  구독 해지
+                </button>
+              )}
             </div>
           ) : (
             <button
