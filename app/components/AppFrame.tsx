@@ -17,8 +17,8 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   const { closeChat } = useUI();
   // 다른 메뉴 페이지로 이동하면 열려 있던 채팅창을 자동으로 닫는다.
   useEffect(() => { closeChat(); }, [path, closeChat]);
-  // 인증 화면 + 여정 지도는 앱 크롬(사이드바·플레이바·메모·AI) 없이 단독 화면으로
-  const bare = path === '/login' || path.startsWith('/auth') || path === '/journey';
+  // 랜딩(공개) + 인증 화면 + 여정 지도는 앱 크롬(사이드바·플레이바·메모·AI) 없이 단독 화면으로
+  const bare = path === '/' || path === '/login' || path.startsWith('/auth') || path === '/journey';
 
   if (bare) return <>{children}</>;
 

@@ -40,7 +40,7 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full flex flex-col gap-3">
-          {/* 카카오 */}
+          {/* 카카오 로그인 — 1차 웹 배포에서는 숨김 (사업자 인증 후 STEP 6에서 재설정). 코드 보존.
           <button
             onClick={() => oauth('kakao')}
             disabled={busy !== null}
@@ -52,6 +52,7 @@ export default function LoginPage() {
             </svg>
             {busy === 'kakao' ? '이동 중…' : '카카오로 계속하기'}
           </button>
+          */}
 
           {/* 구글 */}
           <button

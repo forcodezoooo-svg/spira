@@ -46,7 +46,7 @@ export const RECOMMENDED: Record<string, RecommendedChip[]> = {
     { label: '🗺️ 이번 분기 계획 짜기', message: '이번 분기 실행 계획을 같이 짜줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영해줘.' },
     { label: '🔁 반복 루틴 만들기', message: '매주 반복하면 좋은 루틴 할일들을 요일까지 정해서 만들어줘.' },
   ],
-  '/': [
+  '/home': [
     { label: '🌿 오늘 일정 정리', message: '오늘 일정을 같이 정리하고 싶어요. 오늘의 업무를 어떻게 진행하면 좋을까요?' },
   ],
   default: [

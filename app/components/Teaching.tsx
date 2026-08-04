@@ -25,9 +25,9 @@ const TOUR: Step[] = [
   { page: '/programs', target: '[data-teach="sparky-panel"]', text: '채팅창에 ‘기획안을 기반으로 할 일 생성해줘’ 문구를 넣어뒀어요. 그대로 전송하면 기획서를 기반으로 할 일이 만들어져요!', prefill: '기획안을 기반으로 할 일 생성해줘', awaitTodos: true, closeChat: true },
   { page: '/programs', target: '[data-teach="goal-card"]', text: '생성된 할 일을 자유롭게 수정하거나 추가할 수 있어요.' },
   { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '왼쪽에서 강조된 업무를 클릭한 채로, 이 캘린더의 오늘 날짜(연두색 칸)로 드래그해서 올려보세요.', awaitPlaced: true },
-  { page: '/programs', target: '[data-teach="nav-home"]', text: '위의 집 모양 아이콘을 눌러 Home 페이지로 이동해보세요!', go: '/' },
-  { page: '/', target: '[data-teach="today-timer"]', text: '오늘의 업무 옆 플레이 버튼을 눌러보세요. 플레이 버튼은 업무 위에 마우스를 올리면 나타나요. 누르면 타이머가 시작되고 업무 시간이 기록돼요.', awaitTimer: true },
-  { page: '/', text: '여정 지도에 첫 목표 깃발을 꽂았어요. 업무를 완수할 때마다 깃발이 하나씩 쌓여요.', last: true, celebrate: true },
+  { page: '/programs', target: '[data-teach="nav-home"]', text: '위의 집 모양 아이콘을 눌러 Home 페이지로 이동해보세요!', go: '/home' },
+  { page: '/home', target: '[data-teach="today-timer"]', text: '오늘의 업무 옆 플레이 버튼을 눌러보세요. 플레이 버튼은 업무 위에 마우스를 올리면 나타나요. 누르면 타이머가 시작되고 업무 시간이 기록돼요.', awaitTimer: true },
+  { page: '/home', text: '여정 지도에 첫 목표 깃발을 꽂았어요. 업무를 완수할 때마다 깃발이 하나씩 쌓여요.', last: true, celebrate: true },
 ];
 
 // 온보딩 투어가 다루지 않는 페이지의 첫 진입 안내. Home·Goals는 위 투어가 다룸.

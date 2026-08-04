@@ -5,9 +5,10 @@ import { usePathname } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { useAuth } from './AuthProvider';
 import { useUI } from '../lib/UIContext';
+import FeedbackModal from './FeedbackModal';
 
 const nav = [
-  { href: '/', label: 'Home', icon: '/home_icon.svg' },
+  { href: '/home', label: 'Home', icon: '/home_icon.svg' },
   // Task 메뉴 숨김 — 라우트/기능/데이터는 유지 (배포 전 완전 삭제 여부 확인 예정)
   // { href: '/task', label: 'Task', icon: '/task_icon.svg' },
   { href: '/programs', label: 'Goals', icon: '/goals_icon.svg' },
@@ -44,6 +45,7 @@ export default function Sidebar() {
   const { sidebarOpen, closeSidebar } = useUI();
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const wsRef = useRef<HTMLDivElement>(null);
@@ -148,7 +150,7 @@ export default function Sidebar() {
               <Link
                 key={href}
                 href={href}
-                data-teach={href === '/programs' ? 'nav-goals' : href === '/' ? 'nav-home' : undefined}
+                data-teach={href === '/programs' ? 'nav-goals' : href === '/home' ? 'nav-home' : undefined}
                 onClick={closeSidebar}
                 title={label}
                 aria-label={label}
@@ -183,7 +185,11 @@ export default function Sidebar() {
                     <p className="text-xs font-medium text-neutral-800 truncate">{displayName}</p>
                     <p className="text-[10px] text-neutral-500 truncate">{user.email}</p>
                   </div>
-                  <button onClick={() => signOut()} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs text-neutral-600 hover:bg-neutral-100 transition-colors">
+                  <button onClick={() => { setUserOpen(false); setFeedbackOpen(true); }} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs text-neutral-600 hover:bg-neutral-100 transition-colors">
+                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M14 7.5a5.5 5.5 0 01-7.9 4.95L2.5 13.5l1.05-3.6A5.5 5.5 0 1114 7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    의견 보내기
+                  </button>
+                  <button onClick={() => signOut()} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs text-neutral-600 hover:bg-neutral-100 transition-colors border-t border-neutral-100">
                     <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     로그아웃
                   </button>
@@ -199,6 +205,8 @@ export default function Sidebar() {
           )}
         </div>
       </aside>
+
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </>
   );
 }

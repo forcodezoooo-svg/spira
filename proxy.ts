@@ -25,15 +25,16 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  const isAuthRoute = path === '/login' || path.startsWith('/auth');
+  // 공개 경로: 랜딩('/') · 로그인 · OAuth 콜백. 나머지는 앱(로그인 필요).
+  const isPublicRoute = path === '/' || path === '/login' || path.startsWith('/auth');
 
-  // 로그인 안 했는데 인증 페이지가 아니면 → 로그인으로
-  if (!user && !isAuthRoute) {
+  // 로그인 안 했는데 공개 경로가 아니면 → 로그인으로
+  if (!user && !isPublicRoute) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
-  // 로그인 했는데 로그인 페이지면 → 홈으로
-  if (user && path === '/login') {
-    return NextResponse.redirect(new URL('/', request.url));
+  // 로그인 했는데 랜딩/로그인 페이지면 → 앱 홈으로
+  if (user && (path === '/' || path === '/login')) {
+    return NextResponse.redirect(new URL('/home', request.url));
   }
 
   return response;
