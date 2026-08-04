@@ -2,7 +2,7 @@
 import { useUI } from '../lib/UIContext';
 
 export default function MobileHeader() {
-  const { toggleSidebar, toggleChat } = useUI();
+  const { toggleSidebar } = useUI();
 
   return (
     <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white/90 backdrop-blur-sm border-b border-neutral-200 flex items-center justify-between px-4 z-30">
@@ -19,15 +19,8 @@ export default function MobileHeader() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/logo.svg" alt="Spira" className="h-5 w-auto" />
 
-      <button
-        onClick={toggleChat}
-        className="w-9 h-9 flex items-center justify-center"
-        aria-label="AI 채팅 열기"
-      >
-        <svg className="w-5 h-5 text-neutral-700" viewBox="0 0 24 24" fill="none">
-          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+      {/* 우측 여백 — 로고 중앙 정렬 유지 (채팅은 우측 하단 플로팅 버튼으로 이동) */}
+      <div className="w-9" />
     </div>
   );
 }

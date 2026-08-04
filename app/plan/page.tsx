@@ -1730,7 +1730,7 @@ export default function PlanPage() {
     </div>
 
     {/* ── 오른쪽: 플레이바 + 공용 메모 ── */}
-    <aside className="space-y-4 lg:sticky lg:top-8">
+    <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
       <MusicTimer compact />
       <MemoPanel />
     </aside>

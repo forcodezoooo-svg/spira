@@ -694,7 +694,7 @@ export default function ResourcesPage() {
       </div>
 
       {/* ── 오른쪽: 대시보드 ── */}
-      <aside className="space-y-4 lg:sticky lg:top-8">
+      <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
         {/* 플레이바 + 공용 메모 (Home·Task·Goals와 동일) */}
         <MusicTimer compact />
         <MemoPanel />

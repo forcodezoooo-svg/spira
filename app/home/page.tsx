@@ -297,7 +297,7 @@ export default function Home() {
     return (
       <li key={t.key} draggable={dp.draggable} onDragStart={dp.onDragStart} onDragOver={dp.onDragOver} onDrop={dp.onDrop} onDragEnd={dp.onDragEnd}
         style={{ borderColor: '#BCE89A', backgroundColor: t.done ? '#F8FBF3' : '#FFFFFF' }}
-        className={`group flex items-center gap-3 border-[1.5px] rounded-full px-5 py-3 transition-colors ${dp.className}`}>
+        className={`group flex flex-wrap items-center gap-x-2 gap-y-1.5 border-[1.5px] rounded-3xl px-5 py-3 transition-colors ${dp.className}`}>
         <DragHandle />
         <StarButton starred={t.starred} onClick={() => store.toggleProgramTodoStar(t.wsId, t.programId, t.deadlineId, t.todoId)} />
         <button
@@ -336,7 +336,7 @@ export default function Home() {
         {!t.recurring && !t.done && (
           <button
             onClick={() => moveGoalToTomorrow(t)}
-            className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+            className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
             title="내일 이어서 하기"
           >
             내일 ↪
@@ -344,7 +344,7 @@ export default function Home() {
         )}
         <button
           onClick={() => setEditTodoTarget(t)}
-          className="text-[10px] text-neutral-400 hover:text-neutral-700 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+          className="text-[10px] text-neutral-400 hover:text-neutral-700 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
           title="업무 편집 (이름·날짜·기한)"
         >
           편집
@@ -352,7 +352,7 @@ export default function Home() {
         <button
           onClick={() => store.hideTodoFromHome(t.key)}
           title={t.recurring ? '오늘 홈에서 숨기기' : '홈에서 숨기기 (Task에서 복구 가능)'}
-          className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+          className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
         >
           ×
         </button>
@@ -387,7 +387,7 @@ export default function Home() {
       {!t.completed && (
         <button
           onClick={() => store.moveQuickTask(t.id, tomorrowStr)}
-          className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+          className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
           title="내일 이어서 하기"
         >
           내일 ↪
@@ -396,7 +396,7 @@ export default function Home() {
       <button
         onClick={() => store.deleteQuickTask(t.id)}
         title="추가 업무 삭제"
-        className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all"
+        className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
       >
         ×
       </button>
@@ -527,8 +527,8 @@ export default function Home() {
         )}
       </div>
 
-      {/* ── 오른쪽: 대시보드 ── */}
-      <aside className="space-y-4 lg:sticky lg:top-8">
+      {/* ── 오른쪽: 대시보드 (모바일에서는 숨김) ── */}
+      <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
         {/* 타이머 pill */}
         <MusicTimer compact />
 

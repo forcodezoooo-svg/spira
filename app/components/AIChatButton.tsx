@@ -121,11 +121,11 @@ export default function AIChatButton() {
 
   return (
     <>
-      {/* 나의 여정 지도 — 채팅 아이콘 바로 위 스티키 FAB */}
-      {isDesktop && !panelVisible && (
+      {/* 나의 여정 지도 — 채팅 아이콘 바로 위 스티키 FAB (모바일에서도 우측 하단 표시) */}
+      {!panelVisible && (
         <button
           onClick={() => router.push('/journey')}
-          className="fixed bottom-[86px] right-6 z-40 w-[50px] h-[50px] rounded-full flex items-center justify-center transition-transform hover:scale-105"
+          className="fixed bottom-[72px] right-4 lg:bottom-[86px] lg:right-6 z-40 w-11 h-11 lg:w-[50px] lg:h-[50px] rounded-full flex items-center justify-center transition-transform hover:scale-105"
           style={{ backgroundColor: '#16211E', color: '#EDFF9F', boxShadow: 'var(--spira-glow-fab)' }}
           aria-label="나의 여정 지도"
           title="나의 여정 지도"
@@ -137,12 +137,12 @@ export default function AIChatButton() {
         </button>
       )}
 
-      {/* 우측 하단 플로팅 버튼 (데스크탑에서 채팅이 닫혀 있을 때 — 모바일은 헤더 버튼 사용) */}
-      {isDesktop && !panelVisible && (
+      {/* 우측 하단 플로팅 채팅 버튼 (채팅이 닫혀 있을 때 — 데스크탑·모바일 공통) */}
+      {!panelVisible && (
         <button
           data-teach="sparky"
           onClick={toggleChat}
-          className="fixed bottom-6 right-6 z-40 w-[50px] h-[50px] rounded-full flex items-center justify-center transition-transform hover:scale-105"
+          className="fixed bottom-4 right-4 lg:bottom-6 lg:right-6 z-40 w-11 h-11 lg:w-[50px] lg:h-[50px] rounded-full flex items-center justify-center transition-transform hover:scale-105"
           style={{ backgroundColor: '#5FD93A', color: '#16211E', boxShadow: 'var(--spira-glow-fab)' }}
           aria-label="AI 어시스턴트 열기"
           title="AI 어시스턴트"

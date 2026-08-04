@@ -45,7 +45,7 @@ export default function TaskTimerButton({ taskId, dateStr, done }: { taskId: str
         data-teach="today-timer"
         onClick={() => toggleTaskTimer(taskId)}
         className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-          active ? 'bg-violet-600 text-neutral-900' : 'text-neutral-600 opacity-0 group-hover:opacity-100 hover:text-neutral-900'
+          active ? 'bg-violet-600 text-neutral-900' : 'text-neutral-600 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 hover:text-neutral-900'
         }`}
         title={active ? '시간 기록 정지' : '시간 기록 시작'}
       >
