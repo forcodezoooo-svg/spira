@@ -259,9 +259,9 @@
 
 ## Responsive
 
-- [~] Desktop
+- [x] Desktop
 - [ ] **iPad (주요 타깃)**
-- [ ] Mobile Web
+- [x] Mobile Web (Home·Resources·여정지도·헤더·사이드바 실기기 대응)
 
 ---
 
