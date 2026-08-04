@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+import { NextResponse } from 'next/server';
+import { checkAiAccess } from '../../lib/aiUsage';
 
 // 지연 초기화: 빌드 중 키 없이 모듈만 로드돼도 터지지 않도록, 요청 시 클라이언트 생성.
 let _client: OpenAI | null = null;
@@ -9,6 +11,10 @@ function getClient() {
 
 // 온보딩 전용 — 사업 설명·첫 목표를 분석해 기획서 초안 + 분기별 목표 + 업무 영역을 JSON으로 반환.
 export async function POST(request: Request) {
+  // 로그인 필수 + 무료 하루 한도 (비로그인 외부 호출 차단 → 비용 남용 방지)
+  const access = await checkAiAccess();
+  if ('error' in access) return NextResponse.json({ error: access.error }, { status: access.status });
+
   const { name, description, goal } = await request.json();
 
   const system = `당신은 1인 창업가를 위한 사업 운영 OS 'Spira'의 온보딩 어시스턴트예요.
