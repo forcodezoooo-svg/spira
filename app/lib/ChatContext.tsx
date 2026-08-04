@@ -1,6 +1,8 @@
 'use client';
 import { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
 import { useUI } from './UIContext';
+import { useToast } from './ToastContext';
+import { createClient } from './supabase/client';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER } from './ai/markers';
 import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
 
@@ -122,6 +124,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const appContextRef = useRef<string>('');
   const setAppContext = useCallback((data: string) => {
     appContextRef.current = data;
+  }, []);
+
+  const { toast } = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // AI 자동 입력(마커 적용)은 Pro 전용 — 현재 사용자의 Pro 여부를 추적
+  const isProRef = useRef(false);
+  useEffect(() => {
+    const supabase = createClient();
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { isProRef.current = false; return; }
+      const { data } = await supabase.from('user_plan').select('tier, current_period_end').eq('user_id', user.id).maybeSingle();
+      isProRef.current = data?.tier === 'pro' && (!data.current_period_end || new Date(data.current_period_end).getTime() > Date.now());
+    };
+    void check();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => { void check(); });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const messagesRef = useRef<Message[]>([]);
@@ -298,7 +319,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      if (full.includes(PLAN_MARKER) && planHandlerRef.current) {
+      // AI 자동 입력(기획서·할일·영역 자동 반영)은 Pro 전용 — 무료는 조언까지만
+      const hadMarker = full.includes(PLAN_MARKER) || full.includes(ROUTINE_MARKER) || full.includes(GOALS_MARKER) || full.includes(QUARTER_PLAN_MARKER) || full.includes(AREA_ASSIGN_MARKER);
+      if (hadMarker && !isProRef.current) {
+        toastRef.current('AI 자동 입력은 Pro 전용이에요. 업그레이드하면 자동으로 채워드려요.', 'info');
+      }
+
+      if (full.includes(PLAN_MARKER) && planHandlerRef.current && isProRef.current) {
         const rawPart = full.split(PLAN_MARKER)[1]?.trim() ?? '';
         // 코드펜스나 앞뒤 설명이 섞여도 첫 '{' ~ 마지막 '}'만 잘라 파싱
         const objStart = rawPart.indexOf('{');
@@ -323,7 +350,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(ROUTINE_MARKER) && routineHandlerRef.current) {
+      if (full.includes(ROUTINE_MARKER) && routineHandlerRef.current && isProRef.current) {
         const rawPart = full.split(ROUTINE_MARKER)[1]?.trim() ?? '';
         const arrayStart = rawPart.indexOf('[');
         const arrayEnd = rawPart.lastIndexOf(']');
@@ -350,7 +377,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(GOALS_MARKER) && goalsHandlerRef.current) {
+      if (full.includes(GOALS_MARKER) && goalsHandlerRef.current && isProRef.current) {
         const rawPart = full.split(GOALS_MARKER)[1]?.trim() ?? '';
         const arrayStart = rawPart.indexOf('[');
         const arrayEnd = rawPart.lastIndexOf(']');
@@ -374,7 +401,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(QUARTER_PLAN_MARKER) && quarterPlanHandlerRef.current) {
+      if (full.includes(QUARTER_PLAN_MARKER) && quarterPlanHandlerRef.current && isProRef.current) {
         const rawPart = full.split(QUARTER_PLAN_MARKER)[1]?.trim() ?? '';
         // 배열([...]) 또는 단일 객체({...}) 모두 지원 — 먼저 등장하는 형태를 추출
         const aStart = rawPart.indexOf('[');
@@ -405,7 +432,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(AREA_ASSIGN_MARKER) && areaAssignHandlerRef.current) {
+      if (full.includes(AREA_ASSIGN_MARKER) && areaAssignHandlerRef.current && isProRef.current) {
         const rawPart = full.split(AREA_ASSIGN_MARKER)[1]?.trim() ?? '';
         const aStart = rawPart.indexOf('[');
         const aEnd = rawPart.lastIndexOf(']');

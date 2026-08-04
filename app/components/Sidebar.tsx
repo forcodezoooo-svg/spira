@@ -2,9 +2,12 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { useAuth } from './AuthProvider';
 import { useUI } from '../lib/UIContext';
+import { usePlan } from '../lib/usePlan';
+import { useToast } from '../lib/ToastContext';
 import FeedbackModal from './FeedbackModal';
 
 const nav = [
@@ -39,6 +42,9 @@ function NavIcon({ src, active }: { src: string; active: boolean }) {
 export default function Sidebar() {
   const path = usePathname();
   const { data, ready, allWorkspaces, switchWorkspace, addWorkspace } = useStore();
+  const { plan } = usePlan();
+  const { toast } = useToast();
+  const router = useRouter();
   const { user, loading, signOut } = useAuth();
   const displayName = (user?.user_metadata?.full_name as string) || (user?.user_metadata?.name as string) || user?.email || '계정';
   const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
@@ -67,6 +73,14 @@ export default function Sidebar() {
   const handleAdd = () => {
     const name = newName.trim();
     if (!name) return;
+    // 무료 플랜: 워크스페이스 1개까지 — 추가 사업은 Pro
+    if (plan.tier !== 'pro' && allWorkspaces.length >= 1) {
+      toast('무료 플랜은 워크스페이스 1개까지예요. Pro로 업그레이드하면 무제한이에요.', 'info');
+      setAdding(false);
+      setWsOpen(false);
+      router.push('/pricing');
+      return;
+    }
     addWorkspace(name);
     setNewName('');
     setAdding(false);

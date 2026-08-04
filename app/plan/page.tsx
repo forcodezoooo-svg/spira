@@ -11,6 +11,7 @@ import { buildValuePropPrompt, buildSolutionsPrompt, buildRevenuePrompt, buildBr
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
 import FlagAward from '../components/FlagAward';
+import { usePlan } from '../lib/usePlan';
 
 // 사업 고유 컬러 팔레트 (Goals 등 서비스 전체에서 사용)
 const BUSINESS_COLORS = ['#8B5CF6', '#6366F1', '#3B82F6', '#06B6D4', '#10B981', '#84CC16', '#F59E0B', '#F97316', '#EF4444', '#EC4899'];
@@ -1294,6 +1295,7 @@ const HINTS: Record<string, string> = {
 export default function PlanPage() {
   const store = useStore();
   const { toast } = useToast();
+  const { plan: userPlan } = usePlan();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1508,6 +1510,11 @@ export default function PlanPage() {
   // 항목별 채우기 — API엔 상세 명령(마커 지시) 전송, 화면 말풍선엔 자연어만 표시
   const genField = (apiPrompt: string, display: string) => {
     if (!chat || chat.loading) return;
+    // AI 자동 채우기는 Pro 전용
+    if (userPlan.tier !== 'pro') {
+      toast('AI 자동 채우기는 Pro 전용이에요. 업그레이드하면 자동으로 채워드려요.', 'info');
+      return;
+    }
     chat.setOpen(true);
     chat.sendMessage(apiPrompt, display);
   };
