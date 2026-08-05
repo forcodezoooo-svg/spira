@@ -34,6 +34,7 @@ export default function Home() {
   const [progressWsId, setProgressWsId] = useState<string | null>(null);
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
+  const [homeFilterWs, setHomeFilterWs] = useState<string | null>(null); // 오늘의 업무 비즈니스 필터 (null = 전체)
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
   const [showYesterday, setShowYesterday] = useState(false);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
@@ -126,8 +127,6 @@ export default function Home() {
   // Goals(프로그램→데드라인→할일)에서 오늘 표시할 할일 (Home에서 숨긴 항목 제외)
   const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow)
     .filter(t => !store.homeHiddenToday.includes(t.key));
-  const totalTasks = quickTasks.length + goalTasks.length;
-  const doneTasks = quickTasks.filter(t => t.completed).length + goalTasks.filter(t => t.done).length;
 
   // ── 어제 못한 업무 — 어제 예정이었는데 완료 안 한 업무를 '복구'하도록 보여줌 ──
   const yDate = new Date(today); yDate.setDate(yDate.getDate() - 1);
@@ -154,8 +153,17 @@ export default function Home() {
   ];
   const orderIndex = (k: string) => { const i = homeOrder.indexOf(k); return i === -1 ? 9999 : i; };
   const itemDone = (item: TodayItem) => item.kind === 'goal' ? item.goal!.done : item.quick!.completed;
+
+  // 비즈니스 필터 (null = 전체). 추가 업무(quick)는 현재 활성 워크스페이스 소속으로 취급.
+  const activeWsId = store.data.workspace?.id ?? null;
+  const visibleItems = todayItems.filter(item =>
+    !homeFilterWs ? true : item.kind === 'goal' ? item.goal!.wsId === homeFilterWs : activeWsId === homeFilterWs,
+  );
+  const totalTasks = visibleItems.length;
+  const doneTasks = visibleItems.filter(itemDone).length;
+
   // 완료한 업무는 자동으로 하단으로, 그 외에는 수동 순서 유지
-  const orderedItems = [...todayItems].sort((a, b) => {
+  const orderedItems = [...visibleItems].sort((a, b) => {
     const da = itemDone(a) ? 1 : 0, db = itemDone(b) ? 1 : 0;
     if (da !== db) return da - db;
     return orderIndex(a.key) - orderIndex(b.key);
@@ -466,6 +474,33 @@ export default function Home() {
           <img src="/deco.svg" alt="" aria-hidden className="hidden md:block w-[262px] h-auto flex-shrink-0 pointer-events-none select-none" />
         </div>
 
+        {/* 비즈니스 필터 (전체 + 각 사업) — 선택 시 그 사업의 오늘 업무만 표시 */}
+        {store.allWorkspaces.length > 1 && (
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            <button
+              onClick={() => setHomeFilterWs(null)}
+              className="px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+              style={!homeFilterWs ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}
+            >
+              전체
+            </button>
+            {store.allWorkspaces.map(ws => {
+              const sel = homeFilterWs === ws.id;
+              return (
+                <button
+                  key={ws.id}
+                  onClick={() => setHomeFilterWs(sel ? null : ws.id)}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+                  style={sel ? { backgroundColor: '#DFF9C4', color: '#16211E' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: workspaceColor(store.allWorkspacesEntries, ws.id) }} />
+                  {ws.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* 완료 카운트 + 전체보기 */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -559,27 +594,6 @@ export default function Home() {
 
         {/* 메모 (접이식) — 공통 컴포넌트, 플레이바 바로 아래 */}
         <MemoPanel />
-
-        {/* 비즈니스 칩 */}
-        {store.allWorkspaces.length > 0 && (
-          <div className="flex flex-wrap gap-2 justify-end">
-            {store.allWorkspaces.map(ws => {
-              const color = workspaceColor(store.allWorkspacesEntries, ws.id);
-              return (
-                <button
-                  key={ws.id}
-                  onClick={() => { store.switchWorkspace(ws.id); router.push('/plan'); }}
-                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[13px] font-medium bg-white transition-colors hover:border-neutral-300"
-                  style={{ border: '1px solid rgba(0,41,41,0.12)', color: '#16211E' }}
-                  title={`${ws.name} 기획서(Plan) 열기`}
-                >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                  {ws.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
 
         {/* 이번 달 수익/지출 */}
         <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
