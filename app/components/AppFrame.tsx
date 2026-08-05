@@ -9,6 +9,7 @@ import AppContextBridge from './AppContextBridge';
 import AIChatButton from './AIChatButton';
 import Onboarding from './Onboarding';
 import Teaching from './Teaching';
+import FeedbackSurvey from './FeedbackSurvey';
 
 // 인증 화면(로그인/OAuth)에서는 사이드바·플레이바·메모·AI 버튼 등 앱 크롬을 숨기고
 // 로그인 박스만 보이게 한다. 그 외 페이지에서는 전체 앱 크롬을 렌더한다.
@@ -31,6 +32,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <AIChatButton />
       <Onboarding />
       <Teaching />
+      <FeedbackSurvey />
     </>
   );
 }
