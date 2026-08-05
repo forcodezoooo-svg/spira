@@ -881,6 +881,7 @@ export default function ProgramsPage() {
         for (const dl of dls) {
           const dColor = pColor; // 업무도 비즈니스 색으로 통일
           for (const t of dl.todos) {
+            if (t.done) continue; // 완료한 업무는 캘린더에서 자동으로 사라짐
             if (!t.date && !t.deadline) continue; // 부모 데드라인 날짜 상속으로 인한 기본 배치 제거
             let start = t.date || t.deadline!;
             let end = t.deadline || t.date!;
