@@ -11,6 +11,7 @@ import { ResourceType } from '../lib/types';
 import { todayStr } from '../lib/store';
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
+import CategoryPicker from '../components/CategoryPicker';
 
 type Tab = ResourceType | 'manage';
 
@@ -367,16 +368,13 @@ export default function ResourcesPage() {
                 onChange={e => setAmount(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAdd()}
               />
-              <select
+              <CategoryPicker
                 value={category}
-                onChange={e => setCategory(e.target.value)}
-                className="rounded-full pl-3 pr-2 py-2 text-[13px] font-semibold outline-none cursor-pointer flex-shrink-0 max-w-[38vw] sm:max-w-none truncate"
-                style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}
-              >
-                <option value="">카테고리</option>
-                {tab === 'expense' && <option value={RECURRING_CAT}>{RECURRING_CAT} (매월 반복)</option>}
-                {(isIncome ? incomeCats : expenseCats).filter(c => c !== RECURRING_CAT).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+                onChange={setCategory}
+                categories={(isIncome ? incomeCats : expenseCats).filter(c => c !== RECURRING_CAT)}
+                recurring={tab === 'expense' ? { value: RECURRING_CAT, label: `${RECURRING_CAT} (매월 반복)` } : null}
+                onAdd={name => (isIncome ? store.addRevenueSource(name) : store.addExpenseCategory(name))}
+              />
               <button
                 onClick={handleAdd}
                 disabled={!amount || !name.trim()}
@@ -387,7 +385,7 @@ export default function ResourcesPage() {
               </button>
             </div>
             {(isIncome ? incomeCats : expenseCats).length === 0 && (
-              <p className="text-[12px] mb-4" style={{ color: '#9AA39D' }}>‘리포트’ 탭에서 {isIncome ? '수익' : '비용'} 카테고리를 먼저 만들 수 있어요.</p>
+              <p className="text-[12px] mb-4" style={{ color: '#9AA39D' }}>위 <span className="font-semibold" style={{ color: '#5B6560' }}>카테고리</span> 버튼을 눌러 바로 추가하거나, ‘리포트’ 탭에서 관리할 수 있어요.</p>
             )}
 
             {/* 수익 목록 */}
