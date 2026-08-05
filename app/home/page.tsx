@@ -161,6 +161,21 @@ export default function Home() {
     return orderIndex(a.key) - orderIndex(b.key);
   });
 
+  // 업무 영역별 그룹핑 — 목표 업무는 영역명으로 묶고, 추가 업무는 '추가 업무' 그룹으로(맨 뒤)
+  const QUICK_GROUP = '__quick__';
+  const todayGroups: { key: string; name: string; color: string; items: TodayItem[] }[] = [];
+  const groupMap = new Map<string, (typeof todayGroups)[number]>();
+  for (const item of orderedItems) {
+    const isGoal = item.kind === 'goal';
+    const key = isGoal ? (item.goal!.workAreaId ?? item.goal!.programName ?? 'area') : QUICK_GROUP;
+    const name = isGoal ? (item.goal!.programName || '업무') : '추가 업무';
+    const color = isGoal ? item.goal!.color : '#C4CCC4';
+    let g = groupMap.get(key);
+    if (!g) { g = { key, name, color, items: [] }; groupMap.set(key, g); todayGroups.push(g); }
+    g.items.push(item);
+  }
+  todayGroups.sort((a, b) => (a.key === QUICK_GROUP ? 1 : 0) - (b.key === QUICK_GROUP ? 1 : 0));
+
   // 드래그&드롭 순서 조정
   const handleDragEnd = () => { setDraggingKey(null); setDragOverKey(null); };
   const handleDrop = (targetKey: string) => {
@@ -322,7 +337,7 @@ export default function Home() {
         <span className="text-[15px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
         </span>
-        <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.programName}</span>
+        <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deadlineName}</span>
         <span className="flex-1" />
         {(t.days?.length ?? 0) > 0 && (
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#96852F', backgroundColor: '#F6EFC2' }}>매주</span>
@@ -516,13 +531,23 @@ export default function Home() {
             {doneTasks === totalTasks && (
               <div className="mb-4"><SuccessState compact title="오늘 할 일을 모두 끝냈어요 🎉" description="깔끔하게 마무리했어요. 내일도 이 흐름을 이어가요." /></div>
             )}
-            <ul className="space-y-3">
-              {orderedItems.map(item =>
-                item.kind === 'goal'
-                  ? renderGoalTask(item.goal!)
-                  : renderQuickTask(item.quick!)
-              )}
-            </ul>
+            <div className="space-y-5">
+              {todayGroups.map(g => (
+                <div key={g.key}>
+                  <div className="flex items-center gap-2 mb-2 px-1">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+                    <span className="text-[13px] font-bold" style={{ color: '#5B6560' }}>{g.name}</span>
+                  </div>
+                  <ul className="space-y-3">
+                    {g.items.map(item =>
+                      item.kind === 'goal'
+                        ? renderGoalTask(item.goal!)
+                        : renderQuickTask(item.quick!)
+                    )}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
