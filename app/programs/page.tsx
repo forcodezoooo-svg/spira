@@ -1791,18 +1791,17 @@ export default function ProgramsPage() {
                               const effDeadline = t.deadline || dl.date;
                               const inheritedDeadline = !t.deadline && !!dl.date;
                               const tDday = effDeadline ? calcDday(effDeadline) : null;
-                              // 매주 반복 업무는 완료가 날짜별로 관리됨 → Goals에서는 기한이 끝났을 때만 완수 표시
                               const recurring = (t.days?.length ?? 0) > 0;
-                              const shownDone = recurring ? (!!effDeadline && effDeadline < todayKey) : t.done;
+                              // Goals에서는 날짜와 무관하게 체크하면 완료 처리. 매주 반복은 기한이 지나도 완수로 표시.
+                              const shownDone = t.done || (recurring && !!effDeadline && effDeadline < todayKey);
                               return (
                                 <li key={t.id} className="group flex items-center gap-2">
                                   <button
-                                    onClick={() => { if (!recurring) toggleTodo(p, dl.id, t.id); }}
-                                    disabled={recurring}
-                                    title={recurring ? '매주 반복 업무는 매주 수행하며, 기한이 끝나면 완수로 표시됩니다' : undefined}
+                                    onClick={() => toggleTodo(p, dl.id, t.id)}
+                                    title="완료 표시 / 해제"
                                     className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
                                       shownDone ? 'bg-neutral-900 border-neutral-900' : 'border-neutral-300 hover:border-neutral-600'
-                                    } ${recurring ? 'cursor-default opacity-70' : ''}`}
+                                    }`}
                                   >
                                     {shownDone && (
                                       <svg className="w-2 h-2 text-white" viewBox="0 0 10 10" fill="none">
