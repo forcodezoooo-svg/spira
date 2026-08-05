@@ -8,10 +8,31 @@ import { UIProvider } from './lib/UIContext';
 import { ToastProvider } from './lib/ToastContext';
 import AuthProvider from './components/AuthProvider';
 import SyncProvider from './components/SyncProvider';
+import { siteUrl } from './lib/siteUrl';
+
+const DESC = '기획부터 목표, 오늘 할 일, 수익 관리까지. AI 어시스턴트 Sparky와 함께 사업을 체계적으로 운영하세요.';
 
 export const metadata: Metadata = {
-  title: 'Spira',
-  description: '1인 창업가를 위한 사업 운영 OS',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: 'Spira — 1인 창업가를 위한 사업 운영 OS',
+    template: '%s · Spira',
+  },
+  description: DESC,
+  applicationName: 'Spira',
+  openGraph: {
+    title: 'Spira — 1인 창업가를 위한 사업 운영 OS',
+    description: DESC,
+    url: siteUrl,
+    siteName: 'Spira',
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Spira — 1인 창업가를 위한 사업 운영 OS',
+    description: DESC,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
