@@ -46,15 +46,19 @@ export default function CategoryPicker({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 left-0 w-48 max-w-[calc(100vw-2.5rem)] max-h-64 overflow-y-auto bg-white border rounded-2xl py-1.5 px-1" style={{ borderColor: 'rgba(0,41,41,0.1)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}>
-          <button onClick={() => { onChange(''); setOpen(false); }} className={opt} style={{ color: value === '' ? '#3E6B1F' : '#9AA39D' }}>카테고리 없음</button>
-          {recurring && (
-            <button onClick={() => { onChange(recurring.value); setOpen(false); }} className={opt} style={{ color: value === recurring.value ? '#3E6B1F' : '#16211E', fontWeight: value === recurring.value ? 700 : 400 }}>{recurring.label}</button>
-          )}
-          {categories.map(c => (
-            <button key={c} onClick={() => { onChange(c); setOpen(false); }} className={`${opt} truncate`} style={{ color: value === c ? '#3E6B1F' : '#16211E', fontWeight: value === c ? 700 : 400 }}>{c}</button>
-          ))}
+        <div className="absolute z-30 mt-1 left-0 w-48 max-w-[calc(100vw-2.5rem)] bg-white border rounded-2xl py-1.5 px-1" style={{ borderColor: 'rgba(0,41,41,0.1)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}>
+          {/* 스크롤되는 카테고리 목록 */}
+          <div className="max-h-56 overflow-y-auto">
+            <button onClick={() => { onChange(''); setOpen(false); }} className={opt} style={{ color: value === '' ? '#3E6B1F' : '#9AA39D' }}>카테고리 없음</button>
+            {recurring && (
+              <button onClick={() => { onChange(recurring.value); setOpen(false); }} className={opt} style={{ color: value === recurring.value ? '#3E6B1F' : '#16211E', fontWeight: value === recurring.value ? 700 : 400 }}>{recurring.label}</button>
+            )}
+            {categories.map(c => (
+              <button key={c} onClick={() => { onChange(c); setOpen(false); }} className={`${opt} truncate`} style={{ color: value === c ? '#3E6B1F' : '#16211E', fontWeight: value === c ? 700 : 400 }}>{c}</button>
+            ))}
+          </div>
 
+          {/* 항상 하단 고정 — 스크롤과 무관하게 보임 */}
           <div className="border-t mt-1 pt-1" style={{ borderColor: 'rgba(0,41,41,0.07)' }}>
             {adding ? (
               <div className="flex items-center gap-1.5 px-1.5 py-1">
