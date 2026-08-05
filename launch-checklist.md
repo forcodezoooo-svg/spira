@@ -22,14 +22,23 @@
 - [x] **STEP 1. 계정 + 데이터베이스** — 로그인 강제(라우트 보호), 서버 DB 도입, localStorage → 서버 저장 이전, 데이터 분리·동기화·백업  *(Phase 4·5·7)*
 - [x] **STEP 2. 핵심/브랜드 기능** — 나의 여정 지도(깃발 수집)
 - [x] **STEP 3. 온보딩 + UX 완성도** — 첫 실행 온보딩, 티칭 투어, 로딩 모션·Skeleton, 에러 처리 UI·메시지 통일, Empty/Success State  *(Phase 2)*
-- **STEP 4. 1차 웹 배포** — 결제(Stripe)·랜딩페이지·피드백 수집 → Vercel 배포 + 도메인 연결 *(카카오 로그인 제외)*  *(Phase 6·9·11)* ← **지금 진행**
-- **STEP 5. 알림 시스템** — 사용자 단계·상황 기반 알림, 루틴/마감/회고 리마인드, 웹 Push·iOS APNs  *(Phase 2)*
-- **STEP 6. 프로필 · 결제 · 피드백** — 프로필 페이지, 구독/결제 연결(웹 Stripe·iOS IAP), 결제 관리 페이지, 피드백 수집 페이지  *(Phase 4·6·9)* > 카카오 로그인 다시 설정
-- **STEP 7. 위젯** — 웹 임베드 위젯 / iPadOS WidgetKit, 데이터 동기화  *(Phase 2·12)*
-- **STEP 8. 보안 · 성능 · QA** — Rate Limit, 개인정보처리방침·이용약관, 성능 최적화·Lighthouse, iPad 반응형·테스트  *(Phase 7·8·10)*
-- **STEP 9. 정식 웹 런칭** — SEO(OG·sitemap), Analytics, 도메인  *(Phase 11)*
-- **STEP 10. iPad 앱 & App Store** — Capacitor iOS 래핑, iPad 최적화, 위젯 확장, App Privacy·IAP 심사, TestFlight → 출시  *(Phase 12)*
-- **STEP 11. 출시 이후** — 분석, 피드백 루프, 지속 개선  *(Phase 13)*
+- [x] **STEP 4. 1차 웹 배포 + 결제 + 반응형** — 토스페이먼츠 구독(구독·해지·주기변경 예약·자동갱신·플랜별 기능 제한), 랜딩페이지, 피드백 수집, 모바일 반응형, SEO(OG·sitemap/robots), 보안 P0(AI 라우트 로그인 필수), 약관·개인정보 템플릿  *(Vercel 배포: spira-wcwm.vercel.app · 카카오 제외 · 토스 테스트키)*
+
+### 정식 런칭 준비 (다음 실행 순서)
+
+- [ ] **STEP 5. 계정 정리** — 새 개발자 구글 계정 정지 해결(이의신청) → GitHub·Vercel·Supabase 이전 완료  *(현재 대기)*
+- [ ] **STEP 6. 사업자 등록** — 개인사업자 등록(홈택스) + 통신판매업 신고(정부24)
+- [ ] **STEP 7. 도메인 연결** — 도메인 구매 → Vercel 연결 + `NEXT_PUBLIC_SITE_URL` 갱신 + Supabase 리다이렉트 URL 갱신
+- [ ] **STEP 8. 브랜딩·법적 마무리** — 구글 OAuth 동의화면(App name=Spira·로고·약관/개인정보 URL) + 약관·개인정보 `[대괄호]` 채우기(상호·대표자·사업자번호·문의처)
+- [ ] **STEP 9. 토스 실결제 전환** — 토스 계약 심사 → 테스트키 → 라이브키 교체
+- [ ] **STEP 10. 애널리틱스 + 모니터링** — Vercel Analytics(방문자 분석) + Sentry(에러 자동 감지)
+- [ ] **STEP 11. 회원가입 메일 브랜딩** — Supabase Custom SMTP(내 도메인에서 발송, Resend 등)
+- [ ] **STEP 12. 관리자용 피드백 페이지** — 앱 내에서 피드백 열람(현재는 Supabase에서 직접 확인)
+
+### 이후 (별도 트랙)
+
+- [ ] **STEP 13. iPad 앱 & App Store** — Capacitor iOS 래핑, iPad 최적화, IAP 심사, TestFlight → 출시  *(Phase 12)*
+- [ ] **STEP 14. 기능 개선** — 알림 시스템, 위젯, 루틴 시스템 UI·주간 회고 등 미완성 기능, 지속 개선  *(Phase 2·13)*
 
 ---
 
