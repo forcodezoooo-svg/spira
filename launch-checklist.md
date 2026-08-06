@@ -26,7 +26,7 @@
 
 ### 정식 런칭 준비 (다음 실행 순서)
 
-- [ ] **STEP 5. 계정 정리** — 새 개발자 구글 계정 정지 해결(이의신청) → GitHub·Vercel·Supabase 이전 완료  *(현재 대기)*
+- [x] **STEP 5. 계정 정리** — 새 개발자 계정으로 GitHub(forcodezoooo-svg/spira)·Vercel(spira-nine.vercel.app)·Supabase(조직 소유권) 이전 완료
 - [ ] **STEP 6. 사업자 등록** — 개인사업자 등록(홈택스) + 통신판매업 신고(정부24)
 - [ ] **STEP 7. 도메인 연결** — 도메인 구매 → Vercel 연결 + `NEXT_PUBLIC_SITE_URL` 갱신 + Supabase 리다이렉트 URL 갱신
 - [ ] **STEP 8. 브랜딩·법적 마무리** — 구글 OAuth 동의화면(App name=Spira·로고·약관/개인정보 URL) + 약관·개인정보 `[대괄호]` 채우기(상호·대표자·사업자번호·문의처)
