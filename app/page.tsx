@@ -4,6 +4,13 @@ import Link from 'next/link';
 // 앱 크롬(사이드바 등)은 AppFrame의 bare 처리로 렌더되지 않는다.
 // 핵심 메시지: '할 일'이 아니라 '방향과 우선순위'를 관리하는, 1인 창업자를 위한 AI 워크스페이스.
 
+const PAINS = [
+  '하루 종일 바빴는데 중요한 일은 못 했다.',
+  '프로젝트가 너무 많아서 머릿속이 복잡하다.',
+  '장기 목표를 세웠지만 결국 Todo만 처리하고 있다.',
+  '다음에 뭘 해야 하는지 계속 고민한다.',
+];
+
 const FEATURES = [
   { emoji: '🧭', title: '무엇부터 할지 모를 때', desc: '할 일이 없는 게 아니라, 무엇이 먼저인지 모를 때. 지금 가장 중요한 다음 한 걸음을 짚어줘요.' },
   { emoji: '🎯', title: '흩어진 일을 하나의 목표로', desc: '여러 프로젝트를 사업의 큰 목표에 연결해, 방향이 흔들리지 않게 잡아줘요.' },
@@ -39,9 +46,9 @@ export default function LandingPage() {
         <span className="inline-block text-[13px] font-bold px-3.5 py-1.5 rounded-full mb-6" style={{ backgroundColor: '#E9FBD6', color: '#3E6B1F' }}>
           1인 창업자를 위한 AI 워크스페이스
         </span>
-        <h1 className="text-[38px] sm:text-[50px] font-black leading-[1.12] tracking-[-0.03em] mb-5">
-          할 일이 없는 게 아니라,<br />
-          <span style={{ color: '#5EA63A' }}>무엇부터 할지 모르는 거예요.</span>
+        <h1 className="text-[34px] sm:text-[46px] font-black leading-[1.15] tracking-[-0.03em] mb-5">
+          해야 할 일이 너무 많아서<br />
+          <span style={{ color: '#5EA63A' }}>무엇부터 해야 할지 모르겠을 때</span>
         </h1>
         <p className="text-[16px] sm:text-[17px] leading-relaxed mb-9 max-w-xl mx-auto" style={{ color: '#5B6560' }}>
           Spira는 생산성을 높이는 To-do 앱이 아니에요.
@@ -59,6 +66,23 @@ export default function LandingPage() {
           <Link href="/login" className="text-[15px] font-semibold px-2 py-2 transition-colors hover:opacity-70" style={{ color: '#5B6560' }}>
             이미 계정이 있어요 →
           </Link>
+        </div>
+      </section>
+
+      {/* ── 이런 경험 있나요? (공감 문단) ── */}
+      <section className="max-w-2xl mx-auto px-6 pb-20 -mt-6">
+        <div className="bg-white border rounded-3xl p-8 sm:p-10" style={{ borderColor: 'rgba(0,41,41,0.08)', boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
+          <h2 className="text-[20px] sm:text-[23px] font-black text-center mb-7">이런 경험 있나요?</h2>
+          <ul className="space-y-3.5 max-w-md mx-auto">
+            {PAINS.map(t => (
+              <li key={t} className="flex items-start gap-3 text-[15px] sm:text-[16px] leading-relaxed" style={{ color: '#3E4A44' }}>
+                <span className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DFF9C4' }}>
+                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" style={{ color: '#3E6B1F' }}><path d="M2.5 6.5l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </span>
+                {t}
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
