@@ -90,7 +90,7 @@ export default function LandingPage() {
       <section className="max-w-5xl mx-auto px-6 pb-8">
         <div className="text-center mb-10">
           <h2 className="text-[26px] sm:text-[32px] font-black tracking-[-0.02em] leading-tight mb-3">
-            생산성 앱이 아니라,<br className="sm:hidden" /> 방향을 관리하는 워크스페이스
+            생산성에 앞서,<br className="sm:hidden" /> 방향성을 관리하는 워크스페이스
           </h2>
           <p className="text-[15px] leading-relaxed max-w-lg mx-auto" style={{ color: '#5B6560' }}>
             하루를 관리하는 도구는 이미 많아요. Spira는 <b style={{ color: '#16211E' }}>사업이 어디로 가야 하는지</b>를 관리해요.
