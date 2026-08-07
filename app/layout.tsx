@@ -10,18 +10,18 @@ import AuthProvider from './components/AuthProvider';
 import SyncProvider from './components/SyncProvider';
 import { siteUrl } from './lib/siteUrl';
 
-const DESC = '기획부터 목표, 오늘 할 일, 수익 관리까지. AI 어시스턴트 Sparky와 함께 사업을 체계적으로 운영하세요.';
+const DESC = '생산성 앱이 아니라 방향과 우선순위를 관리하는 AI 워크스페이스. 혼자 사업을 만들어가는 창업자에게 지금 가장 중요한 다음 한 걸음을 제안해요.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'Spira — 1인 창업가를 위한 사업 운영 OS',
+    default: 'Spira — 1인 창업자를 위한 AI 워크스페이스',
     template: '%s · Spira',
   },
   description: DESC,
   applicationName: 'Spira',
   openGraph: {
-    title: 'Spira — 1인 창업가를 위한 사업 운영 OS',
+    title: 'Spira — 1인 창업자를 위한 AI 워크스페이스',
     description: DESC,
     url: siteUrl,
     siteName: 'Spira',
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Spira — 1인 창업가를 위한 사업 운영 OS',
+    title: 'Spira — 1인 창업자를 위한 AI 워크스페이스',
     description: DESC,
   },
 };

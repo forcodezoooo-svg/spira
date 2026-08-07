@@ -33,11 +33,11 @@ export default async function Image() {
           <div style={{ fontSize: 32, color: '#9DFE3B', fontWeight: 700 }}>Spira</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontSize: 86, color: '#F8F8F8', fontWeight: 700, lineHeight: 1.15 }}>흩어진 사업 운영을,</div>
-          <div style={{ fontSize: 86, color: '#9DFE3B', fontWeight: 700, lineHeight: 1.15 }}>한곳에서.</div>
+          <div style={{ fontSize: 78, color: '#F8F8F8', fontWeight: 700, lineHeight: 1.18 }}>무엇부터 할지 모를 때,</div>
+          <div style={{ fontSize: 78, color: '#9DFE3B', fontWeight: 700, lineHeight: 1.18 }}>다음 한 걸음을 짚어줘요.</div>
         </div>
-        <div style={{ fontSize: 36, color: '#AEB8AE', marginTop: 30, fontWeight: 700 }}>
-          1인 창업가를 위한 사업 운영 OS
+        <div style={{ fontSize: 34, color: '#AEB8AE', marginTop: 30, fontWeight: 700 }}>
+          1인 창업자를 위한 AI 워크스페이스
         </div>
       </div>
     ),
