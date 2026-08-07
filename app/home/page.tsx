@@ -35,6 +35,7 @@ export default function Home() {
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const [homeFilterWs, setHomeFilterWs] = useState<string | null>(null); // 오늘의 업무 비즈니스 필터 (null = 전체)
+  const [weekOffset, setWeekOffset] = useState(0); // 이번 주 집중 지표: 0=이번 주, 1=다음 주 …
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
   const [showYesterday, setShowYesterday] = useState(false);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
@@ -128,6 +129,39 @@ export default function Home() {
   const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow)
     .filter(t => !store.homeHiddenToday.includes(t.key));
 
+  // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
+  const weekStartOf = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); x.setHours(0, 0, 0, 0); return x; };
+  const addDaysD = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const ddayNum = (deadline?: string) => deadline ? Math.round((new Date(deadline + 'T00:00:00').getTime() - new Date(dateStr + 'T00:00:00').getTime()) / 86400000) : 999;
+  const wsNameOf = (id: string) => store.allWorkspaces.find(w => w.id === id)?.name ?? '';
+  type WeekArea = { key: string; name: string; wsId: string; wsName: string; color: string; count: number; minDday: number; score: number };
+  const weekAreas = (weekStart: Date): { areas: WeekArea[]; hasTasks: boolean } => {
+    const map = new Map<string, WeekArea & { seen: Set<string> }>();
+    for (let i = 0; i < 7; i++) {
+      const day = addDaysD(weekStart, i);
+      for (const t of getGoalTasksForDate(store.allWorkspacesEntries, localDateStr(day), day.getDay())) {
+        if (t.done) continue;
+        const key = t.workAreaId ?? t.programName ?? 'area';
+        let a = map.get(key);
+        if (!a) { a = { key, name: t.programName || '업무', wsId: t.wsId, wsName: wsNameOf(t.wsId), color: t.color, count: 0, minDday: 999, score: 0, seen: new Set() }; map.set(key, a); }
+        if (!a.seen.has(t.key)) { a.seen.add(t.key); a.count += 1; }
+        const dn = ddayNum(t.deadline);
+        if (dn < a.minDday) a.minDday = dn;
+      }
+    }
+    const areas: WeekArea[] = [...map.values()]
+      .map(a => { const urgency = a.minDday <= 7 ? Math.max(0, 8 - Math.max(0, a.minDday)) : 0; return { key: a.key, name: a.name, wsId: a.wsId, wsName: a.wsName, color: a.color, count: a.count, minDday: a.minDday, score: urgency * 2 + a.count }; })
+      .sort((x, y) => y.score - x.score);
+    return { areas, hasTasks: areas.length > 0 };
+  };
+  const thisWeekStart = weekStartOf(today);
+  const currentWeekAreas = weekAreas(thisWeekStart).areas; // 오늘 업무 그룹 정렬용(이번 주 기준)
+  const focusWeekStart = addDaysD(thisWeekStart, weekOffset * 7);
+  const focus = weekAreas(focusWeekStart);
+  const weekLabelText = weekOffset === 0 ? '이번 주' : weekOffset === 1 ? '다음 주' : weekOffset === 2 ? '다다음 주' : `${weekOffset}주 후`;
+  const weekRangeText = `${focusWeekStart.getMonth() + 1}.${focusWeekStart.getDate()} – ${addDaysD(focusWeekStart, 6).getMonth() + 1}.${addDaysD(focusWeekStart, 6).getDate()}`;
+  const areaReason = (a: WeekArea) => (a.minDday < 0 ? '기한 지남' : a.minDday === 0 ? '오늘 마감' : a.minDday <= 7 ? `D-${a.minDday} 임박` : `업무 ${a.count}개`) + (a.minDday <= 7 ? ` · 업무 ${a.count}개` : '');
+
   // ── 어제 못한 업무 — 어제 예정이었는데 완료 안 한 업무를 '복구'하도록 보여줌 ──
   const yDate = new Date(today); yDate.setDate(yDate.getDate() - 1);
   const yStr = localDateStr(yDate);
@@ -182,7 +216,13 @@ export default function Home() {
     if (!g) { g = { key, name, color, items: [] }; groupMap.set(key, g); todayGroups.push(g); }
     g.items.push(item);
   }
-  todayGroups.sort((a, b) => (a.key === QUICK_GROUP ? 1 : 0) - (b.key === QUICK_GROUP ? 1 : 0));
+  // 이번 주 집중 순위대로 업무 영역 그룹 정렬 (추가 업무는 맨 뒤)
+  const weekRank = new Map(currentWeekAreas.map((a, i) => [a.key, i]));
+  todayGroups.sort((a, b) => {
+    if (a.key === QUICK_GROUP) return 1;
+    if (b.key === QUICK_GROUP) return -1;
+    return (weekRank.get(a.key) ?? 999) - (weekRank.get(b.key) ?? 999);
+  });
 
   // 드래그&드롭 순서 조정
   const handleDragEnd = () => { setDraggingKey(null); setDragOverKey(null); };
@@ -450,7 +490,7 @@ export default function Home() {
                       </div>
                       <div className="text-[14px] font-semibold truncate mt-2.5" style={{ color: '#16211E' }}>{first.name}</div>
                       <div className="text-[12px] mt-1 truncate" style={{ color: '#9AA39D' }}>
-                        {first.wsName} · {first.kind}{group.items.length > 1 ? ` 외 ${group.items.length - 1}` : ''}
+                        {first.wsName}{group.items.length > 1 ? ` 외 ${group.items.length - 1}개` : ''}
                       </div>
                     </div>
                   );
@@ -594,6 +634,42 @@ export default function Home() {
 
         {/* 메모 (접이식) — 공통 컴포넌트, 플레이바 바로 아래 */}
         <MemoPanel />
+
+        {/* ── 이번 주 집중 (주 이동 가능 · 미배치 시 안내) ── */}
+        <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[16px] font-bold" style={{ color: '#16211E' }}>🎯 {weekLabelText} 집중</span>
+            <div className="flex items-center gap-0.5">
+              <button onClick={() => setWeekOffset(o => Math.max(0, o - 1))} disabled={weekOffset === 0} className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-neutral-100 disabled:opacity-30" style={{ color: '#9AA39D' }} aria-label="이전 주">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M7.5 2.5L4 6l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              <button onClick={() => setWeekOffset(o => o + 1)} className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} aria-label="다음 주">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            </div>
+          </div>
+          <p className="text-[12px] mb-4" style={{ color: '#9AA39D' }}>{weekRangeText}</p>
+
+          {focus.hasTasks ? (
+            <div className="space-y-2.5">
+              {focus.areas.slice(0, 3).map((a, i) => (
+                <div key={a.key} className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: i === 0 ? '#16211E' : '#F0F0EA', color: i === 0 ? '#9DFE3B' : '#9AA39D' }}>{i + 1}</span>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-semibold truncate" style={{ color: '#16211E' }}>{a.name}</div>
+                    <div className="text-[12px] truncate" style={{ color: '#9AA39D' }}>{a.wsName ? a.wsName + ' · ' : ''}{areaReason(a)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-2">
+              <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#9AA39D' }}>{weekLabelText}에 배치된 업무가 없어요.<br />Goals 캘린더에서 계획을 채워보세요.</p>
+              <button onClick={() => router.push('/programs')} className="text-[13px] font-bold px-4 py-2 rounded-full transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>Goals에서 채우기</button>
+            </div>
+          )}
+        </div>
 
         {/* 이번 달 수익/지출 */}
         <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
