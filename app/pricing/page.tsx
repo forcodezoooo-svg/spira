@@ -15,6 +15,10 @@ const PRICE = {
   yearly: 99000, // 연간 = 2개월치 할인
 };
 
+// 정식 출시 전(무료 베타): 구독을 잠그고 그레이톤 + 안내 문구로 표시.
+// 실결제 준비(사업자등록·라이브 키) 되면 false로 바꾸면 구독이 열림.
+const BETA_LOCKED = true;
+
 const FREE_FEATURES = [
   '워크스페이스 1개',
   '기본 AI 어시스턴트(Sparky)',
@@ -186,15 +190,23 @@ export default function PricingPage() {
             ))}
           </ul>
           {!isPro ? (
-            // 미구독 → 첫 구독(즉시 결제)
-            <button
-              onClick={subscribe}
-              disabled={busy}
-              className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50"
-              style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
-            >
-              {busy ? '결제창 여는 중…' : 'Pro 구독하기'}
-            </button>
+            BETA_LOCKED ? (
+              // 무료 베타 — 구독 잠금(그레이톤 + 안내)
+              <div className="mt-7">
+                <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold cursor-not-allowed" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: '#8D9A8D' }}>Pro 구독하기</div>
+                <p className="text-center text-[12px] mt-2.5" style={{ color: '#AEB8AE' }}>정식 버전 출시 후 구독할 수 있어요.</p>
+              </div>
+            ) : (
+              // 미구독 → 첫 구독(즉시 결제)
+              <button
+                onClick={subscribe}
+                disabled={busy}
+                className="mt-7 w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+                style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+              >
+                {busy ? '결제창 여는 중…' : 'Pro 구독하기'}
+              </button>
+            )
           ) : viewingCurrentCycle ? (
             // 구독 중인 주기를 보고 있음 → 이용 중 / 해지 / (예약된 전환 안내)
             <div className="mt-7">
