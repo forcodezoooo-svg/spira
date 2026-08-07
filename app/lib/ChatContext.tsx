@@ -62,7 +62,7 @@ export type GoalsOperation =
 
 // AI가 설계한 분기 계획 (연도 → 분기 → 프로그램 → 데드라인 → 할일)
 // 할일(todo)은 문자열 또는 {name, days?, light?} 객체 (days = 매주 반복 요일)
-export type QuarterPlanTodo = string | { name: string; days?: number[]; light?: boolean };
+export type QuarterPlanTodo = string | { name: string; days?: number[]; light?: boolean; date?: string; deadline?: string };
 export type QuarterPlan = {
   wsId?: string;
   year?: number;

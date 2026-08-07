@@ -567,7 +567,7 @@ export default function ProgramsPage() {
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
     let order = nextOrder();
-    const touchedAreas = new Set<string>(); // 생성된 영역만 펼치기 위한 키(영역명 또는 미분류)
+    const touchedWs = new Set<string>(); // 생성된 사업 박스만 펼치기 위한 키(wsId)
     for (const plan of plans) {
       const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
       const py = plan.year ?? year;
@@ -577,7 +577,7 @@ export default function ProgramsPage() {
         if (!prog?.name) continue;
         // 유효한 업무 영역이면 그 영역에 배정 → 이후 로드 시 해당 영역 컨테이너로 병합됨
         const area = prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined;
-        touchedAreas.add(area?.name ?? NONE);
+        touchedWs.add(targetWs);
         store.addProgramToWs(targetWs, {
           name: prog.name,
           goal: prog.goal ?? '',
@@ -592,17 +592,17 @@ export default function ProgramsPage() {
             name: d.name,
             // 과거/누락 날짜는 완료처럼 보이고 오늘에 드롭이 막히므로 오늘 이후(분기말)로 보정
             date: d.date && d.date >= todayKey ? d.date : getQuarterEndDate(py, pq),
-            // 할일은 문자열 또는 {name, days?, light?} (매주 반복/가벼운 작업)
+            // 할일은 문자열 또는 {name, days?, light?, date?, deadline?}. date가 있으면 캘린더에 그 날짜로 배치됨.
             todos: (d.todos ?? []).map(t => typeof t === 'string'
               ? { id: uid(), name: t, done: false }
-              : { id: uid(), name: t.name, done: false, days: t.days, light: t.light }),
+              : { id: uid(), name: t.name, done: false, days: t.days, light: t.light, date: t.date, deadline: t.deadline ?? t.date }),
           })),
         });
       }
     }
     // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
-    if (touchedAreas.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas]));
+    if (touchedWs.size) setExpandedAreas(prev => new Set([...prev, ...touchedWs]));
   };
 
   // AI가 배정한 영역을 각 목표에 적용 (유효한 영역 id만, 같은 사업 내에서만)
@@ -615,9 +615,9 @@ export default function ProgramsPage() {
       const areaObj = (entry.plan.workAreas ?? []).find(w => w.id === a.workAreaId);
       if (!prog || !areaObj) continue;
       store.updateProgramInWs(a.wsId, { ...prog, workAreaId: a.workAreaId });
-      expanded.push(areaObj.name);
+      expanded.push(a.wsId);
     }
-    // 배정된 영역은 자동으로 펼쳐 결과를 바로 보여줌
+    // 배정된 사업 박스를 자동으로 펼쳐 결과를 바로 보여줌
     if (expanded.length) setExpandedAreas(prev => new Set([...prev, ...expanded]));
   };
 
@@ -796,37 +796,28 @@ export default function ProgramsPage() {
   type AreaSection = { key: string; name: string; color: string; items: ProgRow[] };
   const NONE = '__none__';
   const buildAreaSections = (): AreaSection[] => {
+    // 사업(브랜드) 단위로 하나의 컬러박스 — 그 브랜드의 모든 데드라인이 한 박스에 모임
     const groups = new Map<string, AreaSection>();
     quarterPrograms.forEach((p, idx) => {
-      const area = programArea(p);
-      const key = area?.name ?? NONE;
+      const key = p.wsId;
       if (!groups.has(key)) {
-        groups.set(key, { key, name: area?.name ?? '미분류', color: area?.color ?? '#a3a3a3', items: [] });
+        groups.set(key, { key, name: store.allWorkspaces.find(w => w.id === key)?.name ?? '사업', color: businessColor(key), items: [] });
       }
       groups.get(key)!.items.push({ p, idx });
     });
-    // 저장된 사용자 순서(store.areaOrder) 우선, 미분류는 항상 마지막
-    const order = store.areaOrder;
-    const rank = (name: string) => {
-      const i = order.indexOf(name);
-      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
-    };
-    // 각 영역의 '가장 가까운(미완료·오늘 이후) 데드라인' — 이게 빠른 영역이 위로 올라옴
+    // 가장 가까운(미완료·오늘 이후) 데드라인이 빠른 사업이 위로
     const nearest = (sec: AreaSection) => {
       const ds = sec.items.flatMap(({ p }) => (p.deadlines ?? [])
         .filter(dl => !dl.done && dl.date && dl.date >= todayKey)
         .map(dl => dl.date as string));
-      return ds.length ? ds.sort()[0] : '9999-12-31'; // 임박 데드라인 없으면 맨 아래
+      return ds.length ? ds.sort()[0] : '9999-12-31';
     };
-    return [...groups.values()]
-      .filter(s => s.key !== NONE) // '미분류' 섹션은 표시하지 않음
-      .sort((a, b) => {
-        const na = nearest(a), nb = nearest(b);
-        if (na !== nb) return na.localeCompare(nb);      // 데드라인 가까운 영역 우선(위로)
-        const ra = rank(a.name), rb = rank(b.name);      // 동률이면 저장된 순서 → 이름
-        if (ra !== rb) return ra - rb;
-        return a.name.localeCompare(b.name);
-      });
+    const wsRank = (id: string) => { const i = store.allWorkspaces.findIndex(w => w.id === id); return i === -1 ? 9999 : i; };
+    return [...groups.values()].sort((a, b) => {
+      const na = nearest(a), nb = nearest(b);
+      if (na !== nb) return na.localeCompare(nb);
+      return wsRank(a.key) - wsRank(b.key);
+    });
   };
   const areaSections = buildAreaSections();
   const toggleAreaCollapsed = (key: string) =>
@@ -1902,20 +1893,11 @@ export default function ProgramsPage() {
                     <div className="w-full flex items-center gap-3 px-5 py-4">
                       <div onClick={() => toggleAreaCollapsed(sec.key)} className="flex flex-col gap-1 flex-1 min-w-0 cursor-pointer">
                         <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: sec.color }} />
                           <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{sec.name}</h3>
                           <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#E1E1DA', color: '#5B6560' }}>{secDeadlines.length}</span>
                         </div>
                       </div>
-                      {sec.key !== NONE && !filterWsId && (
-                        <div className="flex items-center flex-shrink-0">
-                          <button onClick={() => store.moveArea(sec.name, -1)} className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-neutral-700 transition-colors" title="영역 위로">
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          </button>
-                          <button onClick={() => store.moveArea(sec.name, 1)} className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-neutral-700 transition-colors" title="영역 아래로">
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          </button>
-                        </div>
-                      )}
                       <button onClick={() => toggleAreaCollapsed(sec.key)} className="flex-shrink-0">
                         <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
