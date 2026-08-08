@@ -1405,12 +1405,16 @@ export default function PlanPage() {
             })),
           }),
           ...(patch.workAreas?.length && {
-            workAreas: patch.workAreas.map((a, i) => ({
-              id: uid(),
-              name: a.name ?? '',
-              goal: a.goal ?? '',
-              color: a.color ?? BUSINESS_COLORS[i % BUSINESS_COLORS.length],
-            })),
+            // 이름이 같은 기존 영역은 id를 '유지' — 그래야 그 영역에 달린 데드라인·업무가 사라지지 않음
+            workAreas: patch.workAreas.map((a, i) => {
+              const existing = (prev.workAreas ?? []).find(w => w.name === (a.name ?? ''));
+              return {
+                id: existing?.id ?? uid(),
+                name: a.name ?? '',
+                goal: a.goal ?? '',
+                color: a.color ?? existing?.color ?? BUSINESS_COLORS[i % BUSINESS_COLORS.length],
+              };
+            }),
           }),
         };
         const wsId = selectedWsIdRef.current;

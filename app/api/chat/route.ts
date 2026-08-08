@@ -19,9 +19,12 @@ export async function POST(request: Request) {
   const { messages, planMode, routineMode, appContext } = await request.json();
 
   const baseSystem = planMode ? BUSINESS_PLANNING_SYSTEM : routineMode ? ROUTINE_SYSTEM : BASE_SYSTEM;
-  const systemContent = appContext
-    ? `${baseSystem}\n\n---\n현재 사용자의 앱 데이터 (질문에 이 데이터를 참고해서 구체적으로 답변하세요):\n${appContext}`
-    : baseSystem;
+  // 오늘 날짜(KST)를 항상 알려줘 과거 연도(예: 2023)로 일정 잡는 실수를 막는다.
+  const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const dateNote = `오늘 날짜는 ${todayKST}(KST)입니다. 모든 데드라인·할일 날짜는 반드시 오늘 이후(현재~미래)로만 잡으세요. 과거 날짜(지난 연도 등) 절대 금지.`;
+  const systemContent = `${dateNote}\n\n${baseSystem}` + (appContext
+    ? `\n\n---\n현재 사용자의 앱 데이터 (질문에 이 데이터를 참고해서 구체적으로 답변하세요):\n${appContext}`
+    : '');
 
   const encoder = new TextEncoder();
 

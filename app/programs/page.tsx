@@ -570,22 +570,32 @@ export default function ProgramsPage() {
     const touchedAreas = new Set<string>(); // 생성된 영역만 펼치기 위한 키(영역명 또는 미분류)
     // (사업 × 업무영역)별로 데드라인을 모은다 — 한 영역 안에서 사업당 컨테이너(데드라인 박스)는 하나만 유지
     type Bucket = { targetWs: string; py: number; pq: number; areaId?: string; areaName?: string; deadlines: ReturnType<typeof buildDeadlines> };
+    // 과거/누락 날짜는 절대 저장하지 않는다 — 오늘 이후만 통과
+    const clampFuture = (d?: string) => (d && d >= todayKey ? d : undefined);
+    const nowY = new Date().getFullYear();
+    const nowQ = Math.floor(new Date().getMonth() / 3) + 1;
     const buildDeadlines = (prog: NonNullable<QuarterPlan['programs']>[number], py: number, pq: number) =>
-      (prog.deadlines ?? []).map(d => ({
-        id: uid(),
-        name: d.name,
-        // 과거/누락 날짜는 완료처럼 보이고 오늘에 드롭이 막히므로 오늘 이후(분기말)로 보정
-        date: d.date && d.date >= todayKey ? d.date : getQuarterEndDate(py, pq),
-        // 할일: 문자열 또는 {name, days?, light?, date?, deadline?}. date가 있으면 캘린더에 그 날짜로 배치됨.
-        todos: (d.todos ?? []).map(t => typeof t === 'string'
-          ? { id: uid(), name: t, done: false }
-          : { id: uid(), name: t.name, done: false, days: t.days, light: t.light, date: t.date, deadline: t.deadline ?? t.date }),
-      }));
+      (prog.deadlines ?? []).map(d => {
+        const dlDate = clampFuture(d.date) ?? getQuarterEndDate(py, pq); // 과거면 분기말(미래)로
+        return {
+          id: uid(),
+          name: d.name,
+          date: dlDate,
+          // 할일 날짜도 오늘 이후만 저장 — 과거/누락이면 자체 마감→데드라인 날짜로 보정
+          todos: (d.todos ?? []).map(t => {
+            if (typeof t === 'string') return { id: uid(), name: t, done: false };
+            const td = clampFuture(t.date) ?? clampFuture(t.deadline) ?? dlDate;
+            return { id: uid(), name: t.name, done: false, days: t.days, light: t.light, date: td, deadline: clampFuture(t.deadline) ?? td };
+          }),
+        };
+      });
     const buckets = new Map<string, Bucket>();
     for (const plan of plans) {
       const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
-      const py = plan.year ?? year;
-      const pq = plan.quarter ?? quarter;
+      let py = plan.year ?? year;
+      let pq = plan.quarter ?? quarter;
+      // 과거 분기로 생성됐으면 현재 분기로 보정 (2023 등 방지)
+      if (py < nowY || (py === nowY && pq < nowQ)) { py = nowY; pq = nowQ; }
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
       for (const prog of plan.programs ?? []) {
         if (!prog?.name) continue;
