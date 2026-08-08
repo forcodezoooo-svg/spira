@@ -86,6 +86,18 @@ export default function ProgramsPage() {
   type CalLevel = 'program' | 'deadline' | 'todo';
   const [calMonth, setCalMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [calLevel, setCalLevel] = useState<CalLevel>('todo');
+  // 보기 모드: 영역별(기본) / 우선순위
+  const [goalsView, setGoalsView] = useState<'area' | 'priority'>('area');
+  const [priorityOrder, setPriorityOrder] = useState<string[]>([]); // 같은 날짜 내 수동 우선순위(데드라인 id 순서)
+  const [selectedDls, setSelectedDls] = useState<Set<string>>(new Set()); // 디데이 쪼개기 선택
+  const [prioDrag, setPrioDrag] = useState<string | null>(null);
+  const [prioOver, setPrioOver] = useState<string | null>(null);
+  useEffect(() => {
+    const v = localStorage.getItem('spira_goals_view'); if (v === 'priority' || v === 'area') setGoalsView(v);
+    try { setPriorityOrder(JSON.parse(localStorage.getItem('spira_goals_prio') || '[]')); } catch { /* empty */ }
+  }, []);
+  useEffect(() => { localStorage.setItem('spira_goals_view', goalsView); }, [goalsView]);
+  const savePriorityOrder = (arr: string[]) => { setPriorityOrder(arr); localStorage.setItem('spira_goals_prio', JSON.stringify(arr)); };
   // 오프 기간 설정 (전면 스탑 → 이후 모든 일정 밀기)
   const [offOpen, setOffOpen] = useState(false);
   const [offStart, setOffStart] = useState('');
@@ -857,6 +869,49 @@ export default function ProgramsPage() {
       });
   };
   const areaSections = buildAreaSections();
+
+  // ── 우선순위 모드: 이번 분기 데드라인을 날짜순 + 같은 날짜 내 수동 우선순위로 평면 정렬 ──
+  const priorityItems = quarterPrograms
+    .flatMap(p => dlInQuarter(p, year, quarter).filter(dl => dl.enabled !== false && !dl.done).map(dl => ({ dl, p })))
+    .sort((a, b) => {
+      const da = a.dl.date || '9999-12-31', db = b.dl.date || '9999-12-31';
+      if (da !== db) return da.localeCompare(db);
+      const ra = priorityOrder.indexOf(a.dl.id), rb = priorityOrder.indexOf(b.dl.id);
+      return (ra === -1 ? 99999 : ra) - (rb === -1 ? 99999 : rb);
+    });
+
+  const handlePrioDrop = (targetId: string) => {
+    if (!prioDrag || prioDrag === targetId) { setPrioDrag(null); setPrioOver(null); return; }
+    const ids = priorityItems.map(i => i.dl.id);
+    const from = ids.indexOf(prioDrag), to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) { setPrioDrag(null); setPrioOver(null); return; }
+    const next = [...ids]; next.splice(from, 1); next.splice(to, 0, prioDrag);
+    savePriorityOrder(next);
+    setPrioDrag(null); setPrioOver(null);
+  };
+
+  const toggleSelectDl = (id: string) => setSelectedDls(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // 디데이 쪼개기 — 선택한 데드라인들을 (현재 우선순위 순서로) 오늘~분기말 사이에 균등 분배해 각각 다른 날짜 부여
+  const splitDday = () => {
+    const selected = priorityItems.filter(i => selectedDls.has(i.dl.id));
+    if (selected.length < 2) return;
+    const start = new Date(todayKey + 'T00:00:00').getTime();
+    const end = new Date(getQuarterEndDate(year, quarter) + 'T00:00:00').getTime();
+    const span = Math.max(86400000, end - start);
+    const n = selected.length;
+    const newDates = new Map<string, string>();
+    selected.forEach((item, i) => {
+      const d = new Date(start + Math.round((span * (i + 1)) / n));
+      newDates.set(item.dl.id, `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    });
+    const byProg = new Map<string, (typeof selected)[number]['p']>();
+    selected.forEach(item => byProg.set(item.p.id, item.p));
+    for (const p of byProg.values()) {
+      store.updateProgramInWs(p.wsId, { ...stripWs(p), deadlines: (p.deadlines ?? []).map(dl => newDates.has(dl.id) ? { ...dl, date: newDates.get(dl.id)! } : dl) });
+    }
+    setSelectedDls(new Set());
+  };
   const toggleAreaCollapsed = (key: string) =>
     setExpandedAreas(prev => {
       const next = new Set(prev);
@@ -1451,9 +1506,76 @@ export default function ProgramsPage() {
           </div>
         )}
 
+        {/* 보기 모드 토글 (영역별 / 우선순위) */}
+        {quarterPrograms.length > 0 && (
+          <div className="flex items-center gap-1 mb-4 rounded-full p-1 w-fit" style={{ backgroundColor: '#F1F1EB' }}>
+            {(['area', 'priority'] as const).map(v => (
+              <button key={v} onClick={() => setGoalsView(v)} className="px-4 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={goalsView === v ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#5B6560' }}>
+                {v === 'area' ? '영역별' : '우선순위'}
+              </button>
+            ))}
+          </div>
+        )}
+
         {quarterPrograms.length === 0 ? (
           <div className="bg-white border rounded-2xl" style={{ borderColor: 'var(--spira-border-subtle)' }}>
             <EmptyState title="아직 업무 영역이 없어요" description="Plan 페이지에서 업무 영역을 추가하면, 각 영역에 데드라인과 업무를 등록할 수 있어요." />
+          </div>
+        ) : goalsView === 'priority' ? (
+          <div className="space-y-3">
+            {/* 디데이 쪼개기 툴바 */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-[13px]" style={{ color: '#9AA39D' }}>
+                {selectedDls.size > 0 ? `${selectedDls.size}개 선택됨 — 우선순위 순서대로 날짜를 나눠요` : '디데이 날짜순 정렬 · 같은 날짜는 드래그로 순서 조정'}
+              </p>
+              <div className="flex items-center gap-1.5">
+                {selectedDls.size > 0 && (
+                  <button onClick={() => setSelectedDls(new Set())} className="text-[13px] font-semibold px-3 py-1.5 transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>선택 해제</button>
+                )}
+                <button onClick={splitDday} disabled={selectedDls.size < 2} className="text-[13px] font-bold px-4 py-1.5 rounded-full transition-transform hover:-translate-y-0.5 disabled:opacity-30 disabled:translate-y-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>디데이 쪼개기</button>
+              </div>
+            </div>
+
+            {priorityItems.length === 0 ? (
+              <div className="bg-white border rounded-2xl" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                <EmptyState title="이번 분기 데드라인이 없어요" description="‘영역별’ 보기에서 데드라인을 추가해보세요." />
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {priorityItems.map(({ dl, p }) => {
+                  const dd = dl.date ? calcDday(dl.date) : null;
+                  const sel = selectedDls.has(dl.id);
+                  return (
+                    <li key={dl.id}
+                      draggable
+                      onDragStart={() => setPrioDrag(dl.id)}
+                      onDragOver={e => { e.preventDefault(); setPrioOver(dl.id); }}
+                      onDrop={() => handlePrioDrop(dl.id)}
+                      onDragEnd={() => { setPrioDrag(null); setPrioOver(null); }}
+                      className="flex items-center gap-3 bg-white border rounded-2xl px-4 py-3"
+                      style={{ borderColor: prioOver === dl.id ? '#C4B5FD' : 'var(--spira-border-subtle)' }}
+                    >
+                      <span className="flex-shrink-0 text-neutral-300 cursor-grab active:cursor-grabbing" title="드래그로 순서 조정">
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="currentColor"><circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" /><circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" /><circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" /></svg>
+                      </span>
+                      <button onClick={() => toggleSelectDl(dl.id)} className="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors" style={sel ? { backgroundColor: '#16211E', borderColor: '#16211E' } : { borderColor: '#C7CEC7' }}>
+                        {sel && <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                      </button>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[14px] font-semibold truncate" style={{ color: '#16211E' }}>{dl.name}</div>
+                        <div className="text-[12px] truncate" style={{ color: '#9AA39D' }}>{store.allWorkspaces.find(w => w.id === p.wsId)?.name}{programArea(p)?.name ? ` · ${programArea(p)!.name}` : ''}</div>
+                      </div>
+                      {dl.date ? (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${dd?.cls ?? ''}`}>{dd?.label} · {dl.date.slice(5).replace('-', '.')}</span>
+                      ) : (
+                        <span className="text-[11px] font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 flex-shrink-0">📅 미배치</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         ) : (() => {
           const renderProgramCard = (p: (typeof quarterPrograms)[number], idx: number) => {
