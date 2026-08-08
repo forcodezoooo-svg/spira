@@ -26,6 +26,7 @@ export type PlanPatch = {
   problems?: string[];
   solutions?: Array<{ title: string; memo: string }>;
   revenueModel?: Array<{ title: string; memo: string }>;
+  products?: Array<string | { title: string; memo: string }>;
   brandingKeywords?: string[];
   valueProposition?: {
     personal?: string;

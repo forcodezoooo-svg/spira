@@ -53,6 +53,7 @@ export interface PlanData {
   targetCustomers: TargetCustomer[];
   solutions: PlanItem[];
   revenueModel: PlanItem[];
+  products?: PlanItem[];        // 프로덕트 목록 (이 사업에서 판매하는 것: 웹앱·앱·굿즈 등)
   growthStages?: GrowthStage[]; // 사업 성장 단계 (장기 목표)
   workAreas?: WorkArea[];       // 업무 영역별 세부 목표
 }

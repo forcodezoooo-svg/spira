@@ -1290,6 +1290,7 @@ const HINTS: Record<string, string> = {
   targetCustomers: '우리 제품을 사용할 핵심 고객을 페르소나로 구체적으로 설명하세요. 페르소나가 명확할수록 마케팅과 제품이 효과적입니다.',
   solutions: '고객의 문제를 해결하기 위해 제공하는 구체적인 솔루션이나 제품을 설명하세요.',
   revenueModel: '어떤 방식으로 수익을 창출하는지 설명하세요. 예: 구독, 거래 수수료, 광고, B2B 라이선스 등',
+  products: '이 사업에서 판매·출시하는 것을 항목별로 정리하세요. 예: 웹앱, 아이패드 전용 앱, 휴대폰 앱, 굿즈 등',
 };
 
 export default function PlanPage() {
@@ -1384,6 +1385,11 @@ export default function PlanPage() {
               typeof r === 'string' ? { title: r, memo: '' } : r
             ),
           }),
+          ...(patch.products?.length && {
+            products: patch.products.map(r =>
+              typeof r === 'string' ? { title: r, memo: '' } : r
+            ),
+          }),
           ...(patch.brandingKeywords?.length && { brandingKeywords: patch.brandingKeywords }),
           ...(patch.valueProposition && {
             valueProposition: { ...prev.valueProposition, ...patch.valueProposition },
@@ -1454,14 +1460,14 @@ export default function PlanPage() {
   const removeItem = (key: 'problems', index: number) =>
     update({ [key]: plan[key].filter((_, i) => i !== index) });
 
-  const addPlanItem = (key: 'solutions' | 'revenueModel', value: PlanItem) =>
-    update({ [key]: [...plan[key], value] });
+  const addPlanItem = (key: 'solutions' | 'revenueModel' | 'products', value: PlanItem) =>
+    update({ [key]: [...(plan[key] ?? []), value] });
 
-  const updatePlanItem = (key: 'solutions' | 'revenueModel', index: number, value: PlanItem) =>
-    update({ [key]: plan[key].map((v, i) => i === index ? value : v) });
+  const updatePlanItem = (key: 'solutions' | 'revenueModel' | 'products', index: number, value: PlanItem) =>
+    update({ [key]: (plan[key] ?? []).map((v, i) => i === index ? value : v) });
 
-  const removePlanItem = (key: 'solutions' | 'revenueModel', index: number) =>
-    update({ [key]: plan[key].filter((_, i) => i !== index) });
+  const removePlanItem = (key: 'solutions' | 'revenueModel' | 'products', index: number) =>
+    update({ [key]: (plan[key] ?? []).filter((_, i) => i !== index) });
 
   const addKeyword = (v: string) =>
     update({ brandingKeywords: [...(plan.brandingKeywords ?? []), v] });
@@ -1525,6 +1531,9 @@ export default function PlanPage() {
   const handleGenerateValueProp = () => genField(buildValuePropPrompt(buildContext()), '핵심 가치 제안을 채워줘');
   const handleGenerateSolutions = () => genField(buildSolutionsPrompt(buildContext()), '솔루션/제품을 제안해줘');
   const handleGenerateRevenueModel = () => genField(buildRevenuePrompt(buildContext()), '수익 구조를 제안해줘');
+  const handleGenerateProducts = () => genField(
+    `아래 사업 정보를 바탕으로 이 사업에서 판매·출시할 '프로덕트(제품/상품)'를 3~5개로 구체적으로 정리해줘. 예: 웹앱, 아이패드 전용 앱, 휴대폰 앱, 굿즈 등. 조언만 하지 말고, 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 products 배열([{title, memo}])이 담긴 JSON을 출력해줘.\n\n${buildContext()}`,
+    '프로덕트 목록을 정리해줘');
   const handleGenerateBrandingKeywords = () => genField(buildBrandingPrompt(buildContext()), '브랜딩 키워드를 만들어줘');
   const handleGeneratePersonas = () => genField(buildPersonasPrompt(buildContext()), '타겟 고객 페르소나를 만들어줘');
   const handleGenerateGrowthStages = () => genField(buildGrowthStagesPrompt(buildContext()), '사업 성장 단계를 설계해줘');
@@ -1535,7 +1544,7 @@ export default function PlanPage() {
 
   // 기획서 전체 일괄 채우기 (모든 필드)
   const handleFillAll = () => genField(
-    `아래 사업 정보를 바탕으로 기획서의 '모든 항목'(tagline, mission, vision, concept, problems, solutions, revenueModel, brandingKeywords, valueProposition, targetCustomers, growthStages, workAreas)을 한 번에 채워줘. 비어 있는 항목까지 전부 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 모든 필드를 출력해줘.\n\n${buildContext()}`,
+    `아래 사업 정보를 바탕으로 기획서의 '모든 항목'(tagline, mission, vision, concept, problems, solutions, revenueModel, products, brandingKeywords, valueProposition, targetCustomers, growthStages, workAreas)을 한 번에 채워줘. products는 이 사업에서 판매·출시하는 것(웹앱·앱·굿즈 등). 비어 있는 항목까지 전부 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 모든 필드를 출력해줘.\n\n${buildContext()}`,
     '기획서 전체를 채워줘');
 
   const handlePrint = () => {
@@ -1717,6 +1726,16 @@ export default function PlanPage() {
           onUpdate={(i, v) => updatePlanItem('revenueModel', i, v)}
           onRemove={i => removePlanItem('revenueModel', i)}
           onGenerate={chat && !chat.loading ? handleGenerateRevenueModel : undefined}
+        />
+
+        <CardListSection
+          label="프로덕트 목록"
+          hint={HINTS.products}
+          items={plan.products ?? []}
+          onAdd={v => addPlanItem('products', v)}
+          onUpdate={(i, v) => updatePlanItem('products', i, v)}
+          onRemove={i => removePlanItem('products', i)}
+          onGenerate={chat && !chat.loading ? handleGenerateProducts : undefined}
         />
 
         <GrowthStagesSection
