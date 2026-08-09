@@ -25,8 +25,9 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
-  // 공개 경로: 랜딩('/') · 로그인 · OAuth 콜백 · 약관/개인정보. 나머지는 앱(로그인 필요).
-  const isPublicRoute = path === '/' || path === '/login' || path.startsWith('/auth') || path === '/terms' || path === '/privacy';
+  // 공개 경로: 랜딩('/') · 로그인 · OAuth 콜백 · 약관/개인정보 · SEO/공유용 메타(OG 이미지·사이트맵·robots).
+  const isPublicRoute = path === '/' || path === '/login' || path.startsWith('/auth') || path === '/terms' || path === '/privacy'
+    || path.startsWith('/opengraph-image') || path.startsWith('/twitter-image') || path === '/sitemap.xml' || path === '/robots.txt';
 
   // 로그인 안 했는데 공개 경로가 아니면 → 로그인으로
   if (!user && !isPublicRoute) {
