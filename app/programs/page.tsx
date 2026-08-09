@@ -1989,8 +1989,8 @@ export default function ProgramsPage() {
                                     </span>
                                   )}
                                   <span className="flex-1" />
-                                  <button onClick={() => startEditTodo(t)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-neutral-700 text-[10px] transition-all flex-shrink-0">편집</button>
-                                  <button onClick={() => deleteTodo(p, dl.id, t.id)} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-red-500 text-xs transition-all flex-shrink-0">×</button>
+                                  <button onClick={() => startEditTodo(t)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-neutral-700 text-[10px] transition-all flex-shrink-0">편집</button>
+                                  <button onClick={() => deleteTodo(p, dl.id, t.id)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-red-500 text-xs transition-all flex-shrink-0">×</button>
                                 </li>
                               );
                             })}

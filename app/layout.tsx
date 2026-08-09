@@ -5,6 +5,7 @@ import AppFrame from './components/AppFrame';
 import { ChatProvider } from './lib/ChatContext';
 import { TimerProvider } from './lib/TimerContext';
 import { UIProvider } from './lib/UIContext';
+import { UpgradeProvider } from './lib/UpgradeContext';
 import { ToastProvider } from './lib/ToastContext';
 import AuthProvider from './components/AuthProvider';
 import SyncProvider from './components/SyncProvider';
@@ -50,9 +51,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SyncProvider>
         <TimerProvider>
           <UIProvider>
+          <UpgradeProvider>
           <ChatProvider>
             <AppFrame>{children}</AppFrame>
           </ChatProvider>
+          </UpgradeProvider>
           </UIProvider>
         </TimerProvider>
         </SyncProvider>

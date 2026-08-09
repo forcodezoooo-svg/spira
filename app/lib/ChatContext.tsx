@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
 import { useUI } from './UIContext';
 import { useToast } from './ToastContext';
+import { useUpgrade } from './UpgradeContext';
 import { createClient } from './supabase/client';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER } from './ai/markers';
 import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
@@ -130,6 +131,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
+  const { showUpgrade } = useUpgrade();
+  const upgradeRef = useRef(showUpgrade);
+  upgradeRef.current = showUpgrade;
 
   // AI 자동 입력(마커 적용)은 Pro 전용 — 현재 사용자의 Pro 여부를 추적
   const isProRef = useRef(false);
@@ -291,9 +295,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       });
 
       if (res.status === 429) {
-        // 무료 플랜 하루 한도 초과 — 서버가 준 안내 문구를 채팅에 표시
+        // 무료 플랜 하루 한도 초과 — 안내 문구 표시 + 유료 플랜 알림 팝업
         const data = await res.json().catch(() => ({} as { error?: string }));
         setMessages(prev => [...prev, { role: 'assistant', content: data.error ?? AI_COPY.error }]);
+        upgradeRef.current('ai_limit');
         return;
       }
       if (!res.ok || !res.body) throw new Error('응답 오류');
@@ -329,7 +334,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // AI 자동 입력(기획서·할일·영역 자동 반영)은 Pro 전용 — 무료는 조언까지만
       const hadMarker = full.includes(PLAN_MARKER) || full.includes(ROUTINE_MARKER) || full.includes(GOALS_MARKER) || full.includes(QUARTER_PLAN_MARKER) || full.includes(AREA_ASSIGN_MARKER);
       if (hadMarker && !isProRef.current) {
-        toastRef.current('AI 자동 입력은 Pro 전용이에요. 업그레이드하면 자동으로 채워드려요.', 'info');
+        upgradeRef.current('autofill');
       }
 
       if (full.includes(PLAN_MARKER) && planHandlerRef.current && isProRef.current) {
