@@ -724,7 +724,11 @@ function BrandImageSection({
     const remaining = MAX - images.length;
     files.filter(f => f.type.startsWith('image/')).slice(0, remaining).forEach(file => {
       const reader = new FileReader();
-      reader.onload = () => onAdd(reader.result as string);
+      reader.onload = async () => {
+        // 업로드 시점에 축소·압축해 저장 (원본 대용량 base64로 저장/동기화되는 것 방지)
+        const compressed = await downscaleDataUrl(reader.result as string);
+        onAdd(compressed);
+      };
       reader.readAsDataURL(file);
     });
   };
@@ -1148,6 +1152,36 @@ function WorkAreasSection({
   );
 }
 
+// ── Image downscaling ──────────────────────────────────────────────────────────
+// 업로드한 브랜드 이미지가 원본(수 MB base64)으로 저장되면 저장/동기화가 무거워지고,
+// 특히 '문서 저장' 시 이 거대한 base64들을 한 HTML에 전부 인라인해 새 탭에서 디코딩하느라
+// 브라우저 전체가 렉이 걸린다. 캔버스로 축소·재인코딩해 용량을 크게 줄인다.
+async function downscaleDataUrl(dataUrl: string, maxDim = 1400, forceJpeg = false): Promise<string> {
+  if (typeof document === 'undefined' || !dataUrl.startsWith('data:image')) return dataUrl;
+  const isPng = dataUrl.startsWith('data:image/png');
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const w0 = img.naturalWidth, h0 = img.naturalHeight;
+      const scale = Math.min(1, maxDim / Math.max(w0, h0));
+      // 이미 충분히 작으면(축소 불필요 + 저용량) 원본 유지
+      if (scale >= 1 && dataUrl.length < 300_000) { resolve(dataUrl); return; }
+      const w = Math.max(1, Math.round(w0 * scale));
+      const h = Math.max(1, Math.round(h0 * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(dataUrl); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      // PNG(투명 로고 등)는 형식 유지, 그 외/강제 시 JPEG로 압축
+      const out = (!forceJpeg && isPng) ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
+      resolve(out.length < dataUrl.length ? out : dataUrl); // 더 커지면 원본 유지
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 // ── Print document builder ─────────────────────────────────────────────────────
 
 function buildPrintHtml(plan: PlanData, brandName: string): string {
@@ -1569,13 +1603,17 @@ export default function PlanPage() {
     `아래 사업 정보를 바탕으로 기획서의 '모든 항목'(tagline, mission, vision, concept, problems, solutions, revenueModel, products, brandingKeywords, valueProposition, targetCustomers, growthStages, workAreas)을 한 번에 채워줘. products는 이 사업에서 판매·출시하는 것(웹앱·앱·굿즈 등). 비어 있는 항목까지 전부 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 모든 필드를 출력해줘.\n\n${buildContext()}`,
     '기획서 전체를 채워줘');
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    // 새 탭을 사용자 제스처 안에서 먼저 열어야 팝업 차단을 피할 수 있음 (async 이후엔 차단됨)
+    const w = window.open('', '_blank');
     const brandName = selectedWsName;
-    const html = buildPrintHtml(plan, brandName);
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const w = window.open(url, '_blank');
-    if (w) w.addEventListener('load', () => URL.revokeObjectURL(url), { once: true });
+    // 문서용으로 이미지를 축소·압축(최대 1000px, JPEG)해 거대한 base64 인라인으로 인한 렉 방지
+    const imgs = await Promise.all((plan.brandImages ?? []).map(s => downscaleDataUrl(s, 1000, true)));
+    const html = buildPrintHtml({ ...plan, brandImages: imgs }, brandName);
+    if (!w) return; // 팝업이 차단된 경우
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   };
 
   return (
