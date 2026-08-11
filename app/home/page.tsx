@@ -140,7 +140,8 @@ export default function Home() {
       const day = addDaysD(weekStart, i);
       for (const t of getGoalTasksForDate(store.allWorkspacesEntries, localDateStr(day), day.getDay())) {
         if (t.done) continue;
-        const key = t.workAreaId ?? t.programName ?? 'area';
+        // 업무 영역명 기준으로 묶어 모든 비즈니스의 같은 영역을 통합 (Goals와 동일)
+        const key = t.programName ?? 'area';
         let a = map.get(key);
         if (!a) { a = { key, name: t.programName || '업무', wsId: t.wsId, wsName: wsNameOf(t.wsId), color: t.color, count: 0, minDday: 999, score: 0, seen: new Set() }; map.set(key, a); }
         if (!a.seen.has(t.key)) { a.seen.add(t.key); a.count += 1; }
@@ -205,7 +206,8 @@ export default function Home() {
   const groupMap = new Map<string, (typeof todayGroups)[number]>();
   for (const item of orderedItems) {
     const isGoal = item.kind === 'goal';
-    const key = isGoal ? (item.goal!.workAreaId ?? item.goal!.programName ?? 'area') : QUICK_GROUP;
+    // 업무 영역명 기준으로 묶어 모든 비즈니스의 같은 영역을 하나로 통합 (Goals와 동일)
+    const key = isGoal ? (item.goal!.programName ?? 'area') : QUICK_GROUP;
     const name = isGoal ? (item.goal!.programName || '업무') : '추가 업무';
     const color = isGoal ? item.goal!.color : '#C4CCC4';
     let g = groupMap.get(key);
@@ -613,7 +615,7 @@ export default function Home() {
                     style={isFocus ? { backgroundColor: '#F4FBEA', border: '1.5px solid #BCE89A' } : undefined}
                   >
                     <div className="flex items-center gap-2 mb-2 px-1 flex-wrap">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+                      {/* 색상 닷 제거 — 업무 영역은 특정 비즈니스 소속이 아니라 모든 비즈니스 통합 (비즈니스 구분은 각 업무 옆 닷으로 표시) */}
                       <span className="text-[13px] font-bold" style={{ color: isFocus ? '#16211E' : '#5B6560' }}>{g.name}</span>
                       {isFocus && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>
