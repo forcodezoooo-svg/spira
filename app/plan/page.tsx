@@ -304,14 +304,12 @@ function CardListSection({
 // ── List section ───────────────────────────────────────────────────────────────
 
 function ListSection({
-  label, hint, items, onAdd, onUpdate, onRemove, placeholder, onGenerate,
+  label, hint, items, onReplace, placeholder, onGenerate,
 }: {
   label: string;
   hint: string;
   items: string[];
-  onAdd: (v: string) => void;
-  onUpdate: (i: number, v: string) => void;
-  onRemove: (i: number) => void;
+  onReplace: (items: string[]) => void;
   placeholder: string;
   onGenerate?: () => void;
 }) {
@@ -330,21 +328,18 @@ function ListSection({
     if (!isEditing) setDrafts(items);
   }, [items, isEditing]);
 
+  // 편집 중에는 추가/삭제/수정 모두 로컬 drafts에만 반영하고, 저장 시 한 번에 커밋
   const handleAdd = () => {
     const v = input.trim();
     if (!v) return;
-    onAdd(v);
+    setDrafts(prev => [...prev, v]);
     setInput('');
   };
 
   const startEdit = () => { setDrafts(items); setIsEditing(true); };
-  // 저장: 변경된 항목은 반영, 빈 항목은 삭제 (뒤에서부터 지워 인덱스 밀림 방지)
+  // 저장: 편집한 전체 목록을 한 번에 커밋 (빈 항목은 제거). 개별 update 반복 호출로 인한 유실 방지
   const handleSave = () => {
-    for (let i = drafts.length - 1; i >= 0; i--) {
-      const v = drafts[i].trim();
-      if (!v) { onRemove(i); continue; }
-      if (v !== items[i]) onUpdate(i, v);
-    }
+    onReplace(drafts.map(d => d.trim()).filter(Boolean));
     setIsEditing(false);
     setInput('');
   };
@@ -1483,14 +1478,9 @@ export default function PlanPage() {
     store.updatePlanInWs(selectedWsId, next);
   };
 
-  const addItem = (key: 'problems', value: string) =>
-    update({ [key]: [...plan[key], value] });
-
-  const removeItem = (key: 'problems', index: number) =>
-    update({ [key]: plan[key].filter((_, i) => i !== index) });
-
-  const updateItem = (key: 'problems', index: number, value: string) =>
-    update({ [key]: plan[key].map((v, i) => (i === index ? value : v)) });
+  // 리스트 항목 전체를 한 번에 교체 (개별 update를 연달아 호출하면 stale closure로 마지막 것만 반영됨)
+  const replaceItems = (key: 'problems', values: string[]) =>
+    update({ [key]: values });
 
   const addPlanItem = (key: 'solutions' | 'revenueModel' | 'products', value: PlanItem) =>
     update({ [key]: [...(plan[key] ?? []), value] });
@@ -1694,9 +1684,7 @@ export default function PlanPage() {
           label="문제 정의"
           hint={HINTS.problems}
           items={plan.problems}
-          onAdd={v => addItem('problems', v)}
-          onUpdate={(i, v) => updateItem('problems', i, v)}
-          onRemove={i => removeItem('problems', i)}
+          onReplace={items => replaceItems('problems', items)}
           placeholder="해결하려는 문제를 입력하세요."
           onGenerate={chat && !chat.loading ? handleGenerateProblems : undefined}
         />
