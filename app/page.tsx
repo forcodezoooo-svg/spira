@@ -27,100 +27,13 @@ function MaskIcon({ src, size = 18, color = LIME }: { src: string; size?: number
   );
 }
 
-// 다크 라운드 박스 안의 아이콘 (기능 섹션·흐름 카드 공용)
-function IconBox({ src, size = 44, icon = 20 }: { src: string; size?: number; icon?: number }) {
-  return (
-    <span className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{ width: size, height: size, backgroundColor: DARK }}>
-      <MaskIcon src={src} size={icon} color={LIME} />
-    </span>
-  );
-}
-
 const Check = () => (
   <span className="mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: LIME }}>
     <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" style={{ color: DARK }}><path d="M2.5 6.3l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /></svg>
   </span>
 );
 
-// ── 제품 UI 미니목업 (스크린샷 대체 — 코드로 재현) ────────────────────────────
-
-// Plan: 완성된 기획서 문서 카드
-function PlanDocMock() {
-  const bar = (w: string, c = '#EBEDEA') => <span className="block h-2 rounded-full" style={{ width: w, backgroundColor: c }} />;
-  return (
-    <div className="bg-white rounded-2xl p-5 w-full" style={{ boxShadow: '0 18px 40px rgba(0,0,0,0.10)', border: '1px solid #EFEFEA' }}>
-      <div className="flex items-center gap-2 mb-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.svg" alt="" className="w-4 h-auto" />
-        <span className="text-[15px] font-black" style={{ color: INK }}>Spira</span>
-        <span className="ml-auto w-5 h-5 rounded-full" style={{ backgroundColor: '#F0F0EA' }} />
-      </div>
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        <span className="text-[9px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>브랜딩</span>
-        {['미션', '비전', '컨셉', '타겟'].map(t => (
-          <span key={t} className="text-[9px] font-medium px-2 py-1 rounded-full" style={{ backgroundColor: '#F1F1EB', color: '#8A938C' }}>{t}</span>
-        ))}
-      </div>
-      <div className="space-y-2.5">
-        <div className="space-y-1.5">
-          {bar('40%', '#DDEFCB')}
-          {bar('100%')}
-          {bar('88%')}
-          {bar('64%')}
-        </div>
-        <div className="h-px my-1" style={{ backgroundColor: '#F0F0EA' }} />
-        <div className="space-y-1.5">
-          {bar('34%', '#DDEFCB')}
-          {bar('96%')}
-          {bar('72%')}
-        </div>
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          {[0, 1, 2, 3].map(i => (
-            <div key={i} className="rounded-lg p-2 space-y-1.5" style={{ border: '1px solid #EFEFEA' }}>
-              {bar('60%', '#E7E7E1')}
-              {bar('90%')}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Goals: 업무영역 아코디언 + 데드라인 + D-day 원
-function GoalsMock() {
-  const row = (name: string, count: number, open = false) => (
-    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: open ? '#F6FBEF' : '#F7F7F3' }}>
-      <span className="text-[13px] font-bold" style={{ color: INK }}>{name}</span>
-      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#E7E7E1', color: '#8A938C' }}>{count}</span>
-      <svg className={`w-3.5 h-3.5 ml-auto ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#B4BBB4' }}><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-    </div>
-  );
-  return (
-    <div className="relative w-full">
-      <div className="bg-white rounded-2xl p-3 space-y-1.5" style={{ boxShadow: '0 18px 40px rgba(0,0,0,0.10)', border: '1px solid #EFEFEA', maxWidth: 300 }}>
-        {row('개발', 3)}
-        {row('디자인', 2)}
-        {row('마케팅', 5, true)}
-        <div className="pl-3 pr-1 pb-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] font-medium flex-1 min-w-0 truncate" style={{ color: '#44514B' }}>홍보 콘텐츠 100개 올리기</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FFE1DD', color: '#E0574F' }}>D-50</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#C7CEC7' }} />
-            <span className="text-[12px]" style={{ color: '#8A938C' }}>첫 번째 게시글 업로드</span>
-          </div>
-        </div>
-      </div>
-      {/* D-day 원 (연결선 + 라임 원) */}
-      <div className="absolute -bottom-5 right-3 flex flex-col items-center">
-        <span className="w-px h-5" style={{ backgroundColor: '#D4DAD2' }} />
-        <span className="w-10 h-10 rounded-full flex items-center justify-center text-[15px] font-black" style={{ backgroundColor: LIME, color: DARK, boxShadow: '0 8px 18px rgba(157,254,59,0.5)' }}>11</span>
-      </div>
-    </div>
-  );
-}
+// ── 제품 UI 미니목업 (Resources·Home은 코드로 재현, Plan·Goals는 에셋 사용) ──
 
 // Resources: 이번 달 수익/지출 카드 2개
 function ResourceCard({ income, expense, net }: { income: string; expense: string; net: string }) {
@@ -190,14 +103,20 @@ const FEATURES = [
     icon: '/plan_icon.svg',
     title: '비즈니스의 기획과\n방향성을 정리해요',
     desc: 'Plan에서 비즈니스의 방향과 성장 목표를 체계적으로 정리하세요. 막연한 부분은 Sparky의 도움을 받아 채우고, 완성된 계획은 하나의 문서로 확인할 수 있어요.',
-    mock: <PlanDocMock />,
+    mock: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/feature-plan.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300, filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.10))' }} />
+    ),
     reverse: false,
   },
   {
     icon: '/goals_icon.svg',
     title: '각기 다른 성격의 일들도\n일정을 나눠서 차근차근',
     desc: 'Goals에서 업무 영역별 목표와 데드라인을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 Sparky가 함께 도와줘요.',
-    mock: <GoalsMock />,
+    mock: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/feature-goals.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300 }} />
+    ),
     reverse: true,
   },
   {
@@ -357,7 +276,10 @@ export default function LandingPage() {
           <div key={f.title} className="grid md:grid-cols-2 gap-10 md:gap-8 items-center">
             {/* 텍스트 */}
             <div className={f.reverse ? 'md:order-2' : ''}>
-              <IconBox src={f.icon} size={46} icon={21} />
+              {/* 실제 서비스 메뉴바의 '활성' 아이콘 모습 — 라임 라운드 네모 + 딥틸 아이콘 */}
+              <span className="inline-flex w-[46px] h-[46px] rounded-[15px] items-center justify-center" style={{ backgroundColor: LIME, boxShadow: '0 6px 16px rgba(157,254,59,0.50)' }}>
+                <MaskIcon src={f.icon} size={21} color={EMBLEM} />
+              </span>
               <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mt-4 mb-3 whitespace-pre-line" style={{ color: INK }}>
                 {f.title}
               </h3>
