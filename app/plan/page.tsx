@@ -304,18 +304,20 @@ function CardListSection({
 // ── List section ───────────────────────────────────────────────────────────────
 
 function ListSection({
-  label, hint, items, onAdd, onRemove, placeholder, onGenerate,
+  label, hint, items, onAdd, onUpdate, onRemove, placeholder, onGenerate,
 }: {
   label: string;
   hint: string;
   items: string[];
   onAdd: (v: string) => void;
+  onUpdate: (i: number, v: string) => void;
   onRemove: (i: number) => void;
   placeholder: string;
   onGenerate?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [input, setInput] = useState('');
+  const [drafts, setDrafts] = useState<string[]>(items); // 편집 중 각 항목 텍스트
   const inputRef = useRef<HTMLInputElement>(null);
   const chat = useChatContext();
 
@@ -323,10 +325,27 @@ function ListSection({
     if (isEditing) inputRef.current?.focus();
   }, [isEditing]);
 
+  // 편집 시작/외부(AI) 반영 시 드래프트 동기화
+  useEffect(() => {
+    if (!isEditing) setDrafts(items);
+  }, [items, isEditing]);
+
   const handleAdd = () => {
     const v = input.trim();
     if (!v) return;
     onAdd(v);
+    setInput('');
+  };
+
+  const startEdit = () => { setDrafts(items); setIsEditing(true); };
+  // 저장: 변경된 항목은 반영, 빈 항목은 삭제 (뒤에서부터 지워 인덱스 밀림 방지)
+  const handleSave = () => {
+    for (let i = drafts.length - 1; i >= 0; i--) {
+      const v = drafts[i].trim();
+      if (!v) { onRemove(i); continue; }
+      if (v !== items[i]) onUpdate(i, v);
+    }
+    setIsEditing(false);
     setInput('');
   };
 
@@ -340,8 +359,8 @@ function ListSection({
         label={label}
         hint={hint}
         isEditing={isEditing}
-        onEdit={() => setIsEditing(true)}
-        onSave={() => { setIsEditing(false); setInput(''); }}
+        onEdit={startEdit}
+        onSave={handleSave}
         onAskAI={handleAskAI}
       />
       <div className={`bg-white border rounded-xl px-5 py-4 transition-all ${isEditing ? 'ring-2 ring-violet-400 border-violet-300' : 'border-neutral-200'}`}>
@@ -349,23 +368,31 @@ function ListSection({
           <p className="text-sm text-neutral-400">{placeholder}</p>
         ) : (
           <>
-            {items.length > 0 && (
+            {(isEditing ? drafts : items).length > 0 && (
               <ul className="space-y-2 mb-3">
-                {items.map((item, i) => (
+                {(isEditing ? drafts : items).map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <span className="text-neutral-400 text-xs mt-0.5 flex-shrink-0">•</span>
-                    <span className="text-sm text-neutral-800 flex-1 leading-relaxed">{item}</span>
-                    {isEditing && (
-                      <button onClick={() => onRemove(i)} className="text-neutral-400 hover:text-red-400 text-xs flex-shrink-0 transition-colors mt-0.5">
-                        ×
-                      </button>
+                    {isEditing ? (
+                      <>
+                        <AutoTextarea
+                          value={item}
+                          onChange={v => setDrafts(prev => prev.map((d, idx) => (idx === i ? v : d)))}
+                          placeholder={placeholder}
+                        />
+                        <button onClick={() => setDrafts(prev => prev.filter((_, idx) => idx !== i))} className="text-neutral-400 hover:text-red-400 text-xs flex-shrink-0 transition-colors mt-0.5">
+                          ×
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-sm text-neutral-800 flex-1 leading-relaxed">{item}</span>
                     )}
                   </li>
                 ))}
               </ul>
             )}
             {isEditing && (
-              <div className={`flex gap-2 ${items.length > 0 ? 'pt-3 border-t border-neutral-100' : ''}`}>
+              <div className={`flex gap-2 ${drafts.length > 0 ? 'pt-3 border-t border-neutral-100' : ''}`}>
                 <input
                   ref={inputRef}
                   className="flex-1 text-sm text-neutral-800 placeholder-neutral-400 outline-none bg-transparent"
@@ -1462,6 +1489,9 @@ export default function PlanPage() {
   const removeItem = (key: 'problems', index: number) =>
     update({ [key]: plan[key].filter((_, i) => i !== index) });
 
+  const updateItem = (key: 'problems', index: number, value: string) =>
+    update({ [key]: plan[key].map((v, i) => (i === index ? value : v)) });
+
   const addPlanItem = (key: 'solutions' | 'revenueModel' | 'products', value: PlanItem) =>
     update({ [key]: [...(plan[key] ?? []), value] });
 
@@ -1665,6 +1695,7 @@ export default function PlanPage() {
           hint={HINTS.problems}
           items={plan.problems}
           onAdd={v => addItem('problems', v)}
+          onUpdate={(i, v) => updateItem('problems', i, v)}
           onRemove={i => removeItem('problems', i)}
           placeholder="해결하려는 문제를 입력하세요."
           onGenerate={chat && !chat.loading ? handleGenerateProblems : undefined}
