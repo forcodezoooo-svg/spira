@@ -68,7 +68,7 @@ function HomeMock() {
     </div>
   );
   return (
-    <div className="rounded-2xl px-4 pt-4 pb-4 w-full" style={{ backgroundColor: '#F4FBEA', border: '1.5px solid #BCE89A', maxWidth: 320 }}>
+    <div className="rounded-2xl px-4 pt-4 pb-4 w-full" style={{ backgroundColor: '#F4FBEA', border: '1.5px solid #BCE89A', maxWidth: 320, boxShadow: '0 10px 28px rgba(0,0,0,0.10)' }}>
       <div className="flex items-center gap-2 mb-3 px-1">
         <span className="text-[13px] font-bold" style={{ color: INK }}>마케팅</span>
         <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>🎯 이번 주 집중</span>
@@ -252,8 +252,8 @@ export default function LandingPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/speech-bubble.svg" alt="꿈꾸던 미래로 나아가는 첫 걸음을 도와줄게요!" className="block mx-auto w-full max-w-[300px] h-auto" />
         {/* 실제 서비스의 Sparky AI 채팅 버튼 */}
-        <div className="w-[50px] h-[50px] rounded-full mx-auto mb-6 -mt-2 flex items-center justify-center" style={{ backgroundColor: '#5FD93A', color: '#16211E', boxShadow: '0 8px 22px rgba(95,217,58,0.50)' }}>
-          <svg viewBox="0 0 37 34" style={{ width: 35, height: 32 }} fill="currentColor">
+        <div className="w-[55px] h-[55px] rounded-full mx-auto mb-6 mt-[15px] flex items-center justify-center" style={{ backgroundColor: '#5FD93A', color: '#16211E', boxShadow: '0 8px 22px rgba(95,217,58,0.50)' }}>
+          <svg viewBox="0 0 37 34" style={{ width: 39, height: 35 }} fill="currentColor">
             <path d="M24.2739 8.23248C31.1271 8.23248 36.7056 13.811 36.7056 20.6642H32.3406C32.3406 16.2162 28.7219 12.5976 24.2739 12.5976V8.23248Z" />
             <path d="M11.1655 6.10352e-05C15.7008 6.10352e-05 19.3937 3.69291 19.3937 8.22822H16.504C16.504 5.28616 14.1076 2.88974 11.1655 2.88974V6.10352e-05Z" />
             <path d="M25.588 6.10352e-05C21.0527 6.10352e-05 17.3599 3.69291 17.3599 8.22822H20.2495C20.2495 5.28616 22.646 2.88974 25.588 2.88974V6.10352e-05Z" />
