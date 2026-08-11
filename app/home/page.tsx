@@ -35,7 +35,6 @@ export default function Home() {
   const [progressMenuOpen, setProgressMenuOpen] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const [homeFilterWs, setHomeFilterWs] = useState<string | null>(null); // 오늘의 업무 비즈니스 필터 (null = 전체)
-  const [weekOffset, setWeekOffset] = useState(0); // 이번 주 집중 지표: 0=이번 주, 1=다음 주 …
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
   const [showYesterday, setShowYesterday] = useState(false);
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
@@ -156,10 +155,7 @@ export default function Home() {
   };
   const thisWeekStart = weekStartOf(today);
   const currentWeekAreas = weekAreas(thisWeekStart).areas; // 오늘 업무 그룹 정렬용(이번 주 기준)
-  const focusWeekStart = addDaysD(thisWeekStart, weekOffset * 7);
-  const focus = weekAreas(focusWeekStart);
-  const weekLabelText = weekOffset === 0 ? '이번 주' : weekOffset === 1 ? '다음 주' : weekOffset === 2 ? '다다음 주' : `${weekOffset}주 후`;
-  const weekRangeText = `${focusWeekStart.getMonth() + 1}.${focusWeekStart.getDate()} – ${addDaysD(focusWeekStart, 6).getMonth() + 1}.${addDaysD(focusWeekStart, 6).getDate()}`;
+  const focusArea = currentWeekAreas[0] ?? null; // 이번 주 가장 집중해야 할 업무 영역
   const areaReason = (a: WeekArea) => (a.minDday < 0 ? '기한 지남' : a.minDday === 0 ? '오늘 마감' : a.minDday <= 7 ? `D-${a.minDday} 임박` : `업무 ${a.count}개`) + (a.minDday <= 7 ? ` · 업무 ${a.count}개` : '');
 
   // ── 어제 못한 업무 — 어제 예정이었는데 완료 안 한 업무를 '복구'하도록 보여줌 ──
@@ -607,21 +603,37 @@ export default function Home() {
               <div className="mb-4"><SuccessState compact title="오늘 할 일을 모두 끝냈어요 🎉" description="깔끔하게 마무리했어요. 내일도 이 흐름을 이어가요." /></div>
             )}
             <div className="space-y-5">
-              {todayGroups.map(g => (
-                <div key={g.key}>
-                  <div className="flex items-center gap-2 mb-2 px-1">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
-                    <span className="text-[13px] font-bold" style={{ color: '#5B6560' }}>{g.name}</span>
+              {todayGroups.map(g => {
+                // 이번 주 가장 집중해야 할 업무 영역이면 눈에 띄게 박스 처리
+                const isFocus = !!focusArea && g.key === focusArea.key && g.key !== QUICK_GROUP;
+                return (
+                  <div
+                    key={g.key}
+                    className={isFocus ? 'rounded-[24px] px-4 pt-4 pb-4 -mx-1' : ''}
+                    style={isFocus ? { backgroundColor: '#F4FBEA', border: '1.5px solid #BCE89A' } : undefined}
+                  >
+                    <div className="flex items-center gap-2 mb-2 px-1 flex-wrap">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
+                      <span className="text-[13px] font-bold" style={{ color: isFocus ? '#16211E' : '#5B6560' }}>{g.name}</span>
+                      {isFocus && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>
+                          🎯 이번 주 집중
+                        </span>
+                      )}
+                      {isFocus && (
+                        <span className="text-[11px] font-medium" style={{ color: '#7A9463' }}>{areaReason(focusArea)}</span>
+                      )}
+                    </div>
+                    <ul className="space-y-3">
+                      {g.items.map(item =>
+                        item.kind === 'goal'
+                          ? renderGoalTask(item.goal!)
+                          : renderQuickTask(item.quick!)
+                      )}
+                    </ul>
                   </div>
-                  <ul className="space-y-3">
-                    {g.items.map(item =>
-                      item.kind === 'goal'
-                        ? renderGoalTask(item.goal!)
-                        : renderQuickTask(item.quick!)
-                    )}
-                  </ul>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -634,42 +646,6 @@ export default function Home() {
 
         {/* 메모 (접이식) — 공통 컴포넌트, 플레이바 바로 아래 */}
         <MemoPanel />
-
-        {/* ── 이번 주 집중 (주 이동 가능 · 미배치 시 안내) ── */}
-        <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[16px] font-bold" style={{ color: '#16211E' }}>🎯 {weekLabelText} 집중</span>
-            <div className="flex items-center gap-0.5">
-              <button onClick={() => setWeekOffset(o => Math.max(0, o - 1))} disabled={weekOffset === 0} className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-neutral-100 disabled:opacity-30" style={{ color: '#9AA39D' }} aria-label="이전 주">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M7.5 2.5L4 6l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-              <button onClick={() => setWeekOffset(o => o + 1)} className="w-7 h-7 flex items-center justify-center rounded-full transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} aria-label="다음 주">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-            </div>
-          </div>
-          <p className="text-[12px] mb-4" style={{ color: '#9AA39D' }}>{weekRangeText}</p>
-
-          {focus.hasTasks ? (
-            <div className="space-y-2.5">
-              {focus.areas.slice(0, 3).map((a, i) => (
-                <div key={a.key} className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: i === 0 ? '#16211E' : '#F0F0EA', color: i === 0 ? '#9DFE3B' : '#9AA39D' }}>{i + 1}</span>
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[14px] font-semibold truncate" style={{ color: '#16211E' }}>{a.name}</div>
-                    <div className="text-[12px] truncate" style={{ color: '#9AA39D' }}>{a.wsName ? a.wsName + ' · ' : ''}{areaReason(a)}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-2">
-              <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#9AA39D' }}>{weekLabelText}에 배치된 업무가 없어요.<br />Goals 캘린더에서 계획을 채워보세요.</p>
-              <button onClick={() => router.push('/programs')} className="text-[13px] font-bold px-4 py-2 rounded-full transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>Goals에서 채우기</button>
-            </div>
-          )}
-        </div>
 
         {/* 이번 달 수익/지출 */}
         <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
