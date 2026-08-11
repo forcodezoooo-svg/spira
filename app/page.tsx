@@ -329,14 +329,19 @@ export default function LandingPage() {
 
       {/* ══ Sparky 소개 ══ */}
       <section className="max-w-xl mx-auto px-6 pb-24 text-center">
-        <div className="inline-block relative mb-8">
-          <span className="inline-block text-[13px] font-semibold px-4 py-2.5 rounded-2xl rounded-bl-sm" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>
-            꿈꾸던 미래로 나아가는 첫 걸음을 도와줄게요!
-          </span>
-        </div>
-        <div className="w-[76px] h-[76px] rounded-[26px] mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: LIME, boxShadow: '0 14px 34px rgba(157,254,59,0.5)' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Sparky" className="w-9 h-auto" />
+        {/* 말풍선 (첨부 에셋) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/speech-bubble.svg" alt="꿈꾸던 미래로 나아가는 첫 걸음을 도와줄게요!" className="block mx-auto w-full max-w-[300px] h-auto" />
+        {/* 실제 서비스의 Sparky AI 채팅 버튼 */}
+        <div className="w-[50px] h-[50px] rounded-full mx-auto mb-6 -mt-2 flex items-center justify-center" style={{ backgroundColor: '#5FD93A', color: '#16211E', boxShadow: '0 8px 22px rgba(95,217,58,0.50)' }}>
+          <svg viewBox="0 0 37 34" style={{ width: 35, height: 32 }} fill="currentColor">
+            <path d="M24.2739 8.23248C31.1271 8.23248 36.7056 13.811 36.7056 20.6642H32.3406C32.3406 16.2162 28.7219 12.5976 24.2739 12.5976V8.23248Z" />
+            <path d="M11.1655 6.10352e-05C15.7008 6.10352e-05 19.3937 3.69291 19.3937 8.22822H16.504C16.504 5.28616 14.1076 2.88974 11.1655 2.88974V6.10352e-05Z" />
+            <path d="M25.588 6.10352e-05C21.0527 6.10352e-05 17.3599 3.69291 17.3599 8.22822H20.2495C20.2495 5.28616 22.646 2.88974 25.588 2.88974V6.10352e-05Z" />
+            <path d="M12.4317 8.73444C5.57856 8.73444 0 14.313 0 21.1662H4.36507C4.36507 16.7182 7.98372 13.0995 12.4317 13.0995V8.73444Z" />
+            <path d="M20.5376 13.3572H16.2206C16.2206 17.7572 12.6412 21.3365 8.24121 21.3365V25.6536C12.6412 25.6536 16.2206 29.2329 16.2206 33.6329H20.5376C20.5376 29.2329 24.117 25.6536 28.517 25.6536V21.3365C24.117 21.3365 20.5376 17.7572 20.5376 13.3572ZM18.3769 26.6837C17.517 25.4353 16.4344 24.3528 15.1904 23.4972C16.4388 22.6373 17.5214 21.5548 18.3769 20.3107C19.2368 21.5591 20.3194 22.6417 21.5634 23.4972C20.315 24.3572 19.2325 25.4397 18.3769 26.6837Z" />
+            <path d="M18.3764 10.1924C20.2616 10.1924 21.7899 8.66418 21.7899 6.77896C21.7899 4.89375 20.2616 3.36548 18.3764 3.36548C16.4912 3.36548 14.9629 4.89375 14.9629 6.77896C14.9629 8.66418 16.4912 10.1924 18.3764 10.1924Z" />
+          </svg>
         </div>
         <h2 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] mb-3" style={{ color: INK }}>
           Spira의 전용 AI assistant, Sparky.
