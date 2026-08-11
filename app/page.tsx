@@ -224,60 +224,62 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{ backgroundColor: '#F8F8F8', color: INK }}>
       {/* ══ 히어로 ══ */}
-      <section className="relative overflow-hidden">
-        {/* 배경 라임 블롭 */}
-        <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ height: 380, background: 'radial-gradient(130% 90% at 12% -10%, #B4FF6E 0%, #D6FFA8 34%, #EBFFD4 55%, rgba(248,248,248,0) 78%)' }} />
+      {/* 데스크톱: 첨부 배경 SVG를 그대로 깔고 텍스트를 오버레이 (배경 비율 유지) */}
+      <section
+        className="hidden md:block relative w-full"
+        style={{ aspectRatio: '1920 / 1228', backgroundImage: 'url(/hero-bg.svg)', backgroundSize: 'cover', backgroundPosition: 'center top', backgroundRepeat: 'no-repeat' }}
+      >
+        {/* 로고 (좌상단) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/type-logo.svg" alt="SpirA" className="absolute left-[6%] top-[3.5%] w-auto" style={{ height: 'clamp(26px, 2.4vw, 42px)' }} />
+        {/* 우상단 로그인 */}
+        <Link href="/login" className="absolute right-[6%] top-[3.5%] font-semibold px-4 py-2 rounded-full transition-colors hover:bg-black/5" style={{ fontSize: 'clamp(13px, 1vw, 16px)', color: INK }}>로그인</Link>
 
-        <div className="relative max-w-5xl mx-auto px-6">
-          {/* 상단 바 */}
-          <header className="h-16 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="Spira" className="w-6 h-auto" />
-              <span className="text-[18px] font-black tracking-[-0.02em]">Spira</span>
-            </div>
-            <Link href="/login" className="text-[14px] font-semibold px-4 py-2 rounded-full transition-colors hover:bg-black/5">로그인</Link>
-          </header>
-
-          {/* 히어로 본문 */}
-          <div className="relative pt-14 pb-24 sm:pt-20 sm:pb-28">
-            <h1 className="text-[32px] sm:text-[44px] font-black leading-[1.18] tracking-[-0.03em] mb-5">
-              해야 할 일이 너무 많아<br />무엇부터 할지 모르겠다면
-            </h1>
-            <p className="text-[15px] sm:text-[17px] font-medium mb-8" style={{ color: '#3E4A44' }}>
-              1인 창업자를 위한 AI 워크스페이스 <b>Spira</b>
-            </p>
-            <Link
-              href="/login"
-              className="inline-block px-6 py-3 rounded-full text-[15px] font-bold transition-transform hover:-translate-y-0.5"
-              style={{ backgroundColor: '#fff', color: INK, boxShadow: '0 10px 26px rgba(0,0,0,0.10)', border: '1px solid rgba(0,0,0,0.05)' }}
-            >
-              무료로 시작하기
-            </Link>
-
-            {/* 우측 데코 그래픽 (로고 마크 + 점선 경로 + 다이아몬드) */}
-            <div aria-hidden className="hidden sm:block absolute top-0 right-0 w-[300px] h-[220px] pointer-events-none">
-              {/* 점선 경로 */}
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 220" fill="none">
-                <path d="M40 190 C 120 200, 150 150, 120 110 S 70 40, 150 30 S 260 60, 250 20" stroke={INK} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="0.5 10" />
-              </svg>
-              {/* 로고 마크 (아웃라인 느낌) */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="" className="absolute top-2 right-6 w-[92px] h-auto" style={{ filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.12))' }} />
-              {/* 다이아몬드 산포 */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/diamond.svg" alt="" className="absolute top-1 left-10 w-3.5" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/diamond.svg" alt="" className="absolute top-24 right-2 w-2.5 opacity-80" />
-              <span className="absolute top-16 left-4 w-2.5 h-2.5 rounded-[3px] rotate-12" style={{ backgroundColor: '#7BE04A' }} />
-              <span className="absolute bottom-6 left-24 w-2 h-2 rounded-[2px] rotate-45" style={{ backgroundColor: LIME }} />
-            </div>
-          </div>
+        {/* 히어로 카피 (그린 영역 좌측 중앙) */}
+        <div className="absolute left-[6%]" style={{ top: '58%', transform: 'translateY(-50%)', maxWidth: '52%' }}>
+          <h1 className="font-black leading-[1.2] tracking-[-0.03em]" style={{ color: INK, fontSize: 'clamp(26px, 3.5vw, 52px)' }}>
+            해야 할 일이 너무 많아<br />무엇부터 할지 모르겠다면
+          </h1>
+          <p className="font-medium" style={{ color: '#2E3A32', fontSize: 'clamp(14px, 1.35vw, 21px)', marginTop: 'clamp(14px, 1.4vw, 22px)' }}>
+            1인 창업자를 위한 AI 워크스페이스 SpirA
+          </p>
+          <Link
+            href="/login"
+            className="inline-block rounded-full font-bold transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: INK, color: '#fff', fontSize: 'clamp(13px, 1.05vw, 17px)', padding: 'clamp(9px,0.85vw,14px) clamp(18px,1.55vw,28px)', marginTop: 'clamp(18px,1.8vw,30px)' }}
+          >
+            무료로 시작하기
+          </Link>
         </div>
       </section>
 
+      {/* 모바일: 배경이 너무 납작해지므로 그린 그라데이션 + 세로 스택 */}
+      <section className="md:hidden relative overflow-hidden px-6 pt-7 pb-16" style={{ background: 'linear-gradient(158deg, #E9FFD0 0%, #C3FF7A 60%, #B7F56C 100%)' }}>
+        <div className="flex items-center justify-between mb-14">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/type-logo.svg" alt="SpirA" className="h-6 w-auto" />
+          <Link href="/login" className="text-[13px] font-semibold px-3.5 py-1.5 rounded-full transition-colors hover:bg-black/5" style={{ color: INK }}>로그인</Link>
+        </div>
+        <h1 className="text-[29px] font-black leading-[1.2] tracking-[-0.03em]" style={{ color: INK }}>
+          해야 할 일이 너무 많아<br />무엇부터 할지 모르겠다면
+        </h1>
+        <p className="mt-4 text-[15px] font-medium" style={{ color: '#2E3A32' }}>
+          1인 창업자를 위한 AI 워크스페이스 SpirA
+        </p>
+        <Link
+          href="/login"
+          className="inline-block mt-6 px-5 py-2.5 rounded-full text-[14px] font-bold transition-transform hover:-translate-y-0.5"
+          style={{ backgroundColor: INK, color: '#fff' }}
+        >
+          무료로 시작하기
+        </Link>
+        {/* 데코 다이아몬드 */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/diamond.svg" alt="" aria-hidden className="absolute top-8 right-8 w-4 opacity-90" />
+      </section>
+
       {/* ══ 공감 카드 ══ */}
-      <section className="max-w-2xl mx-auto px-6 -mt-8 pb-20">
+      <section className="max-w-2xl mx-auto px-6 pt-14 pb-20">
         <div className="rounded-[26px] px-7 py-9 sm:px-10 sm:py-11" style={{ backgroundColor: DARK, boxShadow: '0 24px 60px rgba(22,39,27,0.28)' }}>
           <h2 className="text-[18px] sm:text-[21px] font-black text-center mb-7" style={{ color: '#F4F8F2' }}>
             나만의 비즈니스를 준비하면서<br />이런 경험 있나요?
