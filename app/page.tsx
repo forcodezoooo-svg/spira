@@ -2,148 +2,384 @@ import Link from 'next/link';
 
 // 공개 랜딩 페이지 (비로그인 방문자용). 로그인한 사용자는 proxy.ts에서 /home 으로 보냄.
 // 앱 크롬(사이드바 등)은 AppFrame의 bare 처리로 렌더되지 않는다.
-// 핵심 메시지: '할 일'이 아니라 '방향과 우선순위'를 관리하는, 1인 창업자를 위한 AI 워크스페이스.
+// 시안(모바일 세로형 단일 컬럼)에 맞춰: 히어로 → 공감 카드 → 포지셔닝 → 4단계 흐름
+// → Sparky 소개 → 기능 4개(스크린샷) → 마무리 CTA.
 
+const DARK = '#16271B';   // 다크 그린 카드 배경
+const LIME = '#9DFE3B';   // 포인트 라임
+const INK = '#16211E';    // 본문 진한 텍스트
+
+// ── 아이콘(마스크) : 단색 SVG를 지정 색으로 렌더 ──────────────────────────────
+function MaskIcon({ src, size = 18, color = LIME }: { src: string; size?: number; color?: string }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-block flex-shrink-0"
+      style={{
+        width: size, height: size, backgroundColor: color,
+        WebkitMaskImage: `url(${src})`, maskImage: `url(${src})`,
+        WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center', maskPosition: 'center',
+        WebkitMaskSize: 'contain', maskSize: 'contain',
+      }}
+    />
+  );
+}
+
+// 다크 라운드 박스 안의 아이콘 (기능 섹션·흐름 카드 공용)
+function IconBox({ src, size = 44, icon = 20 }: { src: string; size?: number; icon?: number }) {
+  return (
+    <span className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{ width: size, height: size, backgroundColor: DARK }}>
+      <MaskIcon src={src} size={icon} color={LIME} />
+    </span>
+  );
+}
+
+const Check = () => (
+  <span className="mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: LIME }}>
+    <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" style={{ color: DARK }}><path d="M2.5 6.3l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  </span>
+);
+
+// ── 제품 UI 미니목업 (스크린샷 대체 — 코드로 재현) ────────────────────────────
+
+// Plan: 완성된 기획서 문서 카드
+function PlanDocMock() {
+  const bar = (w: string, c = '#EBEDEA') => <span className="block h-2 rounded-full" style={{ width: w, backgroundColor: c }} />;
+  return (
+    <div className="bg-white rounded-2xl p-5 w-full" style={{ boxShadow: '0 18px 40px rgba(0,0,0,0.10)', border: '1px solid #EFEFEA' }}>
+      <div className="flex items-center gap-2 mb-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" className="w-4 h-auto" />
+        <span className="text-[15px] font-black" style={{ color: INK }}>Spira</span>
+        <span className="ml-auto w-5 h-5 rounded-full" style={{ backgroundColor: '#F0F0EA' }} />
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        <span className="text-[9px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>브랜딩</span>
+        {['미션', '비전', '컨셉', '타겟'].map(t => (
+          <span key={t} className="text-[9px] font-medium px-2 py-1 rounded-full" style={{ backgroundColor: '#F1F1EB', color: '#8A938C' }}>{t}</span>
+        ))}
+      </div>
+      <div className="space-y-2.5">
+        <div className="space-y-1.5">
+          {bar('40%', '#DDEFCB')}
+          {bar('100%')}
+          {bar('88%')}
+          {bar('64%')}
+        </div>
+        <div className="h-px my-1" style={{ backgroundColor: '#F0F0EA' }} />
+        <div className="space-y-1.5">
+          {bar('34%', '#DDEFCB')}
+          {bar('96%')}
+          {bar('72%')}
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="rounded-lg p-2 space-y-1.5" style={{ border: '1px solid #EFEFEA' }}>
+              {bar('60%', '#E7E7E1')}
+              {bar('90%')}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Goals: 업무영역 아코디언 + 데드라인 + D-day 원
+function GoalsMock() {
+  const row = (name: string, count: number, open = false) => (
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ backgroundColor: open ? '#F6FBEF' : '#F7F7F3' }}>
+      <span className="text-[13px] font-bold" style={{ color: INK }}>{name}</span>
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#E7E7E1', color: '#8A938C' }}>{count}</span>
+      <svg className={`w-3.5 h-3.5 ml-auto ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#B4BBB4' }}><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </div>
+  );
+  return (
+    <div className="relative w-full">
+      <div className="bg-white rounded-2xl p-3 space-y-1.5" style={{ boxShadow: '0 18px 40px rgba(0,0,0,0.10)', border: '1px solid #EFEFEA', maxWidth: 300 }}>
+        {row('개발', 3)}
+        {row('디자인', 2)}
+        {row('마케팅', 5, true)}
+        <div className="pl-3 pr-1 pb-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-medium flex-1 min-w-0 truncate" style={{ color: '#44514B' }}>홍보 콘텐츠 100개 올리기</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FFE1DD', color: '#E0574F' }}>D-50</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#C7CEC7' }} />
+            <span className="text-[12px]" style={{ color: '#8A938C' }}>첫 번째 게시글 업로드</span>
+          </div>
+        </div>
+      </div>
+      {/* D-day 원 (연결선 + 라임 원) */}
+      <div className="absolute -bottom-5 right-3 flex flex-col items-center">
+        <span className="w-px h-5" style={{ backgroundColor: '#D4DAD2' }} />
+        <span className="w-10 h-10 rounded-full flex items-center justify-center text-[15px] font-black" style={{ backgroundColor: LIME, color: DARK, boxShadow: '0 8px 18px rgba(157,254,59,0.5)' }}>11</span>
+      </div>
+    </div>
+  );
+}
+
+// Resources: 이번 달 수익/지출 카드 2개
+function ResourceCard({ income, expense, net }: { income: string; expense: string; net: string }) {
+  const negative = net.startsWith('-');
+  return (
+    <div className="bg-white rounded-2xl px-5 py-4 w-full" style={{ boxShadow: '0 14px 34px rgba(0,0,0,0.08)', border: '1px solid #EFEFEA' }}>
+      <p className="text-[11px] font-semibold mb-3" style={{ color: '#9AA39D' }}>이번 달 수익/지출</p>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[12px]" style={{ color: '#5B6560' }}>수익</span>
+        <span className="font-mono text-[14px] font-semibold tabular-nums" style={{ color: INK }}>{income}</span>
+      </div>
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[12px]" style={{ color: '#5B6560' }}>비용</span>
+        <span className="font-mono text-[14px] font-semibold tabular-nums" style={{ color: INK }}>{expense}</span>
+      </div>
+      <div className="h-px mb-2.5" style={{ backgroundColor: '#F0F0EA' }} />
+      <div className="flex items-baseline justify-between">
+        <span className="text-[12px] font-semibold" style={{ color: INK }}>순이익</span>
+        <span className="font-mono text-[22px] font-black tabular-nums tracking-[-0.01em]" style={{ color: negative ? '#FF696C' : INK }}>{net}</span>
+      </div>
+    </div>
+  );
+}
+
+// Home: 이번 주 집중 박스
+function HomeMock() {
+  const task = (name: string) => (
+    <div className="flex items-center gap-2 bg-white rounded-full px-3.5 py-2.5" style={{ border: '1.5px solid #BCE89A' }}>
+      <span className="w-3.5 h-3.5 rounded-full border-2 flex-shrink-0" style={{ borderColor: '#C7CEC7' }} />
+      <span className="text-[12px] font-bold flex-1 min-w-0 truncate" style={{ color: INK }}>{name}</span>
+      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>D-day</span>
+    </div>
+  );
+  return (
+    <div className="rounded-2xl px-4 pt-4 pb-4 w-full" style={{ backgroundColor: '#F4FBEA', border: '1.5px solid #BCE89A', maxWidth: 320 }}>
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <span className="text-[13px] font-bold" style={{ color: INK }}>마케팅</span>
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>🎯 이번 주 집중</span>
+      </div>
+      <div className="space-y-2">
+        {task('첫 번째 게시글 업로드')}
+        {task('두 번째 게시글 기획')}
+      </div>
+    </div>
+  );
+}
+
+// ── 공감 카드 항목 ──────────────────────────────────────────────────────────
 const PAINS = [
-  '하루 종일 바빴는데 중요한 일은 못 했다.',
-  '프로젝트가 너무 많아서 머릿속이 복잡하다.',
-  '장기 목표를 세웠지만 결국 Todo만 처리하고 있다.',
-  '다음에 뭘 해야 하는지 계속 고민한다.',
+  '하루 종일 바빴는데 정작 중요한 일은 못 한 것 같다.',
+  '프로젝트가 너무 많아서 머릿속이 복잡하고 할 일 정리가 안 된다.',
+  '장기 목표를 세웠지만 제대로 그 목표로 향해가고 있는 건지 모르겠다.',
+  '가장 먼저 뭘 해야 하는지 계속 고민하느라 결국 시작을 못 했다.',
 ];
 
+// 4단계 흐름
+const FLOW = [
+  { icon: '/plan_icon.svg', name: 'Plan', desc: '비즈니스를\n기획하고' },
+  { icon: '/goals_icon.svg', name: 'Goals', desc: '업무 일정을\n계획하고' },
+  { icon: '/resources_icon.svg', name: 'Resources', desc: '자금을\n관리하고' },
+  { icon: '/home_icon.svg', name: 'Home', desc: '하나하나\n실행해요' },
+];
+
+// 기능 섹션 (좌우 교차)
 const FEATURES = [
-  { emoji: '🧭', title: '무엇부터 할지 모를 때', desc: '할 일이 없는 게 아니라, 무엇이 먼저인지 모를 때. 지금 가장 중요한 다음 한 걸음을 짚어줘요.' },
-  { emoji: '🎯', title: '흩어진 일을 하나의 목표로', desc: '여러 프로젝트를 사업의 큰 목표에 연결해, 방향이 흔들리지 않게 잡아줘요.' },
-  { emoji: '📊', title: '우선순위가 저절로', desc: '마감·중요도를 읽어 이번 주 가장 집중해야 할 업무 영역을 정리해줘요.' },
-  { emoji: '🌱', title: '하루가 아니라 여정을', desc: '오늘의 할 일을 넘어, 사업이 장기적으로 나아가는 과정을 관리해요.' },
-  { emoji: '✨', title: '혼자여도 혼자가 아니게', desc: '모든 결정을 홀로 내리는 당신 옆에서, AI 어시스턴트 Sparky가 함께 판단해요.' },
-  { emoji: '🚩', title: '나아가는 게 보이도록', desc: '목표를 이룰 때마다 깃발이 쌓여, 사업이 앞으로 나아간 여정이 지도로 남아요.' },
-];
-
-const STEPS = [
-  { n: '1', title: '사업을 소개하면', desc: '이름과 한 줄 설명만 주면, AI가 방향을 잡아 기획서와 목표를 정리해요.' },
-  { n: '2', title: '일이 목표로 정렬돼요', desc: '흩어진 프로젝트가 하나의 목표 아래 우선순위로 줄을 서요.' },
-  { n: '3', title: '다음 한 걸음부터', desc: '지금 가장 중요한 일부터 실행하며, 사업을 앞으로 밀어가요.' },
+  {
+    icon: '/plan_icon.svg',
+    title: '비즈니스의 기획과\n방향성을 정리해요',
+    desc: 'Plan에서 비즈니스의 방향과 성장 목표를 체계적으로 정리하세요. 막연한 부분은 Sparky의 도움을 받아 채우고, 완성된 계획은 하나의 문서로 확인할 수 있어요.',
+    mock: <PlanDocMock />,
+    reverse: false,
+  },
+  {
+    icon: '/goals_icon.svg',
+    title: '각기 다른 성격의 일들도\n일정을 나눠서 차근차근',
+    desc: 'Goals에서 업무 영역별 목표와 데드라인을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 Sparky가 함께 도와줘요.',
+    mock: <GoalsMock />,
+    reverse: true,
+  },
+  {
+    icon: '/resources_icon.svg',
+    title: '비용과 수익을 관리하며\n비즈니스 성장을 직관적으로',
+    desc: 'Resources에서 수익과 비용을 기록하고 매달 달라지는 비즈니스의 성장을 확인하세요. 다음 목표를 설정하면 Sparky가 이를 달성하기 위한 계획도 함께 세워줘요.',
+    mock: (
+      <div className="w-full space-y-3" style={{ maxWidth: 300 }}>
+        <ResourceCard income="+124,000" expense="-78,000" net="+46,000" />
+        <ResourceCard income="+58,000" expense="-78,000" net="-20,000" />
+      </div>
+    ),
+    reverse: false,
+  },
+  {
+    icon: '/home_icon.svg',
+    title: '오늘 할 일에만 집중하면\n목표를 향해 나아가요',
+    desc: 'Home에서 오늘 할 일과 데드라인, 프로젝트 진행 상황을 한눈에 확인하세요. 업무를 시작하면 타이머로 실제 작업 시간까지 기록할 수 있어요.',
+    mock: <HomeMock />,
+    reverse: true,
+  },
 ];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen w-full overflow-x-hidden" style={{ backgroundColor: '#F8F8F8', color: '#16211E' }}>
-      {/* ── 상단 바 ── */}
-      <header className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Spira" className="w-7 h-auto" />
-          <span className="text-[19px] font-black tracking-[-0.02em]">Spira</span>
-        </div>
-        <Link href="/login" className="text-[14px] font-semibold px-4 py-2 rounded-full transition-colors hover:bg-black/5" style={{ color: '#16211E' }}>
-          로그인
-        </Link>
-      </header>
+    <div className="min-h-screen w-full overflow-x-hidden" style={{ backgroundColor: '#F8F8F8', color: INK }}>
+      {/* ══ 히어로 ══ */}
+      <section className="relative overflow-hidden">
+        {/* 배경 라임 블롭 */}
+        <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ height: 380, background: 'radial-gradient(130% 90% at 12% -10%, #B4FF6E 0%, #D6FFA8 34%, #EBFFD4 55%, rgba(248,248,248,0) 78%)' }} />
 
-      {/* ── 히어로 ── */}
-      <section className="max-w-3xl mx-auto px-6 pt-16 pb-20 text-center">
-        <span className="inline-block text-[13px] font-bold px-3.5 py-1.5 rounded-full mb-6" style={{ backgroundColor: '#E9FBD6', color: '#3E6B1F' }}>
-          1인 창업자를 위한 AI 워크스페이스
-        </span>
-        <h1 className="text-[34px] sm:text-[46px] font-black leading-[1.15] tracking-[-0.03em] mb-5">
-          해야 할 일이 너무 많아서<br />
-          <span style={{ color: '#5EA63A' }}>무엇부터 해야 할지 모르겠을 때</span>
-        </h1>
-        <p className="text-[16px] sm:text-[17px] leading-relaxed mb-9 max-w-xl mx-auto" style={{ color: '#5B6560' }}>
-          Spira는 생산성을 높이는 To-do 앱이 아니에요.
-          혼자 사업을 만들어가는 창업자를 위해 <b style={{ color: '#16211E' }}>방향과 우선순위</b>를 관리하고,
-          지금 가장 중요한 <b style={{ color: '#16211E' }}>다음 한 걸음</b>을 제안하는 AI 워크스페이스예요.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/login"
-            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl text-[16px] font-bold transition-transform hover:-translate-y-0.5"
-            style={{ backgroundColor: '#9DFE3B', color: '#16211E', boxShadow: '0 10px 30px rgba(157,254,59,0.45)' }}
-          >
-            무료로 시작하기
-          </Link>
-          <Link href="/login" className="text-[15px] font-semibold px-2 py-2 transition-colors hover:opacity-70" style={{ color: '#5B6560' }}>
-            이미 계정이 있어요 →
-          </Link>
+        <div className="relative max-w-5xl mx-auto px-6">
+          {/* 상단 바 */}
+          <header className="h-16 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="Spira" className="w-6 h-auto" />
+              <span className="text-[18px] font-black tracking-[-0.02em]">Spira</span>
+            </div>
+            <Link href="/login" className="text-[14px] font-semibold px-4 py-2 rounded-full transition-colors hover:bg-black/5">로그인</Link>
+          </header>
+
+          {/* 히어로 본문 */}
+          <div className="relative pt-14 pb-24 sm:pt-20 sm:pb-28">
+            <h1 className="text-[32px] sm:text-[44px] font-black leading-[1.18] tracking-[-0.03em] mb-5">
+              해야 할 일이 너무 많아<br />무엇부터 할지 모르겠다면
+            </h1>
+            <p className="text-[15px] sm:text-[17px] font-medium mb-8" style={{ color: '#3E4A44' }}>
+              1인 창업자를 위한 AI 워크스페이스 <b>Spira</b>
+            </p>
+            <Link
+              href="/login"
+              className="inline-block px-6 py-3 rounded-full text-[15px] font-bold transition-transform hover:-translate-y-0.5"
+              style={{ backgroundColor: '#fff', color: INK, boxShadow: '0 10px 26px rgba(0,0,0,0.10)', border: '1px solid rgba(0,0,0,0.05)' }}
+            >
+              무료로 시작하기
+            </Link>
+
+            {/* 우측 데코 그래픽 (로고 마크 + 점선 경로 + 다이아몬드) */}
+            <div aria-hidden className="hidden sm:block absolute top-0 right-0 w-[300px] h-[220px] pointer-events-none">
+              {/* 점선 경로 */}
+              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 220" fill="none">
+                <path d="M40 190 C 120 200, 150 150, 120 110 S 70 40, 150 30 S 260 60, 250 20" stroke={INK} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="0.5 10" />
+              </svg>
+              {/* 로고 마크 (아웃라인 느낌) */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="" className="absolute top-2 right-6 w-[92px] h-auto" style={{ filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.12))' }} />
+              {/* 다이아몬드 산포 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/diamond.svg" alt="" className="absolute top-1 left-10 w-3.5" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/diamond.svg" alt="" className="absolute top-24 right-2 w-2.5 opacity-80" />
+              <span className="absolute top-16 left-4 w-2.5 h-2.5 rounded-[3px] rotate-12" style={{ backgroundColor: '#7BE04A' }} />
+              <span className="absolute bottom-6 left-24 w-2 h-2 rounded-[2px] rotate-45" style={{ backgroundColor: LIME }} />
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ── 이런 경험 있나요? (공감 문단) ── */}
-      <section className="max-w-2xl mx-auto px-6 pb-20 -mt-6">
-        <div className="bg-white border rounded-3xl p-8 sm:p-10" style={{ borderColor: 'rgba(0,41,41,0.08)', boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
-          <h2 className="text-[20px] sm:text-[23px] font-black text-center mb-7">이런 경험 있나요?</h2>
+      {/* ══ 공감 카드 ══ */}
+      <section className="max-w-2xl mx-auto px-6 -mt-8 pb-20">
+        <div className="rounded-[26px] px-7 py-9 sm:px-10 sm:py-11" style={{ backgroundColor: DARK, boxShadow: '0 24px 60px rgba(22,39,27,0.28)' }}>
+          <h2 className="text-[18px] sm:text-[21px] font-black text-center mb-7" style={{ color: '#F4F8F2' }}>
+            나만의 비즈니스를 준비하면서<br />이런 경험 있나요?
+          </h2>
           <ul className="space-y-3.5 max-w-md mx-auto">
             {PAINS.map(t => (
-              <li key={t} className="flex items-start gap-3 text-[15px] sm:text-[16px] leading-relaxed" style={{ color: '#3E4A44' }}>
-                <span className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DFF9C4' }}>
-                  <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" style={{ color: '#3E6B1F' }}><path d="M2.5 6.5l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </span>
-                {t}
+              <li key={t} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#D4E0D2' }}>
+                <Check />{t}
               </li>
             ))}
           </ul>
         </div>
       </section>
 
-      {/* ── 포지셔닝 + 기능 ── */}
-      <section className="max-w-5xl mx-auto px-6 pb-8">
-        <div className="text-center mb-10">
-          <h2 className="text-[26px] sm:text-[32px] font-black tracking-[-0.02em] leading-tight mb-3">
-            생산성에 앞서,<br className="sm:hidden" /> 방향성을 관리하는 워크스페이스
-          </h2>
-          <p className="text-[15px] leading-relaxed max-w-lg mx-auto" style={{ color: '#5B6560' }}>
-            하루를 관리하는 도구는 이미 많아요. Spira는 <b style={{ color: '#16211E' }}>사업이 어디로 가야 하는지</b>를 관리해요.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {FEATURES.map(f => (
-            <div key={f.title} className="bg-white border rounded-3xl p-6 transition-transform hover:-translate-y-0.5" style={{ borderColor: 'rgba(0,41,41,0.08)', boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-[22px] mb-4" style={{ backgroundColor: '#F1F6EC' }}>{f.emoji}</div>
-              <h3 className="text-[16px] font-bold mb-1.5">{f.title}</h3>
-              <p className="text-[14px] leading-relaxed" style={{ color: '#5B6560' }}>{f.desc}</p>
+      {/* ══ 포지셔닝 ══ */}
+      <section className="max-w-xl mx-auto px-6 pb-16 text-center">
+        <p className="text-[15px] sm:text-[16px] leading-[1.85]" style={{ color: '#44514B' }}>
+          <b style={{ color: INK }}>Spira</b>는 단순히 생산성을 높이는 To-do 앱이 아니에요.
+          혼자 사업을 만들어가는 창업자를 위해 <b style={{ color: INK }}>비즈니스의 방향과 우선순위</b>를 관리하고,
+          지금 가장 중요한 <b style={{ color: INK }}>다음 한 걸음</b>을 제안하는 AI 워크스페이스예요.
+        </p>
+      </section>
+
+      {/* ══ 4단계 흐름 ══ */}
+      <section className="max-w-4xl mx-auto px-6 pb-20">
+        <div className="flex items-stretch justify-center gap-2 sm:gap-3 flex-wrap">
+          {FLOW.map((f, i) => (
+            <div key={f.name} className="flex items-center gap-2 sm:gap-3">
+              <div className="bg-white rounded-2xl px-4 py-5 text-center w-[132px] sm:w-[150px]" style={{ boxShadow: '0 10px 26px rgba(0,0,0,0.05)', border: '1px solid #EFEFEA' }}>
+                <div className="flex justify-center mb-3"><IconBox src={f.icon} size={40} icon={18} /></div>
+                <p className="text-[15px] font-black mb-1" style={{ color: INK }}>{f.name}</p>
+                <p className="text-[12px] leading-snug whitespace-pre-line" style={{ color: '#8A938C' }}>{f.desc}</p>
+              </div>
+              {i < FLOW.length - 1 && (
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="none" style={{ color: '#C4CCC4' }}><path d="M5 3l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              )}
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── 사용 방법 ── */}
-      <section className="max-w-4xl mx-auto px-6 py-20">
-        <h2 className="text-[28px] sm:text-[32px] font-black text-center tracking-[-0.02em] mb-3">설정이 아니라, 방향부터 잡아드려요</h2>
-        <p className="text-[15px] text-center mb-12" style={{ color: '#5B6560' }}>가입하고 5분이면, 무엇을 먼저 해야 할지 보이기 시작해요.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {STEPS.map(s => (
-            <div key={s.n} className="text-center">
-              <div className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center text-[18px] font-black" style={{ backgroundColor: '#16211E', color: '#9DFE3B' }}>{s.n}</div>
-              <h3 className="text-[16px] font-bold mb-2">{s.title}</h3>
-              <p className="text-[14px] leading-relaxed" style={{ color: '#5B6560' }}>{s.desc}</p>
-            </div>
-          ))}
+      {/* ══ Sparky 소개 ══ */}
+      <section className="max-w-xl mx-auto px-6 pb-24 text-center">
+        <div className="inline-block relative mb-8">
+          <span className="inline-block text-[13px] font-semibold px-4 py-2.5 rounded-2xl rounded-bl-sm" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>
+            꿈꾸던 미래로 나아가는 첫 걸음을 도와줄게요!
+          </span>
         </div>
+        <div className="w-[76px] h-[76px] rounded-[26px] mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: LIME, boxShadow: '0 14px 34px rgba(157,254,59,0.5)' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Sparky" className="w-9 h-auto" />
+        </div>
+        <h2 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] mb-3" style={{ color: INK }}>
+          Spira의 전용 AI assistant, Sparky.
+        </h2>
+        <p className="text-[15px] leading-relaxed max-w-md mx-auto" style={{ color: '#5B6560' }}>
+          어렵고 잘 몰라도 괜찮아요. 막연한 아이디어와 고민들을 자유롭게 털어놓으면 Sparky가 정리해줄 거예요.
+        </p>
       </section>
 
-      {/* ── 마무리 CTA ── */}
-      <section className="max-w-5xl mx-auto px-6 pb-20">
-        <div className="rounded-[32px] px-8 py-14 text-center" style={{ backgroundColor: '#16211E' }}>
-          <h2 className="text-[28px] sm:text-[34px] font-black leading-tight tracking-[-0.02em] mb-4" style={{ color: '#F8F8F8' }}>
-            지금 가장 중요한<br />다음 한 걸음부터.
+      {/* ══ 기능 4개 (좌우 교차) ══ */}
+      <section className="max-w-4xl mx-auto px-6 pb-8 space-y-24 sm:space-y-28">
+        {FEATURES.map(f => (
+          <div key={f.title} className="grid md:grid-cols-2 gap-10 md:gap-8 items-center">
+            {/* 텍스트 */}
+            <div className={f.reverse ? 'md:order-2' : ''}>
+              <IconBox src={f.icon} size={46} icon={21} />
+              <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mt-4 mb-3 whitespace-pre-line" style={{ color: INK }}>
+                {f.title}
+              </h3>
+              <p className="text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#5B6560' }}>{f.desc}</p>
+            </div>
+            {/* 목업 */}
+            <div className={`flex justify-center ${f.reverse ? 'md:order-1 md:justify-start' : 'md:justify-end'}`}>
+              {f.mock}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* ══ 마무리 CTA ══ */}
+      <section className="max-w-3xl mx-auto px-6 py-20">
+        <div className="rounded-[30px] px-8 py-14 text-center" style={{ backgroundColor: DARK }}>
+          <h2 className="text-[22px] sm:text-[28px] font-black leading-[1.35] tracking-[-0.02em] mb-4" style={{ color: '#F4F8F2' }}>
+            당신의 비즈니스가<br />길을 잃지 않고 나아갈 수 있도록
           </h2>
-          <p className="text-[15px] leading-relaxed mb-8 max-w-md mx-auto" style={{ color: '#AEB8AE' }}>
-            혼자 사업을 만들어가는 당신을 위한 AI 워크스페이스. 지금 무료로 시작해보세요.
+          <p className="text-[14px] sm:text-[15px] leading-relaxed mb-8 max-w-md mx-auto" style={{ color: '#9FB3A0' }}>
+            혼자 사업을 만들어가는 당신을 위한 AI 워크스페이스.<br className="hidden sm:block" /> 지금 무료로 시작해보세요.
           </p>
           <Link
             href="/login"
-            className="inline-block px-8 py-3.5 rounded-2xl text-[16px] font-bold transition-transform hover:-translate-y-0.5"
-            style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}
+            className="inline-block px-8 py-3.5 rounded-full text-[16px] font-bold transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: LIME, color: DARK }}
           >
             무료로 시작하기
           </Link>
         </div>
       </section>
 
-      {/* ── 푸터 ── */}
+      {/* ══ 푸터 ══ */}
       <footer className="border-t" style={{ borderColor: 'rgba(0,41,41,0.08)' }}>
-        <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-5xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.svg" alt="" className="w-5 h-auto opacity-70" />
