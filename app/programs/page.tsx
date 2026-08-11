@@ -92,6 +92,8 @@ export default function ProgramsPage() {
   const [selectedDls, setSelectedDls] = useState<Set<string>>(new Set()); // 디데이 쪼개기 선택
   const [prioDrag, setPrioDrag] = useState<string | null>(null);
   const [prioOver, setPrioOver] = useState<string | null>(null);
+  const [expandedPrio, setExpandedPrio] = useState<Set<string>>(new Set()); // 우선순위 모드에서 업무 펼친 데드라인
+  const togglePrioExpand = (id: string) => setExpandedPrio(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   useEffect(() => {
     const v = localStorage.getItem('spira_goals_view'); if (v === 'priority' || v === 'area') setGoalsView(v);
     try { setPriorityOrder(JSON.parse(localStorage.getItem('spira_goals_prio') || '[]')); } catch { /* empty */ }
@@ -872,6 +874,7 @@ export default function ProgramsPage() {
 
   // ── 우선순위 모드: 이번 분기 데드라인을 날짜순 + 같은 날짜 내 수동 우선순위로 평면 정렬 ──
   const priorityItems = quarterPrograms
+    .filter(p => programArea(p)) // 미분류(영역 없음) 컨테이너 제외 — 영역별 보기와 동일하게(유령 항목 방지)
     .flatMap(p => dlInQuarter(p, year, quarter).filter(dl => dl.enabled !== false && !dl.done).map(dl => ({ dl, p })))
     .sort((a, b) => {
       const da = a.dl.date || '9999-12-31', db = b.dl.date || '9999-12-31';
@@ -1545,31 +1548,77 @@ export default function ProgramsPage() {
                 {priorityItems.map(({ dl, p }) => {
                   const dd = dl.date ? calcDday(dl.date) : null;
                   const sel = selectedDls.has(dl.id);
+                  const todos = (dl.todos ?? []);
+                  const expanded = expandedPrio.has(dl.id);
                   return (
                     <li key={dl.id}
-                      draggable
-                      onDragStart={() => setPrioDrag(dl.id)}
-                      onDragOver={e => { e.preventDefault(); setPrioOver(dl.id); }}
-                      onDrop={() => handlePrioDrop(dl.id)}
-                      onDragEnd={() => { setPrioDrag(null); setPrioOver(null); }}
-                      className="flex items-center gap-3 bg-white border rounded-2xl px-4 py-3"
+                      className="bg-white border rounded-2xl overflow-hidden"
                       style={{ borderColor: prioOver === dl.id ? '#C4B5FD' : 'var(--spira-border-subtle)' }}
                     >
-                      <span className="flex-shrink-0 text-neutral-300 cursor-grab active:cursor-grabbing" title="드래그로 순서 조정">
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="currentColor"><circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" /><circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" /><circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" /></svg>
-                      </span>
-                      <button onClick={() => toggleSelectDl(dl.id)} className="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors" style={sel ? { backgroundColor: '#16211E', borderColor: '#16211E' } : { borderColor: '#C7CEC7' }}>
-                        {sel && <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                      </button>
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[14px] font-semibold truncate" style={{ color: '#16211E' }}>{dl.name}</div>
-                        <div className="text-[12px] truncate" style={{ color: '#9AA39D' }}>{store.allWorkspaces.find(w => w.id === p.wsId)?.name}{programArea(p)?.name ? ` · ${programArea(p)!.name}` : ''}</div>
+                      <div
+                        draggable
+                        onDragStart={() => setPrioDrag(dl.id)}
+                        onDragOver={e => { e.preventDefault(); setPrioOver(dl.id); }}
+                        onDrop={() => handlePrioDrop(dl.id)}
+                        onDragEnd={() => { setPrioDrag(null); setPrioOver(null); }}
+                        className="flex items-center gap-3 px-4 py-3"
+                      >
+                        <span className="flex-shrink-0 text-neutral-300 cursor-grab active:cursor-grabbing" title="드래그로 순서 조정">
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="currentColor"><circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" /><circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" /><circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" /></svg>
+                        </span>
+                        <button onClick={() => toggleSelectDl(dl.id)} className="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors" style={sel ? { backgroundColor: '#16211E', borderColor: '#16211E' } : { borderColor: '#C7CEC7' }}>
+                          {sel && <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                        </button>
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
+                        <button
+                          onClick={() => togglePrioExpand(dl.id)}
+                          className="min-w-0 flex-1 text-left"
+                          title={todos.length ? (expanded ? '업무 접기' : '업무 펼치기') : undefined}
+                        >
+                          <div className="text-[14px] font-semibold truncate" style={{ color: '#16211E' }}>{dl.name}</div>
+                          <div className="text-[12px] truncate" style={{ color: '#9AA39D' }}>{store.allWorkspaces.find(w => w.id === p.wsId)?.name}{programArea(p)?.name ? ` · ${programArea(p)!.name}` : ''}{todos.length ? ` · 업무 ${todos.length}` : ''}</div>
+                        </button>
+                        {dl.date ? (
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${dd?.cls ?? ''}`}>{dd?.label} · {dl.date.slice(5).replace('-', '.')}</span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 flex-shrink-0">📅 미배치</span>
+                        )}
+                        {todos.length > 0 && (
+                          <button onClick={() => togglePrioExpand(dl.id)} className="flex-shrink-0 text-neutral-400 hover:text-neutral-700 transition-colors" title={expanded ? '접기' : '펼치기'}>
+                            <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          </button>
+                        )}
                       </div>
-                      {dl.date ? (
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${dd?.cls ?? ''}`}>{dd?.label} · {dl.date.slice(5).replace('-', '.')}</span>
-                      ) : (
-                        <span className="text-[11px] font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 flex-shrink-0">📅 미배치</span>
+                      {expanded && todos.length > 0 && (
+                        <ul className="px-4 pb-3 pl-11 space-y-1.5 border-t pt-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                          {todos.map(t => {
+                            const effDeadline = t.deadline || dl.date;
+                            const recurring = (t.days?.length ?? 0) > 0;
+                            const tDday = effDeadline ? calcDday(effDeadline) : null;
+                            const shownDone = t.done || (recurring && !!effDeadline && effDeadline < todayKey);
+                            return (
+                              <li key={t.id} className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleTodo(p, dl.id, t.id)}
+                                  title="완료 표시 / 해제"
+                                  className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${shownDone ? 'bg-neutral-900 border-neutral-900' : 'border-neutral-300 hover:border-neutral-600'}`}
+                                >
+                                  {shownDone && <svg className="w-2 h-2 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                                </button>
+                                <span className={`text-[13px] min-w-0 truncate ${shownDone ? 'line-through text-neutral-400' : 'text-neutral-700'}`}>{t.name}</span>
+                                {recurring && (
+                                  <span className="text-[10px] text-violet-800 bg-violet-100 rounded-full px-1.5 py-0.5 flex-shrink-0">매주 {t.days!.map(d => DOW[d]).join('·')}</span>
+                                )}
+                                {t.date && (
+                                  <span className="text-[10px] text-neutral-500 bg-neutral-100 rounded-full px-1.5 py-0.5 flex-shrink-0 tabular-nums">시작 {t.date.slice(5).replace('-', '.')}</span>
+                                )}
+                                {tDday && !recurring && (
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${tDday.cls}`}>{tDday.label}</span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
                       )}
                     </li>
                   );
