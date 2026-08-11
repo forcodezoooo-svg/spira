@@ -8,6 +8,7 @@ import Link from 'next/link';
 const DARK = '#16271B';   // 다크 그린 카드 배경
 const LIME = '#9DFE3B';   // 포인트 라임
 const INK = '#16211E';    // 본문 진한 텍스트
+const EMBLEM = '#002929'; // 시안 엠블럼(딥 틸) — 히어로 카피/버튼·활성 메뉴 아이콘
 
 // ── 아이콘(마스크) : 단색 SVG를 지정 색으로 렌더 ──────────────────────────────
 function MaskIcon({ src, size = 18, color = LIME }: { src: string; size?: number; color?: string }) {
@@ -233,20 +234,20 @@ export default function LandingPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/type-logo.svg" alt="SpirA" className="absolute left-[6%] top-[3.5%] w-auto" style={{ height: 'clamp(26px, 2.4vw, 42px)' }} />
         {/* 우상단 로그인 */}
-        <Link href="/login" className="absolute right-[6%] top-[3.5%] font-semibold px-4 py-2 rounded-full transition-colors hover:bg-black/5" style={{ fontSize: 'clamp(13px, 1vw, 16px)', color: INK }}>로그인</Link>
+        <Link href="/login" className="absolute right-[6%] top-[3.5%] font-semibold px-4 py-2 rounded-full transition-colors hover:bg-black/5" style={{ fontSize: 'clamp(13px, 1vw, 16px)', color: EMBLEM }}>로그인</Link>
 
         {/* 히어로 카피 (그린 영역 좌측 중앙) */}
         <div className="absolute left-[6%]" style={{ top: '58%', transform: 'translateY(-50%)', maxWidth: '52%' }}>
-          <h1 className="font-black leading-[1.2] tracking-[-0.03em]" style={{ color: INK, fontSize: 'clamp(26px, 3.5vw, 52px)' }}>
+          <h1 className="font-black leading-[1.2] tracking-[-0.03em]" style={{ color: EMBLEM, fontSize: 'clamp(26px, 3.5vw, 52px)' }}>
             해야 할 일이 너무 많아<br />무엇부터 할지 모르겠다면
           </h1>
-          <p className="font-medium" style={{ color: '#2E3A32', fontSize: 'clamp(14px, 1.35vw, 21px)', marginTop: 'clamp(14px, 1.4vw, 22px)' }}>
+          <p className="font-medium" style={{ color: EMBLEM, fontSize: 'clamp(14px, 1.35vw, 21px)', marginTop: 'clamp(14px, 1.4vw, 22px)' }}>
             1인 창업자를 위한 AI 워크스페이스 SpirA
           </p>
           <Link
             href="/login"
             className="inline-block rounded-full font-bold transition-transform hover:-translate-y-0.5"
-            style={{ backgroundColor: INK, color: '#fff', fontSize: 'clamp(13px, 1.05vw, 17px)', padding: 'clamp(9px,0.85vw,14px) clamp(18px,1.55vw,28px)', marginTop: 'clamp(18px,1.8vw,30px)' }}
+            style={{ backgroundColor: EMBLEM, color: '#fff', fontSize: 'clamp(13px, 1.05vw, 17px)', padding: 'clamp(9px,0.85vw,14px) clamp(18px,1.55vw,28px)', marginTop: 'clamp(18px,1.8vw,30px)' }}
           >
             무료로 시작하기
           </Link>
@@ -258,18 +259,18 @@ export default function LandingPage() {
         <div className="flex items-center justify-between mb-14">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/type-logo.svg" alt="SpirA" className="h-6 w-auto" />
-          <Link href="/login" className="text-[13px] font-semibold px-3.5 py-1.5 rounded-full transition-colors hover:bg-black/5" style={{ color: INK }}>로그인</Link>
+          <Link href="/login" className="text-[13px] font-semibold px-3.5 py-1.5 rounded-full transition-colors hover:bg-black/5" style={{ color: EMBLEM }}>로그인</Link>
         </div>
-        <h1 className="text-[29px] font-black leading-[1.2] tracking-[-0.03em]" style={{ color: INK }}>
+        <h1 className="text-[29px] font-black leading-[1.2] tracking-[-0.03em]" style={{ color: EMBLEM }}>
           해야 할 일이 너무 많아<br />무엇부터 할지 모르겠다면
         </h1>
-        <p className="mt-4 text-[15px] font-medium" style={{ color: '#2E3A32' }}>
+        <p className="mt-4 text-[15px] font-medium" style={{ color: EMBLEM }}>
           1인 창업자를 위한 AI 워크스페이스 SpirA
         </p>
         <Link
           href="/login"
           className="inline-block mt-6 px-5 py-2.5 rounded-full text-[14px] font-bold transition-transform hover:-translate-y-0.5"
-          style={{ backgroundColor: INK, color: '#fff' }}
+          style={{ backgroundColor: EMBLEM, color: '#fff' }}
         >
           무료로 시작하기
         </Link>
@@ -280,13 +281,13 @@ export default function LandingPage() {
 
       {/* ══ 공감 카드 ══ */}
       <section className="max-w-2xl mx-auto px-6 pt-14 pb-20">
-        <div className="rounded-[26px] px-7 py-9 sm:px-10 sm:py-11" style={{ backgroundColor: DARK, boxShadow: '0 24px 60px rgba(22,39,27,0.28)' }}>
-          <h2 className="text-[18px] sm:text-[21px] font-black text-center mb-7" style={{ color: '#F4F8F2' }}>
+        <div className="rounded-[26px] px-7 py-9 sm:px-10 sm:py-11 bg-white" style={{ border: '1px solid #EFEFEA', boxShadow: '0 20px 50px rgba(0,0,0,0.06)' }}>
+          <h2 className="text-[18px] sm:text-[21px] font-black text-center mb-7" style={{ color: INK }}>
             나만의 비즈니스를 준비하면서<br />이런 경험 있나요?
           </h2>
           <ul className="space-y-3.5 max-w-md mx-auto">
             {PAINS.map(t => (
-              <li key={t} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#D4E0D2' }}>
+              <li key={t} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#3E4A44' }}>
                 <Check />{t}
               </li>
             ))}
@@ -309,7 +310,12 @@ export default function LandingPage() {
           {FLOW.map((f, i) => (
             <div key={f.name} className="flex items-center gap-2 sm:gap-3">
               <div className="bg-white rounded-2xl px-4 py-5 text-center w-[132px] sm:w-[150px]" style={{ boxShadow: '0 10px 26px rgba(0,0,0,0.05)', border: '1px solid #EFEFEA' }}>
-                <div className="flex justify-center mb-3"><IconBox src={f.icon} size={40} icon={18} /></div>
+                {/* 실제 서비스 메뉴바의 '활성' 아이콘 모습 — 라임 라운드 네모 + 딥틸 아이콘 */}
+                <div className="flex justify-center mb-3">
+                  <span className="w-11 h-11 rounded-[14px] flex items-center justify-center" style={{ backgroundColor: LIME, boxShadow: '0 6px 16px rgba(157,254,59,0.50)' }}>
+                    <MaskIcon src={f.icon} size={20} color={EMBLEM} />
+                  </span>
+                </div>
                 <p className="text-[15px] font-black mb-1" style={{ color: INK }}>{f.name}</p>
                 <p className="text-[12px] leading-snug whitespace-pre-line" style={{ color: '#8A938C' }}>{f.desc}</p>
               </div>
