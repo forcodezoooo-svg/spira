@@ -182,14 +182,17 @@ export default function Teaching() {
   };
   const endPage = () => { localStorage.setItem(seenKey(pathname), '1'); setPageIdx(-1); };
 
-  // 사용자가 실제 동작을 해야 넘어가는 단계 = '다음' 버튼 숨김
-  const actionStep = !!(step.awaitChatOpen || step.awaitTodos || step.awaitPlaced || step.awaitTimer || step.go);
-
   const next = () => {
     if (step.closeChat) ui.closeChat();
     if (tourActive) { if (step.last) { setTour(-1); return; } setTour(tourIdx + 1); return; }
     if (step.last || pageIdx >= pageTips!.length - 1) { endPage(); return; }
     setPageIdx(pageIdx + 1);
+  };
+  // 티칭 전체 건너뛰기 (투어면 투어 종료, 페이지 안내면 해당 안내 종료)
+  const skip = () => {
+    if (step.closeChat) ui.closeChat();
+    if (tourActive) setTour(-1);
+    else endPage();
   };
   const isLast = step.last || (!tourActive && pageIdx >= pageTips!.length - 1);
   const nextLabel = tourActive ? (step.last ? '시작하기' : '다음') : (isLast ? '알겠어요' : '다음');
@@ -275,12 +278,15 @@ export default function Teaching() {
                 <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: i === dotIdx ? '#5EA63A' : '#E1E1DA' }} />
               ))}
             </div>
-            <div className="flex items-center gap-1">
-              {!actionStep && (
-                <button onClick={next} className="px-4 py-1.5 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
-                  {nextLabel}
+            <div className="flex items-center gap-1.5">
+              {!isLast && (
+                <button onClick={skip} className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }}>
+                  건너뛰기
                 </button>
               )}
+              <button onClick={next} className="px-4 py-1.5 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
+                {nextLabel}
+              </button>
             </div>
           </div>
         </div>
