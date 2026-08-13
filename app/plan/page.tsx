@@ -302,6 +302,102 @@ function CardListSection({
   );
 }
 
+// ── Products section (프로덕트 목록 + 계열사 연동) ───────────────────────────────
+// 프로덕트를 다른 비즈니스(계열사)에 연동해 이 비즈니스 안에 종속 표시. 뱃지 클릭 시 그 비즈니스로 이동.
+function ProductsSection({
+  items, businesses, onAdd, onUpdate, onRemove, onGenerate, onOpenBusiness,
+}: {
+  items: PlanItem[];
+  businesses: { id: string; name: string }[];
+  onAdd: (v: PlanItem) => void;
+  onUpdate: (i: number, v: PlanItem) => void;
+  onRemove: (i: number) => void;
+  onGenerate?: () => void;
+  onOpenBusiness: (wsId: string) => void;
+}) {
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [title, setTitle] = useState('');
+  const [memo, setMemo] = useState('');
+  const [linkedWsId, setLinkedWsId] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const startAdd = () => { setTitle(''); setMemo(''); setLinkedWsId(''); setAdding(true); setEditingIdx(null); };
+  const startEdit = (i: number) => { setTitle(items[i].title); setMemo(items[i].memo); setLinkedWsId(items[i].linkedWsId ?? ''); setEditingIdx(i); setAdding(false); };
+  const commit = (i: number | null) => {
+    if (!title.trim()) return;
+    const v: PlanItem = { title: title.trim(), memo: memo.trim(), ...(linkedWsId ? { linkedWsId } : {}) };
+    if (i === null) onAdd(v); else onUpdate(i, v);
+    setAdding(false); setEditingIdx(null);
+  };
+  const bizName = (id?: string) => businesses.find(b => b.id === id)?.name;
+
+  const form = (i: number | null) => (
+    <div className="space-y-2">
+      <AutoTextarea value={title} onChange={setTitle} placeholder="프로덕트 이름" />
+      <div className="border-t border-neutral-100 pt-2">
+        <AutoTextarea value={memo} onChange={setMemo} placeholder="상세 내용 (선택)" />
+      </div>
+      {businesses.length > 0 && (
+        <div className="border-t border-neutral-100 pt-2">
+          <label className="text-[11px] font-medium text-neutral-400 block mb-1">계열사 연동 (선택) — 이 프로덕트를 다른 비즈니스로 저장</label>
+          <select value={linkedWsId} onChange={e => setLinkedWsId(e.target.value)} className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400">
+            <option value="">연동 안 함</option>
+            {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="flex gap-3 pt-1 border-t border-neutral-100">
+        <button onClick={() => commit(i)} className="text-xs text-neutral-700 font-medium transition-colors">{i === null ? '추가' : '저장'}</button>
+        <button onClick={() => { setAdding(false); setEditingIdx(null); }} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
+        {i !== null && <button onClick={() => { onRemove(i); setEditingIdx(null); }} className="text-xs text-neutral-700 hover:text-red-400 transition-colors ml-auto">삭제</button>}
+      </div>
+    </div>
+  );
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={onGenerate ? 'flex items-center gap-1 cursor-pointer group' : 'flex items-center'} onClick={onGenerate} title={onGenerate ? 'AI가 프로덕트 목록 제안' : undefined}>
+          <h2 className={`text-sm font-semibold text-neutral-900 ${onGenerate ? 'group-hover:text-neutral-700 transition-colors' : ''}`}>프로덕트 목록</h2>
+          {onGenerate && <svg className="w-3 h-3 text-neutral-500 group-hover:text-neutral-600 transition-colors ml-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+        </div>
+        <Hint text="이 사업에서 판매·출시하는 것(웹앱·앱·굿즈 등). 다른 비즈니스를 '계열사'로 연동하면, 그 비즈니스가 이 사업의 프로덕트로 종속되어 여기에만 표시돼요." />
+      </div>
+
+      <div className="space-y-2">
+        {items.map((item, i) => (
+          <div key={i} className={`bg-white border rounded-xl px-4 py-3 transition-all ${editingIdx === i ? 'ring-2 ring-violet-400 border-violet-300' : 'border-neutral-200'}`}>
+            {editingIdx === i ? form(i) : (
+              <div className="flex items-start gap-3 group/card">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-50 text-neutral-600 text-[10px] font-semibold flex items-center justify-center mt-0.5">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-sm font-medium text-neutral-800 leading-relaxed">{item.title}</p>
+                    {item.linkedWsId && bizName(item.linkedWsId) && (
+                      <button onClick={() => onOpenBusiness(item.linkedWsId!)} className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors hover:brightness-95" style={{ backgroundColor: '#EEF1FF', color: '#5B5BD6' }} title="이 계열사 비즈니스로 이동">
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none"><path d="M3 6h6M6.5 3.5L9 6l-2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        계열사 · {bizName(item.linkedWsId)}
+                      </button>
+                    )}
+                  </div>
+                  {item.memo && <p className="text-xs text-neutral-400 leading-relaxed mt-0.5 whitespace-pre-wrap">{item.memo}</p>}
+                </div>
+                <button onClick={() => startEdit(i)} className="flex-shrink-0 text-xs text-neutral-700 transition-colors opacity-0 group-hover/card:opacity-100 mt-0.5">수정</button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {adding ? (
+          <div className="bg-white border border-violet-300 ring-2 ring-violet-400 rounded-xl px-4 py-3">{form(null)}</div>
+        ) : (
+          <button onClick={startAdd} className="w-full py-2.5 rounded-xl border-2 border-dashed border-neutral-200 text-xs text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 프로덕트 추가</button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── List section ───────────────────────────────────────────────────────────────
 
 function ListSection({
@@ -1892,14 +1988,14 @@ export default function PlanPage() {
           onGenerate={chat && !chat.loading ? handleGenerateRevenueModel : undefined}
         />
 
-        <CardListSection
-          label="프로덕트 목록"
-          hint={HINTS.products}
+        <ProductsSection
           items={plan.products ?? []}
+          businesses={store.allWorkspaces.filter(w => w.id !== selectedWsId).map(w => ({ id: w.id, name: w.name }))}
           onAdd={v => addPlanItem('products', v)}
           onUpdate={(i, v) => updatePlanItem('products', i, v)}
           onRemove={i => removePlanItem('products', i)}
           onGenerate={chat && !chat.loading ? handleGenerateProducts : undefined}
+          onOpenBusiness={wsId => { store.switchWorkspace(wsId); setSelectedWsId(wsId); }}
         />
 
         <GrowthStagesSection

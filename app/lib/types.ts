@@ -18,6 +18,7 @@ export interface TargetCustomer {
 export interface PlanItem {
   title: string;
   memo: string;
+  linkedWsId?: string; // (프로덕트 전용) 이 프로덕트를 대표하는 다른 비즈니스 = 계열사. 소유 비즈니스 안에서만 표시
 }
 
 // 사업 성장 단계 (장기 목표 단계) — 성장 지표 + 확장 방향성 + 상세 프로젝트 목표
