@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useUI } from './UIContext';
 import { useToast } from './ToastContext';
 import { useUpgrade } from './UpgradeContext';
@@ -8,9 +9,21 @@ import { createClient } from './supabase/client';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER } from './ai/markers';
 import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
 
+// 대화 내용에서 인식된 '앱에 자동 반영' 액션. 버튼으로 노출되며, 클릭 시 실제 반영(Pro/온보딩 게이트).
+export interface ChatAction {
+  kind: 'plan' | 'goals';   // 버튼 색/구분용 (Plan 계열 / Goals 계열)
+  marker: string;           // 어떤 마커인지 (핸들러 라우팅용)
+  payload: unknown;         // 파싱된 JSON
+  route: string;            // 반영 대상 페이지 ('/plan' | '/programs')
+  label: string;            // 버튼 문구
+  feedback: string;         // 반영 완료 후 메시지에 덧붙일 문구
+  done?: boolean;           // 이미 반영됨
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
+  action?: ChatAction;
 }
 
 export interface ChatSession {
@@ -90,6 +103,7 @@ interface ChatContextType {
   messages: Message[];
   loading: boolean;
   sendMessage: (text: string, displayText?: string) => Promise<void>;
+  applyAction: (idx: number) => void;
   openWithContext: (label: string, content: string) => void;
   registerPlanHandler: (handler: (patch: PlanPatch) => void) => void;
   unregisterPlanHandler: () => void;
@@ -110,10 +124,52 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | null>(null);
 
+// AI 응답에서 자동 반영 마커를 찾아 파싱하고, 버튼용 액션 메타로 변환한다.
+// (예전엔 즉시 자동 반영했지만, 이제는 버튼 클릭으로 반영해 '대화'와 '앱 반영(유료 기능)'을 분리)
+function extractAction(full: string): ChatAction & { display: string } | null {
+  const tryParse = (j: string) => { try { return JSON.parse(j); } catch { return undefined; } };
+  const sliceObj = (raw: string) => { const s = raw.indexOf('{'), e = raw.lastIndexOf('}'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
+  const sliceArr = (raw: string) => { const s = raw.indexOf('['), e = raw.lastIndexOf(']'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
+  const before = (marker: string) => full.split(marker)[0].trimEnd();
+  const after = (marker: string) => full.split(marker)[1]?.trim() ?? '';
+
+  if (full.includes(PLAN_MARKER)) {
+    const payload = tryParse(sliceObj(after(PLAN_MARKER)));
+    if (payload) return { kind: 'plan', marker: PLAN_MARKER, payload, route: '/plan', label: 'Plan에 자동으로 채우기', feedback: FEEDBACK.planUpdated, display: before(PLAN_MARKER) };
+  }
+  if (full.includes(QUARTER_PLAN_MARKER)) {
+    const raw = after(QUARTER_PLAN_MARKER);
+    const aStart = raw.indexOf('['), oStart = raw.indexOf('{');
+    let j = raw;
+    if (aStart !== -1 && (oStart === -1 || aStart < oStart)) j = raw.slice(aStart, raw.lastIndexOf(']') + 1);
+    else if (oStart !== -1) j = raw.slice(oStart, raw.lastIndexOf('}') + 1);
+    const parsed = tryParse(j);
+    if (parsed) {
+      const plans = (Array.isArray(parsed) ? parsed : [parsed]) as QuarterPlan[];
+      const progCount = plans.reduce((s, p) => s + (p.programs?.length ?? 0), 0);
+      return { kind: 'goals', marker: QUARTER_PLAN_MARKER, payload: plans, route: '/programs', label: 'Goals에 자동으로 채우기', feedback: FEEDBACK.quarterApplied(plans.length, progCount), display: before(QUARTER_PLAN_MARKER) };
+    }
+  }
+  if (full.includes(AREA_ASSIGN_MARKER)) {
+    const payload = tryParse(sliceArr(after(AREA_ASSIGN_MARKER)));
+    if (Array.isArray(payload)) return { kind: 'goals', marker: AREA_ASSIGN_MARKER, payload, route: '/programs', label: 'Goals에 자동으로 반영', feedback: FEEDBACK.areaAssigned(payload.length), display: before(AREA_ASSIGN_MARKER) };
+  }
+  if (full.includes(GOALS_MARKER)) {
+    const payload = tryParse(sliceArr(after(GOALS_MARKER)));
+    if (Array.isArray(payload)) return { kind: 'goals', marker: GOALS_MARKER, payload, route: '/programs', label: 'Goals에 자동으로 반영', feedback: FEEDBACK.goalsUpdated, display: before(GOALS_MARKER) };
+  }
+  if (full.includes(ROUTINE_MARKER)) {
+    const payload = tryParse(sliceArr(after(ROUTINE_MARKER)));
+    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Goals에 반복 루틴 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
+  }
+  return null;
+}
+
 export function ChatProvider({ children }: { children: ReactNode }) {
   // 채팅 표시 상태는 UIContext(chatOpen)가 실제 패널을 제어하므로 그것과 하나로 묶는다.
   // (예전엔 별도 useState라 chat.setOpen(true)로는 패널이 열리지 않았음)
   const ui = useUI();
+  const router = useRouter();
   const open = ui.chatOpen;
   const setOpen = useCallback((v: boolean | ((p: boolean) => boolean)) => {
     const next = typeof v === 'function' ? v(ui.chatOpen) : v;
@@ -162,9 +218,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const goalsHandlerRef = useRef<((ops: GoalsOperation[]) => void) | null>(null);
   const quarterPlanHandlerRef = useRef<((plans: QuarterPlan[]) => void) | null>(null);
   const areaAssignHandlerRef = useRef<((assigns: AreaAssignment[]) => void) | null>(null);
+  // 페이지 핸들러가 등록될 때 대기 중인 액션을 반영(아래에서 실제 함수 주입)
+  const flushPendingRef = useRef<((marker: string) => void) | null>(null);
 
   const registerGoalsHandler = useCallback((handler: (ops: GoalsOperation[]) => void) => {
     goalsHandlerRef.current = handler;
+    flushPendingRef.current?.(GOALS_MARKER);
   }, []);
 
   const unregisterGoalsHandler = useCallback(() => {
@@ -173,6 +232,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const registerQuarterPlanHandler = useCallback((handler: (plans: QuarterPlan[]) => void) => {
     quarterPlanHandlerRef.current = handler;
+    flushPendingRef.current?.(QUARTER_PLAN_MARKER);
   }, []);
 
   const unregisterQuarterPlanHandler = useCallback(() => {
@@ -181,6 +241,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const registerAreaAssignHandler = useCallback((handler: (assigns: AreaAssignment[]) => void) => {
     areaAssignHandlerRef.current = handler;
+    flushPendingRef.current?.(AREA_ASSIGN_MARKER);
   }, []);
 
   const unregisterAreaAssignHandler = useCallback(() => {
@@ -332,141 +393,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // AI 자동 입력(기획서·할일·영역 자동 반영)은 Pro 전용 — 무료는 조언까지만.
-      // 단, 온보딩 투어 중에는 제한을 풀어 신규 사용자가 기능을 끝까지 체험하게 한다.
-      const canAutofill = isProRef.current || isOnboardingActive();
-      const hadMarker = full.includes(PLAN_MARKER) || full.includes(ROUTINE_MARKER) || full.includes(GOALS_MARKER) || full.includes(QUARTER_PLAN_MARKER) || full.includes(AREA_ASSIGN_MARKER);
-      if (hadMarker && !canAutofill) {
-        upgradeRef.current('autofill');
-      }
-
-      if (full.includes(PLAN_MARKER) && planHandlerRef.current && canAutofill) {
-        const rawPart = full.split(PLAN_MARKER)[1]?.trim() ?? '';
-        // 코드펜스나 앞뒤 설명이 섞여도 첫 '{' ~ 마지막 '}'만 잘라 파싱
-        const objStart = rawPart.indexOf('{');
-        const objEnd = rawPart.lastIndexOf('}');
-        const jsonPart = objStart !== -1 && objEnd > objStart
-          ? rawPart.slice(objStart, objEnd + 1)
-          : rawPart;
-        if (jsonPart) {
-          try {
-            const patch = JSON.parse(jsonPart) as PlanPatch;
-            planHandlerRef.current(patch);
-            const displayContent = full.split(PLAN_MARKER)[0].trimEnd();
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                role: 'assistant',
-                content: (displayContent ? displayContent + '\n\n' : '') + FEEDBACK.planUpdated,
-              };
-              return updated;
-            });
-          } catch { /* empty */ }
-        }
-      }
-
-      if (full.includes(ROUTINE_MARKER) && routineHandlerRef.current && canAutofill) {
-        const rawPart = full.split(ROUTINE_MARKER)[1]?.trim() ?? '';
-        const arrayStart = rawPart.indexOf('[');
-        const arrayEnd = rawPart.lastIndexOf(']');
-        const jsonPart = arrayStart !== -1 && arrayEnd > arrayStart
-          ? rawPart.slice(arrayStart, arrayEnd + 1)
-          : rawPart;
-        if (jsonPart) {
-          try {
-            const routines = JSON.parse(jsonPart) as AISuggestedRoutine[];
-            const count = routines.length;
-            routineHandlerRef.current(routines);
-            routineHandlerRef.current = null;
-            routineModeRef.current = false;
-            const displayContent = full.split(ROUTINE_MARKER)[0].trimEnd();
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                role: 'assistant',
-                content: (displayContent ? displayContent + '\n\n' : '') + FEEDBACK.routineAdded(count),
-              };
-              return updated;
-            });
-          } catch { /* empty */ }
-        }
-      }
-
-      if (full.includes(GOALS_MARKER) && goalsHandlerRef.current && canAutofill) {
-        const rawPart = full.split(GOALS_MARKER)[1]?.trim() ?? '';
-        const arrayStart = rawPart.indexOf('[');
-        const arrayEnd = rawPart.lastIndexOf(']');
-        const jsonPart = arrayStart !== -1 && arrayEnd > arrayStart
-          ? rawPart.slice(arrayStart, arrayEnd + 1)
-          : rawPart;
-        if (jsonPart) {
-          try {
-            const ops = JSON.parse(jsonPart) as GoalsOperation[];
-            goalsHandlerRef.current(ops);
-            const displayContent = full.split(GOALS_MARKER)[0].trimEnd();
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                role: 'assistant',
-                content: (displayContent ? displayContent + '\n\n' : '') + FEEDBACK.goalsUpdated,
-              };
-              return updated;
-            });
-          } catch { /* empty */ }
-        }
-      }
-
-      if (full.includes(QUARTER_PLAN_MARKER) && quarterPlanHandlerRef.current && canAutofill) {
-        const rawPart = full.split(QUARTER_PLAN_MARKER)[1]?.trim() ?? '';
-        // 배열([...]) 또는 단일 객체({...}) 모두 지원 — 먼저 등장하는 형태를 추출
-        const aStart = rawPart.indexOf('[');
-        const oStart = rawPart.indexOf('{');
-        let jsonPart = rawPart;
-        if (aStart !== -1 && (oStart === -1 || aStart < oStart)) {
-          jsonPart = rawPart.slice(aStart, rawPart.lastIndexOf(']') + 1);
-        } else if (oStart !== -1) {
-          jsonPart = rawPart.slice(oStart, rawPart.lastIndexOf('}') + 1);
-        }
-        if (jsonPart) {
-          try {
-            const parsed = JSON.parse(jsonPart) as QuarterPlan | QuarterPlan[];
-            const plans = Array.isArray(parsed) ? parsed : [parsed];
-            const progCount = plans.reduce((s, p) => s + (p.programs?.length ?? 0), 0);
-            const quarterCount = plans.length;
-            quarterPlanHandlerRef.current(plans);
-            const displayContent = full.split(QUARTER_PLAN_MARKER)[0].trimEnd();
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                role: 'assistant',
-                content: (displayContent ? displayContent + '\n\n' : '') + FEEDBACK.quarterApplied(quarterCount, progCount),
-              };
-              return updated;
-            });
-          } catch { /* empty */ }
-        }
-      }
-
-      if (full.includes(AREA_ASSIGN_MARKER) && areaAssignHandlerRef.current && canAutofill) {
-        const rawPart = full.split(AREA_ASSIGN_MARKER)[1]?.trim() ?? '';
-        const aStart = rawPart.indexOf('[');
-        const aEnd = rawPart.lastIndexOf(']');
-        const jsonPart = aStart !== -1 && aEnd > aStart ? rawPart.slice(aStart, aEnd + 1) : rawPart;
-        if (jsonPart) {
-          try {
-            const assigns = JSON.parse(jsonPart) as AreaAssignment[];
-            areaAssignHandlerRef.current(assigns);
-            const displayContent = full.split(AREA_ASSIGN_MARKER)[0].trimEnd();
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = {
-                role: 'assistant',
-                content: (displayContent ? displayContent + '\n\n' : '') + FEEDBACK.areaAssigned(assigns.length),
-              };
-              return updated;
-            });
-          } catch { /* empty */ }
-        }
+      // 자동 반영 마커가 있으면 즉시 반영하지 않고 '앱에 반영' 버튼(액션)으로 메시지에 붙인다.
+      // 반영은 버튼 클릭 시점에 Pro/온보딩 게이트를 통과해야 실행됨 → '대화'와 '유료 기능'을 분리.
+      const action = extractAction(full);
+      if (action) {
+        const { display, ...act } = action;
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', content: display || '', action: act };
+          return updated;
+        });
       }
     } catch {
       setMessages(prev => [
@@ -478,6 +414,55 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       loadingRef.current = false;
     }
   }, []);
+
+  // 핸들러가 다른 페이지에 있을 때, 그 페이지로 이동한 뒤 반영하려고 대기시켜 둔 액션
+  const pendingApplyRef = useRef<{ idx: number; marker: string; payload: unknown } | null>(null);
+
+  // 마커에 맞는 핸들러가 현재 등록돼 있으면 반영하고 true 반환 (없으면 false)
+  const applyToHandler = useCallback((marker: string, payload: unknown): boolean => {
+    if (marker === PLAN_MARKER && planHandlerRef.current) { planHandlerRef.current(payload as PlanPatch); return true; }
+    if (marker === ROUTINE_MARKER && routineHandlerRef.current) { routineHandlerRef.current(payload as AISuggestedRoutine[]); return true; }
+    if (marker === GOALS_MARKER && goalsHandlerRef.current) { goalsHandlerRef.current(payload as GoalsOperation[]); return true; }
+    if (marker === QUARTER_PLAN_MARKER && quarterPlanHandlerRef.current) { quarterPlanHandlerRef.current(payload as QuarterPlan[]); return true; }
+    if (marker === AREA_ASSIGN_MARKER && areaAssignHandlerRef.current) { areaAssignHandlerRef.current(payload as AreaAssignment[]); return true; }
+    return false;
+  }, []);
+
+  // 액션 반영 완료 표시: 버튼을 '완료'로 바꾸고 완료 문구를 메시지에 덧붙임
+  const markActionDone = useCallback((idx: number) => {
+    setMessages(prev => {
+      const updated = [...prev];
+      const m = updated[idx];
+      if (m?.action && !m.action.done) {
+        updated[idx] = { ...m, content: (m.content ? m.content + '\n\n' : '') + m.action.feedback, action: { ...m.action, done: true } };
+      }
+      return updated;
+    });
+  }, []);
+
+  // 대기 중인 액션이 이 마커용이면 반영 (페이지 핸들러가 막 등록됐을 때 호출)
+  const flushPending = useCallback((marker: string) => {
+    const p = pendingApplyRef.current;
+    if (p && p.marker === marker && applyToHandler(p.marker, p.payload)) {
+      markActionDone(p.idx);
+      pendingApplyRef.current = null;
+    }
+  }, [applyToHandler, markActionDone]);
+  flushPendingRef.current = flushPending;
+
+  // 버튼 클릭 → 앱 반영. Pro/온보딩이 아니면 유료 알림 팝업. 핸들러가 없으면 해당 페이지로 이동 후 반영.
+  const applyAction = useCallback((idx: number) => {
+    const m = messagesRef.current[idx];
+    if (!m?.action || m.action.done) return;
+    const canAutofill = isProRef.current || isOnboardingActive();
+    if (!canAutofill) { upgradeRef.current('autofill'); return; }
+    if (applyToHandler(m.action.marker, m.action.payload)) {
+      markActionDone(idx);
+    } else {
+      pendingApplyRef.current = { idx, marker: m.action.marker, payload: m.action.payload };
+      router.push(m.action.route);
+    }
+  }, [applyToHandler, markActionDone, router]);
 
   const openWithContext = useCallback((label: string, content: string) => {
     if (loadingRef.current) return;
@@ -497,6 +482,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         content: START_MESSAGES.business,
       }]);
     }
+    flushPendingRef.current?.(PLAN_MARKER);
   }, []);
 
   const unregisterPlanHandler = useCallback(() => {
@@ -517,7 +503,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return (
     <ChatContext.Provider value={{
       open, setOpen, messages, loading,
-      sendMessage, openWithContext,
+      sendMessage, applyAction, openWithContext,
       registerPlanHandler, unregisterPlanHandler,
       registerRoutineHandler, unregisterRoutineHandler,
       sessions, loadSession, deleteSession, newChat,

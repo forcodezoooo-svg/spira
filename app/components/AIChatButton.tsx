@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useChatContext, ChatSession } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
-import { AI_COPY, RECOMMENDED } from '../lib/ai/messages';
+import { AI_COPY, STARTERS } from '../lib/ai/messages';
 
 // AI 응답에서 마크다운 기호를 제거해 깔끔한 평문으로 표시 (별표·제목·코드·목록 기호 등)
 function stripMarkdown(s: string): string {
@@ -36,7 +36,6 @@ export default function AIChatButton() {
   const { chatOpen, toggleChat, chatDocked } = useUI();
   const pathname = usePathname();
   const router = useRouter();
-  const chips = RECOMMENDED[pathname] ?? RECOMMENDED.default;
   const [input, setInput] = useState('');
   const [isDesktop, setIsDesktop] = useState(true);
   const [view, setView] = useState<'chat' | 'archive'>('chat');
@@ -310,13 +309,13 @@ export default function AIChatButton() {
                     <p className="text-[13px] leading-relaxed whitespace-pre-line" style={{ color: '#9AA39D' }}>
                       {AI_COPY.emptyBody}
                     </p>
-                    {/* 화면별 추천 메시지 */}
+                    {/* 어떤 대화를 나눌지 고르는 시작 버튼 */}
                     <div className="flex flex-col gap-2 w-full mt-1">
-                      {chips.map(c => (
+                      {STARTERS.map(c => (
                         <button
                           key={c.label}
                           onClick={() => { if (!loading && chat) chat.sendMessage(c.message); }}
-                          className="text-[13px] font-medium rounded-full px-4 py-2 transition-colors"
+                          className="text-[13px] font-medium rounded-full px-4 py-2 transition-colors text-left"
                           style={{ backgroundColor: '#F1F1EB', color: '#5B6560' }}
                           onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#DFF9C4'; e.currentTarget.style.color = '#3E6B1F'; }}
                           onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#F1F1EB'; e.currentTarget.style.color = '#5B6560'; }}
@@ -337,7 +336,7 @@ export default function AIChatButton() {
                   </div>
                 )}
                 {messages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={i} className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                     <div
                       className="max-w-[85%] px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap rounded-2xl"
                       style={msg.role === 'user'
@@ -352,6 +351,29 @@ export default function AIChatButton() {
                         </span>
                       )}
                     </div>
+                    {/* 대화 내용에서 인식된 '앱에 자동 반영' 버튼 (클릭 시 반영 — 무료는 유료 안내 팝업) */}
+                    {msg.role === 'assistant' && msg.action && (
+                      <button
+                        onClick={() => { if (!msg.action!.done) chat?.applyAction(i); }}
+                        disabled={msg.action.done}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:hover:translate-y-0 disabled:cursor-default"
+                        style={msg.action.done
+                          ? { backgroundColor: '#EAF7DD', color: '#3E6B1F' }
+                          : { backgroundColor: '#9DFE3B', color: '#16211E', boxShadow: '0 6px 16px rgba(157,254,59,0.4)' }}
+                      >
+                        {msg.action.done ? (
+                          <>
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.3l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            반영 완료
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                            {msg.action.label}
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 ))}
                 {/* AI가 생각 중 — 아직 답변 버블이 스트리밍되기 전 대기 상태 */}

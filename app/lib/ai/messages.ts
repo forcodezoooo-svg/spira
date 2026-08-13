@@ -33,6 +33,17 @@ export const AI_COPY = {
   error: '앗, 잠시 길이 막혔네요. 잠깐 뒤에 다시 시도해볼까요?',
 };
 
+// 빈 채팅 화면에서 '어떤 대화를 나눌지' 고를 수 있는 시작 버튼 (전 화면 공통).
+// label은 버튼 문구, message는 실제 전송되는 대화 시작 문구.
+export interface StarterChip { label: string; message: string }
+export const STARTERS: StarterChip[] = [
+  { label: '🌱 새 기획안 만들기', message: '새로운 사업 기획안을 처음부터 같이 만들고 싶어요. 무엇부터 이야기하면 좋을까요?' },
+  { label: '🗺️ 업무 계획·일정 짜기', message: '이번 분기 업무 계획과 일정을 같이 짜줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 해줘.' },
+  { label: '💰 자산·수익 계획 상의하기', message: '사업의 자금과 수익 구조를 상의하고 싶어요. 현실적인 수익 모델과 비용 관리 방법을 같이 정리해줘.' },
+  { label: '🎯 타겟 고객 정하기', message: '제 사업의 타겟 고객 페르소나를 같이 만들어줘.' },
+  { label: '🌿 오늘 일정 정리하기', message: '오늘 해야 할 일과 일정을 같이 정리하고 싶어요. 어떻게 진행하면 좋을까요?' },
+];
+
 // 화면별 추천 메시지(시작 칩). label은 버튼, message는 실제 전송 문구.
 export interface RecommendedChip { label: string; message: string; }
 
