@@ -94,6 +94,7 @@ export default function ProgramsPage() {
   const [prioOver, setPrioOver] = useState<string | null>(null);
   const [expandedPrio, setExpandedPrio] = useState<Set<string>>(new Set()); // 우선순위 모드에서 업무 펼친 데드라인
   const togglePrioExpand = (id: string) => setExpandedPrio(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const [pushMenuDl, setPushMenuDl] = useState<string | null>(null); // '일정 미루기' 드롭다운이 열린 데드라인 id
   useEffect(() => {
     const v = localStorage.getItem('spira_goals_view'); if (v === 'priority' || v === 'area') setGoalsView(v);
     try { setPriorityOrder(JSON.parse(localStorage.getItem('spira_goals_prio') || '[]')); } catch { /* empty */ }
@@ -739,6 +740,19 @@ export default function ProgramsPage() {
   // 데드라인 개별 on/off
   const toggleDeadlineEnabled = (p: ProgramWithWs, dlId: string) =>
     updateProg(p, (p.deadlines ?? []).map(d => d.id === dlId ? { ...d, enabled: d.enabled === false } : d));
+
+  // 데드라인 일괄 미루기 — 그 데드라인 안의 모든 업무(시작·완수기한)와 데드라인 날짜를 n일 뒤로.
+  const pushDeadlineSchedule = (p: ProgramWithWs, dlId: string, days: number) => {
+    updateProg(p, (p.deadlines ?? []).map(d => d.id !== dlId ? d : {
+      ...d,
+      date: d.date ? addDaysStr(d.date, days) : d.date,
+      todos: (d.todos ?? []).map(t => ({
+        ...t,
+        date: t.date ? addDaysStr(t.date, days) : t.date,       // 시작 날짜
+        deadline: t.deadline ? addDaysStr(t.deadline, days) : t.deadline, // 완수 기한
+      })),
+    }));
+  };
 
   // 소요시간 포맷 (초 → N시간 M분)
   const fmtDur = (s: number) => {
@@ -1928,6 +1942,31 @@ export default function ProgramsPage() {
                             >
                               {dlOff ? 'OFF' : 'ON'}
                             </button>
+                            {/* 일정 일괄 미루기 */}
+                            {dl.todos.length > 0 && (
+                              <div className="relative flex-shrink-0">
+                                <button
+                                  onClick={() => setPushMenuDl(pushMenuDl === dl.id ? null : dl.id)}
+                                  className="opacity-100 lg:opacity-0 lg:group-hover/dl:opacity-100 text-neutral-300 hover:text-neutral-700 text-[10px] transition-all"
+                                  title="이 데드라인의 업무 일정을 한꺼번에 뒤로 미루기"
+                                >미루기</button>
+                                {pushMenuDl === dl.id && (
+                                  <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setPushMenuDl(null)} />
+                                    <div className="absolute right-0 top-full mt-1 w-32 bg-white border rounded-xl py-1 z-20" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+                                      <p className="px-3 py-1 text-[10px] font-semibold text-neutral-400">일정 미루기</p>
+                                      {[{ l: '1일', d: 1 }, { l: '3일', d: 3 }, { l: '1주', d: 7 }, { l: '2주', d: 14 }, { l: '4주', d: 28 }].map(o => (
+                                        <button
+                                          key={o.d}
+                                          onClick={() => { pushDeadlineSchedule(p, dl.id, o.d); setPushMenuDl(null); }}
+                                          className="block w-full text-left px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 transition-colors"
+                                        >+{o.l} 뒤로</button>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
                             <button onClick={() => startEditDeadline(dl)} className="opacity-0 group-hover/dl:opacity-100 text-neutral-300 hover:text-neutral-700 text-[10px] transition-all flex-shrink-0">편집</button>
                             <button onClick={() => deleteDeadline(p, dl.id)} className="text-neutral-300 hover:text-red-500 text-xs transition-colors flex-shrink-0">×</button>
                           </div>

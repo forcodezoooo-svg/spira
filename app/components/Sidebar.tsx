@@ -50,6 +50,8 @@ export default function Sidebar() {
   const [wsOpen, setWsOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const wsRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,23 @@ export default function Sidebar() {
     setNewName('');
     setAdding(false);
     setWsOpen(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/account/delete', { method: 'POST' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || '탈퇴 처리에 실패했어요');
+      // 로컬 데이터 정리 후 랜딩으로 (전체 새로고침으로 상태 초기화)
+      try { localStorage.clear(); } catch { /* ignore */ }
+      await signOut().catch(() => {});
+      window.location.href = '/';
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '탈퇴 처리에 실패했어요');
+      setDeleting(false);
+    }
   };
 
   const workspaceName = ready ? data.workspace?.name : null;
@@ -208,6 +227,10 @@ export default function Sidebar() {
                     <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     로그아웃
                   </button>
+                  <button onClick={() => { setUserOpen(false); setDeleteOpen(true); }} className="flex items-center gap-2 w-full px-3 py-2.5 text-xs hover:bg-red-50 transition-colors border-t border-neutral-100" style={{ color: '#C24B4B' }}>
+                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3.5a1 1 0 011-1h1a1 1 0 011 1v1M5.5 4.5l.4 8a1 1 0 001 .95h2.2a1 1 0 001-.95l.4-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    회원탈퇴
+                  </button>
                 </div>
               )}
             </>
@@ -222,6 +245,28 @@ export default function Sidebar() {
       </aside>
 
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
+
+      {/* 회원탈퇴 확인 */}
+      {deleteOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-6" style={{ backgroundColor: 'rgba(0,41,41,0.55)' }} onClick={() => { if (!deleting) setDeleteOpen(false); }}>
+          <div className="bg-white rounded-3xl w-full max-w-sm px-6 pt-6 pb-6" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }} onClick={e => e.stopPropagation()}>
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4" style={{ backgroundColor: '#FCEBEB' }}>
+              <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none" style={{ color: '#C24B4B' }}><path d="M3 4.5h10M6.5 4.5V3.5a1 1 0 011-1h1a1 1 0 011 1v1M5.5 4.5l.4 8a1 1 0 001 .95h2.2a1 1 0 001-.95l.4-8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </div>
+            <h2 className="text-[18px] font-black mb-2" style={{ color: '#16211E' }}>정말 탈퇴하시겠어요?</h2>
+            <p className="text-[13px] leading-relaxed mb-5" style={{ color: '#5B6560' }}>
+              계정과 저장된 데이터(기획서·목표·자료 등)가 모두 삭제되며 되돌릴 수 없어요.
+              구독 중이라면 자동 결제도 함께 해지됩니다.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteOpen(false)} disabled={deleting} className="flex-1 py-2.5 rounded-xl text-[14px] font-bold transition-colors disabled:opacity-40" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>취소</button>
+              <button onClick={handleDeleteAccount} disabled={deleting} className="flex-1 py-2.5 rounded-xl text-[14px] font-bold text-white transition-colors disabled:opacity-60" style={{ backgroundColor: '#C24B4B' }}>
+                {deleting ? '처리 중…' : '탈퇴하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
