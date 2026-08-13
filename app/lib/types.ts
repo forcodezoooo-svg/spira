@@ -37,6 +37,18 @@ export interface WorkArea {
   goal: string;  // 영역별 목표
 }
 
+// 프로젝트 — 업무 영역을 묶는 상위 단위. Plan에서 정의하고 Goals에서 조직화한다.
+// (Goals 구조: 프로젝트 > 업무 영역 > 데드라인 > 업무)
+export type ProjectType = 'routine' | 'build'; // 루틴형(반복 운영) / 기획·신규개발형
+export interface Project {
+  id: string;
+  name: string;
+  type?: ProjectType;
+  color?: string;
+  goal?: string;    // 프로젝트 목표/설명
+  order?: number;
+}
+
 export interface PlanData {
   brandImages: string[];
   brandingKeywords: string[];
@@ -56,6 +68,7 @@ export interface PlanData {
   products?: PlanItem[];        // 프로덕트 목록 (이 사업에서 판매하는 것: 웹앱·앱·굿즈 등)
   growthStages?: GrowthStage[]; // 사업 성장 단계 (장기 목표)
   workAreas?: WorkArea[];       // 업무 영역별 세부 목표
+  projects?: Project[];         // 프로젝트 (업무 영역을 묶는 상위 단위) — Goals와 연동
 }
 
 // 완수 기록 (메모/이미지/링크)
@@ -108,6 +121,7 @@ export interface Program {
   quarters?: string[]; // 속한 분기 목록 "YYYY-Q" (다중 선택). 없으면 year/quarter(+deadline)로 폴백
   order?: number; // 분기 내 정렬 순서
   workAreaId?: string; // 업무 영역 (plan.workAreas[].id) — 영역별 카테고리 그룹핑용
+  projectId?: string; // 소속 프로젝트 (plan.projects[].id) — Goals의 프로젝트 그룹핑용
   enabled?: boolean; // 목표 on/off (false면 Task/오늘의 업무에 미반영). 기본 on
   priority?: number; // 우선순위 숫자 (중복 허용). 1번만 Task/오늘의 업무에 반영. 기본 1
   revenueSource?: string; // 연관 수익원(수익 수단) 이름 — Resources의 revenueSources와 연결

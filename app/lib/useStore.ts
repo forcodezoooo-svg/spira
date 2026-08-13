@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
-import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord } from './types';
+import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, Project, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord } from './types';
 import { empty, emptyPlan, load, save, uid, todayStr, todayDow } from './store';
 
 // ── 전역 공유 스토어 ──────────────────────────────────────────────────────────
@@ -367,6 +367,19 @@ export function useStore() {
   const updatePlanInWs = (wsId: string, plan: PlanData) =>
     updateWorkspace(wsId, e => ({ ...e, plan }));
 
+  // ── 프로젝트 (Plan에서 정의, Goals에서 조직화) ──────────────────────────────
+  const addProject = (wsId: string, p: Omit<Project, 'id'>) =>
+    updateWorkspace(wsId, e => ({ ...e, plan: { ...e.plan, projects: [...(e.plan.projects ?? []), { ...p, id: uid() }] } }));
+  const updateProject = (wsId: string, id: string, patch: Partial<Project>) =>
+    updateWorkspace(wsId, e => ({ ...e, plan: { ...e.plan, projects: (e.plan.projects ?? []).map(x => x.id === id ? { ...x, ...patch } : x) } }));
+  // 프로젝트 삭제 — 소속 업무 영역(프로그램)은 유지하되 미지정으로 되돌린다.
+  const removeProject = (wsId: string, id: string) =>
+    updateWorkspace(wsId, e => ({
+      ...e,
+      plan: { ...e.plan, projects: (e.plan.projects ?? []).filter(x => x.id !== id) },
+      programs: e.programs.map(pr => pr.projectId === id ? { ...pr, projectId: undefined } : pr),
+    }));
+
   const setWorkspace = (workspace: Workspace) =>
     update(d => {
       const exists = d.workspaces.find(e => e.workspace.id === workspace.id);
@@ -641,6 +654,7 @@ export function useStore() {
     addRoutineSystem, updateRoutineSystem, deleteRoutineSystem,
     addRoutineToWs, updateRoutineInWs, deleteRoutineInWs,
     updatePlanInWs,
+    addProject, updateProject, removeProject,
     todayRoutines, toggleTask, isCompleted,
     addResource, deleteResource, deleteResourceInWs,
     addSubscription, deleteSubscription, updateSubscription, deleteSubscriptionInWs, updateSubscriptionInWs,

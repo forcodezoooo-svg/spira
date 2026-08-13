@@ -332,6 +332,11 @@ export default function ProgramsPage() {
 
   // 사업 필터 (null = 모든 사업)
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
+  // 프로젝트 필터 (null = 전체 프로젝트) — 특정 사업이 선택됐을 때만 노출
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [addingProject, setAddingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [projMenuFor, setProjMenuFor] = useState<string | null>(null); // 프로젝트 배정 메뉴가 열린 영역 섹션 key
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string; foot?: string } | null>(null); // 깃발 증정 오버레이
   // 수익원 필터 (Resources에서 카테고리 클릭 시 진입)
   const [sourceFilter, setSourceFilter] = useState<string | null>(null);
@@ -458,6 +463,12 @@ export default function ProgramsPage() {
   }
 
   const businesses = store.allWorkspaces;
+  // 프로젝트가 적용되는 '포커스된 사업' (한 사업이 선택됐거나 사업이 하나뿐일 때만 프로젝트 탭 노출)
+  const projectWsId = filterWsId ?? (businesses.length === 1 ? businesses[0].id : null);
+  const projectsForWs = projectWsId
+    ? [...(store.allWorkspacesEntries.find(e => e.workspace.id === projectWsId)?.plan.projects ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    : [];
+  const projectFilterId = projectWsId ? selectedProjectId : null; // 포커스 사업이 없으면 프로젝트 필터 무시
   // 사업별 컬러: Plan에서 설정한 고유 컬러 우선, 없으면 순서 기반 팔레트
   const businessColor = (id: string) => {
     const ws = businesses.find(b => b.id === id);
@@ -555,7 +566,8 @@ export default function ProgramsPage() {
       const d = new Date(dl.date);
       return d.getFullYear() === y && Math.floor(d.getMonth() / 3) + 1 === q;
     });
-  const quarterPrograms = applyWsFilter(allContainers());
+  const quarterPrograms = applyWsFilter(allContainers())
+    .filter(p => !projectFilterId || (p.projectId ?? null) === projectFilterId);
   const countByQuarter = (q: number) =>
     applyWsFilter(allContainers()).reduce((s, p) => s + dlInQuarter(p, year, q).length, 0);
 
@@ -686,6 +698,7 @@ export default function ProgramsPage() {
       quarters: [qKey(year, quarter)],
       order: nextOrder(),
       workAreaId: newProgramAreaId || undefined,
+      projectId: (projectWsId === targetWs ? projectFilterId : null) || undefined, // 선택된 프로젝트에 배정
       revenueSource: newProgramSource || undefined,
       deadlines: [],
     });
@@ -693,6 +706,20 @@ export default function ProgramsPage() {
     setNewProgramAreaId('');
     setNewProgramSource('');
     setShowAddProgram(false);
+  };
+
+  // 프로젝트 생성 (포커스된 사업에)
+  const addProjectHandler = () => {
+    const name = newProjectName.trim();
+    if (!name || !projectWsId) return;
+    store.addProject(projectWsId, { name, order: projectsForWs.length });
+    setNewProjectName('');
+    setAddingProject(false);
+  };
+  // 영역 섹션의 프로그램(들)을 특정 프로젝트로 배정 (미지정 = null)
+  const assignSectionProject = (items: { p: ProgramWithWs }[], projectId: string | null) => {
+    items.forEach(({ p }) => store.updateProgramInWs(p.wsId, { ...stripWs(p), projectId: projectId ?? undefined }));
+    setProjMenuFor(null);
   };
 
   const startEditProgram = (p: ProgramWithWs) => {
@@ -1383,6 +1410,50 @@ export default function ProgramsPage() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* ── 프로젝트 탭 (포커스된 사업이 있을 때) ──────────────────────────── */}
+      {projectWsId && (
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <span className="text-[12px] font-semibold mr-0.5" style={{ color: '#9AA39D' }}>프로젝트</span>
+          <button
+            onClick={() => setSelectedProjectId(null)}
+            className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+            style={!selectedProjectId ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}
+          >
+            전체
+          </button>
+          {projectsForWs.map(pr => {
+            const sel = selectedProjectId === pr.id;
+            return (
+              <button
+                key={pr.id}
+                onClick={() => setSelectedProjectId(sel ? null : pr.id)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors"
+                style={sel ? { backgroundColor: '#DFF9C4', color: '#16211E' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}
+              >
+                {pr.name}
+                {pr.type && <span className="text-[10px] opacity-70">{pr.type === 'routine' ? '루틴' : '개발'}</span>}
+              </button>
+            );
+          })}
+          {addingProject ? (
+            <span className="inline-flex items-center gap-1">
+              <input
+                autoFocus
+                value={newProjectName}
+                onChange={e => setNewProjectName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addProjectHandler(); if (e.key === 'Escape') { setAddingProject(false); setNewProjectName(''); } }}
+                placeholder="프로젝트 이름"
+                className="bg-white border rounded-full px-3 py-1.5 text-[13px] outline-none focus:border-violet-400"
+                style={{ borderColor: 'var(--spira-border-strong)' }}
+              />
+              <button onClick={addProjectHandler} disabled={!newProjectName.trim()} className="text-[13px] font-semibold px-2 py-1 text-neutral-700 disabled:opacity-30">추가</button>
+            </span>
+          ) : (
+            <button onClick={() => setAddingProject(true)} className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5EA63A', backgroundColor: '#EEF7E4' }}>+ 새 프로젝트</button>
+          )}
         </div>
       )}
 
@@ -2154,6 +2225,36 @@ export default function ProgramsPage() {
                           </button>
                         </div>
                       )}
+                      {/* 프로젝트 배정 (포커스된 사업 + 미분류 아닌 영역) */}
+                      {projectWsId && sec.key !== NONE && (() => {
+                        const curPid = sec.items[0]?.p.projectId ?? null;
+                        const curProj = projectsForWs.find(pr => pr.id === curPid);
+                        return (
+                          <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => setProjMenuFor(projMenuFor === sec.key ? null : sec.key)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors"
+                              style={curProj ? { backgroundColor: '#EEF1FF', color: '#5B5BD6' } : { backgroundColor: '#F0F0EA', color: '#9AA39D' }}
+                              title="이 업무 영역을 프로젝트에 배정"
+                            >
+                              {curProj ? curProj.name : '프로젝트 지정'}
+                              <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                            {projMenuFor === sec.key && (
+                              <>
+                                <div className="fixed inset-0 z-10" onClick={() => setProjMenuFor(null)} />
+                                <div className="absolute right-0 top-full mt-1 w-40 bg-white border rounded-xl py-1 z-20" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+                                  <button onClick={() => assignSectionProject(sec.items, null)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: curPid === null ? '#16211E' : '#5B6560', fontWeight: curPid === null ? 700 : 400 }}>미지정</button>
+                                  {projectsForWs.length === 0 && <p className="px-3 py-1.5 text-[11px] text-neutral-400">프로젝트를 먼저 만들어보세요</p>}
+                                  {projectsForWs.map(pr => (
+                                    <button key={pr.id} onClick={() => assignSectionProject(sec.items, pr.id)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: curPid === pr.id ? '#16211E' : '#5B6560', fontWeight: curPid === pr.id ? 700 : 400 }}>{pr.name}</button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <button onClick={() => toggleAreaCollapsed(sec.key)} className="flex-shrink-0">
                         <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
