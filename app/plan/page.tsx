@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, forwardRef } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { ListSkeleton } from '../components/Skeleton';
-import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea } from '../lib/types';
+import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, Project, ProjectType } from '../lib/types';
 import TargetCustomerModal, { Avatar } from '../components/TargetCustomerModal';
 import { uid } from '../lib/store';
 import { useChatContext } from '../lib/ChatContext';
@@ -1024,6 +1024,101 @@ function GrowthStagesSection({
 
 const DEFAULT_WORK_AREAS = ['기획', '디자인', '개발', '마케팅', '운영'];
 
+// ── Projects section (프로젝트 — 업무 영역을 묶는 상위 단위, Goals와 연동) ──────
+const PROJECT_TYPES: { key: ProjectType; label: string; desc: string }[] = [
+  { key: 'routine', label: '루틴형', desc: '반복 운영하는 프로젝트' },
+  { key: 'build', label: '기획·신규개발형', desc: '새로 기획하거나 개발하는 프로젝트' },
+];
+
+function ProjectsSection({
+  projects, onAdd, onUpdate, onRemove,
+}: {
+  projects: Project[];
+  onAdd: (name: string, type: ProjectType, goal: string) => void;
+  onUpdate: (id: string, patch: Partial<Project>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [type, setType] = useState<ProjectType>('routine');
+  const [goal, setGoal] = useState('');
+
+  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setAdding(true); setEditingId(null); };
+  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setEditingId(p.id); setAdding(false); };
+  const saveAdd = () => { if (!name.trim()) return; onAdd(name.trim(), type, goal.trim()); setAdding(false); };
+  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim() }); setEditingId(null); };
+
+  const form = (onSave: () => void, onCancel: () => void, isAdd: boolean) => (
+    <div className="space-y-2.5">
+      <input
+        autoFocus
+        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400 transition-colors"
+        placeholder="프로젝트 이름 (예: 모바일 앱 신규 출시)"
+        value={name}
+        onChange={e => setName(e.target.value)}
+      />
+      <div className="flex gap-1.5">
+        {PROJECT_TYPES.map(t => (
+          <button key={t.key} onClick={() => setType(t.key)} title={t.desc}
+            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${type === t.key ? 'bg-neutral-900 border-neutral-900 text-white' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <textarea
+        rows={2}
+        className="w-full resize-none bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400 transition-colors leading-relaxed"
+        placeholder="이 프로젝트의 목표·설명 (선택)"
+        value={goal}
+        onChange={e => setGoal(e.target.value)}
+      />
+      <div className="flex gap-3 pt-1 border-t border-neutral-100">
+        <button onClick={onSave} className="text-xs text-neutral-700 hover:text-neutral-900 font-medium transition-colors">{isAdd ? '추가' : '저장'}</button>
+        <button onClick={onCancel} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
+        {!isAdd && <button onClick={() => { onRemove(editingId!); setEditingId(null); }} className="text-xs text-neutral-700 hover:text-red-400 transition-colors ml-auto">삭제</button>}
+      </div>
+    </div>
+  );
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-neutral-900">프로젝트</h2>
+          <Hint text="업무 영역·데드라인을 묶는 상위 단위예요. 루틴형(반복 운영)과 기획·신규개발형으로 나눠 관리하고, Goals에서 이 프로젝트별로 업무를 조직할 수 있어요." />
+        </div>
+        <button onClick={startAdd} className="text-xs text-neutral-600 hover:text-neutral-900 transition-colors">+ 프로젝트 추가</button>
+      </div>
+
+      <div className="space-y-2">
+        {projects.map(p => (
+          <div key={p.id} className={`bg-white border rounded-xl px-4 py-3 transition-all ${editingId === p.id ? 'ring-2 ring-violet-400 border-violet-300' : 'border-neutral-200'}`}>
+            {editingId === p.id ? form(() => saveEdit(p.id), () => setEditingId(null), false) : (
+              <div className="flex items-start gap-3 group/proj">
+                <span className="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-full mt-0.5" style={p.type === 'build' ? { backgroundColor: '#EEF1FF', color: '#5B5BD6' } : { backgroundColor: '#EAF7DD', color: '#3E6B1F' }}>
+                  {p.type === 'build' ? '기획·개발' : '루틴'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-neutral-800 leading-relaxed">{p.name}</p>
+                  {p.goal && <p className="text-xs text-neutral-400 leading-relaxed mt-0.5 whitespace-pre-wrap">{p.goal}</p>}
+                </div>
+                <button onClick={() => startEdit(p)} className="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/proj:opacity-100 mt-0.5">수정</button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {adding ? (
+          <div className="bg-white border border-violet-300 ring-2 ring-violet-400 rounded-xl px-4 py-3">{form(saveAdd, () => setAdding(false), true)}</div>
+        ) : projects.length === 0 && (
+          <button onClick={startAdd} className="w-full py-2.5 rounded-xl border-2 border-dashed border-neutral-200 text-xs text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 첫 번째 프로젝트 추가</button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function WorkAreasSection({
   areas, onAdd, onUpdate, onRemove, onGenerate,
 }: {
@@ -1557,6 +1652,14 @@ export default function PlanPage() {
   };
 
   // 업무 영역
+  // 프로젝트 CRUD — Goals와 같은 plan.projects. 삭제는 store로(소속 업무 영역을 미지정으로 되돌림)
+  const addProjectItem = (name: string, type: ProjectType, goal: string) =>
+    store.addProject(selectedWsId, { name, type, goal, order: (plan.projects ?? []).length });
+  const updateProjectItem = (id: string, patch: Partial<Project>) =>
+    store.updateProject(selectedWsId, id, patch);
+  const removeProjectItem = (id: string) =>
+    store.removeProject(selectedWsId, id);
+
   const addWorkArea = (a: WorkArea) =>
     update({ workAreas: [...(plan.workAreas ?? []), a] });
   const updateWorkArea = (id: string, patch: Partial<WorkArea>) =>
@@ -1808,6 +1911,13 @@ export default function PlanPage() {
           onGenerate={chat && !chat.loading ? handleGenerateGrowthStages : undefined}
           currentIndex={growthIdx}
           onComplete={handleCompleteStage}
+        />
+
+        <ProjectsSection
+          projects={plan.projects ?? []}
+          onAdd={addProjectItem}
+          onUpdate={updateProjectItem}
+          onRemove={removeProjectItem}
         />
 
         <WorkAreasSection
