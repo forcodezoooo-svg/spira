@@ -26,6 +26,12 @@ export interface Message {
   action?: ChatAction;
 }
 
+// sendMessage 옵션: 온보딩 자동 생성 등에서 사용
+export interface SendOptions {
+  hideUser?: boolean;  // 사용자 말풍선 없이 조용히 요청
+  intro?: string;      // 답변 문구를 이 문구로 고정 (모델 산문 대신)
+}
+
 export interface ChatSession {
   id: string;
   title: string;
@@ -102,7 +108,7 @@ interface ChatContextType {
   setOpen: (v: boolean | ((p: boolean) => boolean)) => void;
   messages: Message[];
   loading: boolean;
-  sendMessage: (text: string, displayText?: string) => Promise<void>;
+  sendMessage: (text: string, displayText?: string, opts?: SendOptions) => Promise<void>;
   applyAction: (idx: number) => void;
   openWithContext: (label: string, content: string) => void;
   registerPlanHandler: (handler: (patch: PlanPatch) => void) => void;
@@ -338,12 +344,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const sendMessage = useCallback(async (text: string, displayText?: string) => {
-    const displayMsg: Message = { role: 'user', content: displayText ?? text };
+  const sendMessage = useCallback(async (text: string, displayText?: string, opts?: SendOptions) => {
     const apiMsg: Message = { role: 'user', content: text };
-    const displayNext: Message[] = [...messagesRef.current, displayMsg];
     const apiNext: Message[] = [...messagesRef.current, apiMsg];
-    setMessages(displayNext);
+    // hideUser: 사용자 말풍선 없이 조용히 요청 (온보딩 자동 생성용). intro: 답변 문구를 고정.
+    if (!opts?.hideUser) {
+      setMessages([...messagesRef.current, { role: 'user', content: displayText ?? text }]);
+    }
     setLoading(true);
     loadingRef.current = true;
 
@@ -376,6 +383,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         if (done) break;
         full += decoder.decode(value, { stream: true });
 
+        if (opts?.intro) continue; // 고정 문구 모드: 스트리밍 중엔 '생각 중' 상태 유지, 완료 시 intro+버튼 표시
+
         const display = full.includes(PLAN_MARKER)
           ? full.split(PLAN_MARKER)[0].trimEnd()
           : full.includes(ROUTINE_MARKER)
@@ -400,7 +409,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         const { display, ...act } = action;
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', content: display || '', action: act };
+          updated[updated.length - 1] = { role: 'assistant', content: opts?.intro ?? display ?? '', action: act };
+          return updated;
+        });
+      } else if (opts?.intro) {
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', content: opts.intro! };
           return updated;
         });
       }

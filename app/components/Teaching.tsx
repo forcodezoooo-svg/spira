@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useUI } from '../lib/UIContext';
 import { useTimer } from '../lib/TimerContext';
+import { useChatContext } from '../lib/ChatContext';
 
 // 두 종류의 티칭:
 //  1) 온보딩 직후 투어(TOUR) — Plan→Goals→Home. 대부분 '사용자가 실제 동작'을 하면 자동 진행.
@@ -12,6 +13,9 @@ type Step = {
   page?: string; target?: string; targets?: string[]; text: string;
   closeChat?: boolean; go?: string; last?: boolean; prefill?: string; celebrate?: boolean;
   awaitChatOpen?: boolean; awaitTodos?: boolean; awaitPlaced?: boolean; awaitTimer?: boolean;
+  // 온보딩 자동 생성: 사용자가 입력하지 않아도 '버튼 있는 답변'이 자동으로 나오게 함
+  autoSend?: string;    // 조용히 전송할 요청(사용자 말풍선 없음)
+  autoIntro?: string;   // 답변에 고정으로 표시할 문구
 };
 
 const TOUR: Step[] = [
@@ -22,7 +26,7 @@ const TOUR: Step[] = [
   { page: '/plan', target: '[data-teach="sparky-panel"]', text: '아직 아이디어가 정리되지 않아도 괜찮아요. 자유롭게 대화하듯 Sparky와 이야기한 뒤 ‘이 내용으로 기획서 작성해줘’라고 부탁하면, 답변 아래에 ‘Plan에 자동으로 채우기’ 버튼이 생겨요. 그 버튼을 누르면 기획서에 바로 반영돼요.', closeChat: true },
   { page: '/plan', target: '[data-teach="nav-goals"]', text: '위의 깃발 모양 아이콘을 눌러 Goals 페이지로 이동해보세요!', go: '/programs' },
   { page: '/programs', target: '[data-teach="sparky"]', text: '아래 Sparky 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
-  { page: '/programs', target: '[data-teach="sparky-panel"]', text: '채팅창에 ‘기획안을 기반으로 할 일 생성해줘’ 문구를 넣어뒀어요. 그대로 전송한 뒤, 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', prefill: '기획안을 기반으로 할 일 생성해줘', awaitTodos: true, closeChat: true },
+  { page: '/programs', target: '[data-teach="sparky-panel"]', text: '기획안을 기반으로 업무 일정을 계획해뒀어요. 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', autoSend: '기획안을 기반으로 이번 분기 업무 일정을 계획해줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 만들어줘.', autoIntro: '기획안을 기반으로 업무 일정을 계획해봤어요! 아래 버튼을 누르면 Goals에 자동으로 반영돼요. 🌿', awaitTodos: true, closeChat: true },
   { page: '/programs', target: '[data-teach="goal-card"]', text: '생성된 할 일을 자유롭게 수정하거나 추가할 수 있어요.' },
   { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '왼쪽에서 강조된 업무를 클릭한 채로, 이 캘린더의 오늘 날짜(연두색 칸)로 드래그해서 올려보세요.', awaitPlaced: true },
   { page: '/programs', target: '[data-teach="nav-home"]', text: '위의 집 모양 아이콘을 눌러 Home 페이지로 이동해보세요!', go: '/home' },
@@ -73,7 +77,9 @@ function readCounts(): { total: number; placedToday: number } {
 export default function Teaching() {
   const pathname = usePathname();
   const ui = useUI();
+  const chat = useChatContext();
   const { anyActive } = useTimer();
+  const autoSentRef = useRef<Set<number>>(new Set());
   const [tourIdx, setTourIdx] = useState(-1);
   const [pageIdx, setPageIdx] = useState(-1);
   const [rects, setRects] = useState<DOMRect[]>([]); // 하이라이트 대상들(다중 지원)
@@ -120,6 +126,15 @@ export default function Teaching() {
     if (tourActive && step?.awaitTimer && anyActive) advanceTour();
   }, [tourActive, step, anyActive, advanceTour]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 온보딩 자동 생성: 사용자가 입력하지 않아도 '버튼 있는 답변'이 자동으로 나오게 (단계당 1회)
+  useEffect(() => {
+    if (!tourActive || !step?.autoSend || !chat) return;
+    if (autoSentRef.current.has(tourIdx)) return;
+    autoSentRef.current.add(tourIdx);
+    ui.openChat();
+    void chat.sendMessage(step.autoSend, undefined, { hideUser: true, intro: step.autoIntro });
+  }, [tourActive, tourIdx, step, chat, ui]);
 
   // 채팅 입력창 프리필: 특정 단계에서 안내 문구를 미리 채워둠(사용자가 그대로 전송)
   useEffect(() => {
