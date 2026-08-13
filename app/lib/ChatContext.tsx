@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useRef, useEffect, useCallback, Re
 import { useUI } from './UIContext';
 import { useToast } from './ToastContext';
 import { useUpgrade } from './UpgradeContext';
+import { isOnboardingActive } from './onboarding';
 import { createClient } from './supabase/client';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER } from './ai/markers';
 import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
@@ -331,13 +332,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
       }
 
-      // AI 자동 입력(기획서·할일·영역 자동 반영)은 Pro 전용 — 무료는 조언까지만
+      // AI 자동 입력(기획서·할일·영역 자동 반영)은 Pro 전용 — 무료는 조언까지만.
+      // 단, 온보딩 투어 중에는 제한을 풀어 신규 사용자가 기능을 끝까지 체험하게 한다.
+      const canAutofill = isProRef.current || isOnboardingActive();
       const hadMarker = full.includes(PLAN_MARKER) || full.includes(ROUTINE_MARKER) || full.includes(GOALS_MARKER) || full.includes(QUARTER_PLAN_MARKER) || full.includes(AREA_ASSIGN_MARKER);
-      if (hadMarker && !isProRef.current) {
+      if (hadMarker && !canAutofill) {
         upgradeRef.current('autofill');
       }
 
-      if (full.includes(PLAN_MARKER) && planHandlerRef.current && isProRef.current) {
+      if (full.includes(PLAN_MARKER) && planHandlerRef.current && canAutofill) {
         const rawPart = full.split(PLAN_MARKER)[1]?.trim() ?? '';
         // 코드펜스나 앞뒤 설명이 섞여도 첫 '{' ~ 마지막 '}'만 잘라 파싱
         const objStart = rawPart.indexOf('{');
@@ -362,7 +365,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(ROUTINE_MARKER) && routineHandlerRef.current && isProRef.current) {
+      if (full.includes(ROUTINE_MARKER) && routineHandlerRef.current && canAutofill) {
         const rawPart = full.split(ROUTINE_MARKER)[1]?.trim() ?? '';
         const arrayStart = rawPart.indexOf('[');
         const arrayEnd = rawPart.lastIndexOf(']');
@@ -389,7 +392,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(GOALS_MARKER) && goalsHandlerRef.current && isProRef.current) {
+      if (full.includes(GOALS_MARKER) && goalsHandlerRef.current && canAutofill) {
         const rawPart = full.split(GOALS_MARKER)[1]?.trim() ?? '';
         const arrayStart = rawPart.indexOf('[');
         const arrayEnd = rawPart.lastIndexOf(']');
@@ -413,7 +416,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(QUARTER_PLAN_MARKER) && quarterPlanHandlerRef.current && isProRef.current) {
+      if (full.includes(QUARTER_PLAN_MARKER) && quarterPlanHandlerRef.current && canAutofill) {
         const rawPart = full.split(QUARTER_PLAN_MARKER)[1]?.trim() ?? '';
         // 배열([...]) 또는 단일 객체({...}) 모두 지원 — 먼저 등장하는 형태를 추출
         const aStart = rawPart.indexOf('[');
@@ -444,7 +447,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (full.includes(AREA_ASSIGN_MARKER) && areaAssignHandlerRef.current && isProRef.current) {
+      if (full.includes(AREA_ASSIGN_MARKER) && areaAssignHandlerRef.current && canAutofill) {
         const rawPart = full.split(AREA_ASSIGN_MARKER)[1]?.trim() ?? '';
         const aStart = rawPart.indexOf('[');
         const aEnd = rawPart.lastIndexOf(']');

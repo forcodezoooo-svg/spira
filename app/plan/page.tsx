@@ -13,6 +13,7 @@ import MemoPanel from '../components/MemoPanel';
 import FlagAward from '../components/FlagAward';
 import { usePlan } from '../lib/usePlan';
 import { useUpgrade } from '../lib/UpgradeContext';
+import { isOnboardingActive } from '../lib/onboarding';
 
 // 사업 고유 컬러 팔레트 (Goals 등 서비스 전체에서 사용)
 const BUSINESS_COLORS = ['#8B5CF6', '#6366F1', '#3B82F6', '#06B6D4', '#10B981', '#84CC16', '#F59E0B', '#F97316', '#EF4444', '#EC4899'];
@@ -1576,8 +1577,9 @@ export default function PlanPage() {
   // 항목별 채우기 — API엔 상세 명령(마커 지시) 전송, 화면 말풍선엔 자연어만 표시
   const genField = (apiPrompt: string, display: string) => {
     if (!chat || chat.loading) return;
-    // AI 자동 채우기는 Pro 전용 → 유료 플랜 알림 팝업
-    if (userPlan.tier !== 'pro') {
+    // AI 자동 채우기는 Pro 전용 → 유료 플랜 알림 팝업.
+    // 단, 온보딩 투어 중에는 제한을 풀어 기능을 끝까지 체험하게 한다.
+    if (userPlan.tier !== 'pro' && !isOnboardingActive()) {
       showUpgrade('autofill');
       return;
     }
