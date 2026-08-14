@@ -6,7 +6,7 @@ import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { Program } from '../lib/types';
 import { uid } from '../lib/store';
-import { useChatContext, QuarterPlan, AreaAssignment } from '../lib/ChatContext';
+import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '../lib/ChatContext';
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
 import FlagAward from '../components/FlagAward';
@@ -55,6 +55,14 @@ export default function ProgramsPage() {
     if (!chat) return;
     chat.registerAreaAssignHandler(assigns => applyAreaAssignRef.current(assigns));
     return () => chat.unregisterAreaAssignHandler();
+  }, [chat]);
+
+  // AI 프로젝트 정리 핸들러 (기존 데드라인 → 프로젝트로 묶기)
+  const applyProjectAssignRef = useRef<(plans: ProjectAssignPlan[]) => void>(() => {});
+  useEffect(() => {
+    if (!chat) return;
+    chat.registerProjectAssignHandler(plans => applyProjectAssignRef.current(plans));
+    return () => chat.unregisterProjectAssignHandler();
   }, [chat]);
 
   const now = new Date();
@@ -606,13 +614,14 @@ export default function ProgramsPage() {
     const clampFuture = (d?: string) => (d && d >= todayKey ? d : undefined);
     const nowY = new Date().getFullYear();
     const nowQ = Math.floor(new Date().getMonth() / 3) + 1;
-    const buildDeadlines = (prog: NonNullable<QuarterPlan['programs']>[number], py: number, pq: number) =>
+    const buildDeadlines = (prog: NonNullable<QuarterPlan['programs']>[number], py: number, pq: number, projectId?: string) =>
       (prog.deadlines ?? []).map(d => {
         const dlDate = clampFuture(d.date) ?? getQuarterEndDate(py, pq); // 과거면 분기말(미래)로
         return {
           id: uid(),
           name: d.name,
           date: dlDate,
+          ...(projectId ? { projectId } : {}),
           // 할일 날짜도 오늘 이후만 저장 — 과거/누락이면 자체 마감→데드라인 날짜로 보정
           todos: (d.todos ?? []).map(t => {
             if (typeof t === 'string') return { id: uid(), name: t, done: false };
@@ -621,6 +630,31 @@ export default function ProgramsPage() {
           }),
         };
       });
+    // 프로젝트 준비: 계획에 등장하는 project 이름을 사업별로 모아, 없는 것은 새로 만들고 이름→id 매핑
+    const projectIdByName = new Map<string, string>(); // `${ws}::${name}` -> id
+    {
+      const need = new Map<string, Map<string, 'routine' | 'build'>>();
+      for (const plan of plans) {
+        const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
+        for (const prog of plan.programs ?? []) {
+          const pname = (prog.project ?? '').trim();
+          if (!pname) continue;
+          if (!need.has(targetWs)) need.set(targetWs, new Map());
+          if (!need.get(targetWs)!.has(pname)) need.get(targetWs)!.set(pname, prog.projectType === 'routine' ? 'routine' : 'build');
+        }
+      }
+      need.forEach((names, ws) => {
+        const entry = store.allWorkspacesEntries.find(e => e.workspace.id === ws);
+        const existing = entry?.plan.projects ?? [];
+        const toAdd: { id: string; name: string; type: 'routine' | 'build'; order: number }[] = [];
+        names.forEach((type, name) => {
+          const found = existing.find(p => p.name === name);
+          if (found) projectIdByName.set(`${ws}::${name}`, found.id);
+          else { const id = uid(); projectIdByName.set(`${ws}::${name}`, id); toAdd.push({ id, name, type, order: existing.length + toAdd.length }); }
+        });
+        if (toAdd.length && entry) store.updatePlanInWs(ws, { ...entry.plan, projects: [...existing, ...toAdd] });
+      });
+    }
     const buckets = new Map<string, Bucket>();
     for (const plan of plans) {
       const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
@@ -630,11 +664,13 @@ export default function ProgramsPage() {
       if (py < nowY || (py === nowY && pq < nowQ)) { py = nowY; pq = nowQ; }
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
       for (const prog of plan.programs ?? []) {
-        if (!prog?.name) continue;
+        if (!prog || !(prog.deadlines?.length)) continue;
         const area = prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined;
         touchedAreas.add(area?.name ?? NONE);
         const key = `${targetWs}::${area?.id ?? '__none__'}`;
-        const dls = buildDeadlines(prog, py, pq);
+        const pname = (prog.project ?? '').trim();
+        const projectId = pname ? projectIdByName.get(`${targetWs}::${pname}`) : undefined;
+        const dls = buildDeadlines(prog, py, pq, projectId);
         const b = buckets.get(key);
         if (b) b.deadlines.push(...dls);
         else buckets.set(key, { targetWs, py, pq, areaId: area?.id, areaName: area?.name, deadlines: dls });
@@ -663,6 +699,32 @@ export default function ProgramsPage() {
     // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     if (touchedAreas.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas]));
+  };
+
+  // AI가 기존 데드라인을 프로젝트로 정리 — 프로젝트를 만들고(있으면 재사용) 데드라인에 projectId 배정
+  applyProjectAssignRef.current = (plans: ProjectAssignPlan[]) => {
+    for (const plan of plans) {
+      const ws = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
+      const entry = store.allWorkspacesEntries.find(e => e.workspace.id === ws);
+      if (!entry) continue;
+      const projects = [...(entry.plan.projects ?? [])];
+      const idByName = new Map<string, string>();
+      const needed = new Map<string, 'routine' | 'build'>();
+      for (const a of plan.assign ?? []) { const n = (a.projectName ?? '').trim(); if (n && !needed.has(n)) needed.set(n, a.projectType === 'routine' ? 'routine' : 'build'); }
+      let added = false;
+      needed.forEach((type, name) => {
+        const found = projects.find(p => p.name === name);
+        if (found) idByName.set(name, found.id);
+        else { const id = uid(); idByName.set(name, id); projects.push({ id, name, type, order: projects.length }); added = true; }
+      });
+      if (added) store.updatePlanInWs(ws, { ...entry.plan, projects });
+      for (const a of plan.assign ?? []) {
+        const pid = idByName.get((a.projectName ?? '').trim());
+        if (!pid || !a.deadlineId) continue;
+        const prog = entry.programs.find(p => (p.deadlines ?? []).some(d => d.id === a.deadlineId));
+        if (prog) store.setDeadlineProject(ws, prog.id, a.deadlineId, pid);
+      }
+    }
   };
 
   // AI가 배정한 영역을 각 목표에 적용 (유효한 영역 id만, 같은 사업 내에서만)

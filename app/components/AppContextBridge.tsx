@@ -11,7 +11,6 @@ export default function AppContextBridge() {
     if (!chat || !store.ready) return;
 
     const entries = store.allWorkspacesEntries;
-    const today = new Date().toISOString().split('T')[0];
     const lines: string[] = [];
 
     for (const entry of entries) {
@@ -32,17 +31,28 @@ export default function AppContextBridge() {
         if (pl.length) { lines.push(`### 기획서`); pl.forEach(l => lines.push(`- ${l}`)); }
       }
 
-      // 업무 영역 목록(id 포함) — 생성한 프로그램을 이 영역들에 workAreaId로 배정
+      // 업무 영역 목록(id 포함) — 생성한 데드라인을 이 영역들에 workAreaId로 배정
       if (plan?.workAreas?.length) {
         lines.push(`### 업무 영역`);
         for (const a of plan.workAreas) lines.push(`- id:${a.id} | ${a.name}${a.goal ? ` | 목표:${a.goal}` : ''}`);
       }
 
+      // 프로젝트 목록(id 포함) — 데드라인을 이 프로젝트로 묶음. type: routine(루틴)/build(기획·개발)
+      if (plan?.projects?.length) {
+        lines.push(`### 프로젝트`);
+        for (const pr of plan.projects) lines.push(`- id:${pr.id} | ${pr.name} | type:${pr.type ?? 'build'}`);
+      }
+
       if (entry.programs.length > 0) {
-        lines.push(`### 프로그램`);
+        lines.push(`### 업무 영역별 컨테이너 & 데드라인`);
         for (const p of entry.programs) {
-          const started = !p.startDate || p.startDate <= today;
-          lines.push(`- id:${p.id} | ${p.name} | color:${p.color ?? ''} | weight:${p.weight ?? 1}${p.startDate ? ` | startDate:${p.startDate}` : ''}${started ? '' : ' (미시작)'}`);
+          const area = (plan?.workAreas ?? []).find(a => a.id === p.workAreaId);
+          if (!area) continue; // 미분류 잔여 컨테이너 제외
+          lines.push(`- 컨테이너 programId:${p.id} | 업무영역:${area.name}(workAreaId:${area.id})`);
+          for (const dl of p.deadlines ?? []) {
+            const projName = dl.projectId ? (plan?.projects ?? []).find(pr => pr.id === dl.projectId)?.name : undefined;
+            lines.push(`  - deadlineId:${dl.id} | ${dl.name}${dl.date ? ` | date:${dl.date}` : ''}${projName ? ` | 프로젝트:${projName}` : ' | 프로젝트:미지정'}`);
+          }
         }
       }
 

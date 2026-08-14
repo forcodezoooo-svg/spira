@@ -54,7 +54,8 @@ export const RECOMMENDED: Record<string, RecommendedChip[]> = {
     { label: '💡 수익 구조 제안', message: '현실적인 수익 구조를 제안해줘.' },
   ],
   '/programs': [
-    { label: '🗺️ 이번 분기 계획 짜기', message: '이번 분기 실행 계획을 같이 짜줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영해줘.' },
+    { label: '🗺️ 이번 분기 계획 짜기', message: '이번 분기 실행 계획을 프로젝트(큰 목표) 단위로 같이 짜줘. 프로젝트·데드라인·할일까지 정리해서 Goals에 반영해줘.' },
+    { label: '📁 기존 할 일 프로젝트로 정리', message: '지금 Goals에 있는 데드라인들을 성격이 비슷한 것끼리 프로젝트(큰 목표)로 묶어서 정리해줘.' },
     { label: '🔁 반복 루틴 만들기', message: '매주 반복하면 좋은 루틴 할일들을 요일까지 정해서 만들어줘.' },
   ],
   '/home': [

@@ -6,7 +6,7 @@ import { useToast } from './ToastContext';
 import { useUpgrade } from './UpgradeContext';
 import { isOnboardingActive } from './onboarding';
 import { createClient } from './supabase/client';
-import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER } from './ai/markers';
+import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER } from './ai/markers';
 import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
 
 // 대화 내용에서 인식된 '앱에 자동 반영' 액션. 버튼으로 노출되며, 클릭 시 실제 반영(Pro/온보딩 게이트).
@@ -90,8 +90,10 @@ export type QuarterPlan = {
   year?: number;
   quarter?: number;
   programs: Array<{
-    name: string;
+    name?: string;
     goal?: string;
+    project?: string; // 소속 프로젝트(큰 목표) 이름 — 같은 이름끼리 하나의 프로젝트로 묶임
+    projectType?: 'routine' | 'build';
     workAreaId?: string; // 소속 업무 영역 id (있으면 그 영역 컨테이너로 들어감)
     deadlines?: Array<{ name: string; date: string; todos?: QuarterPlanTodo[] }>;
   }>;
@@ -99,6 +101,9 @@ export type QuarterPlan = {
 
 // AI가 미분류 목표를 업무 영역에 배정
 export type AreaAssignment = { programId: string; wsId: string; workAreaId: string };
+
+// AI가 기존 데드라인을 프로젝트로 정리 (사업별 assign 목록)
+export type ProjectAssignPlan = { wsId?: string; assign: Array<{ deadlineId: string; projectName: string; projectType?: 'routine' | 'build' }> };
 
 const SESSIONS_KEY = 'spira_chat_sessions';
 const CURRENT_KEY = 'spira_chat_current';
@@ -126,6 +131,8 @@ interface ChatContextType {
   unregisterQuarterPlanHandler: () => void;
   registerAreaAssignHandler: (handler: (assigns: AreaAssignment[]) => void) => void;
   unregisterAreaAssignHandler: () => void;
+  registerProjectAssignHandler: (handler: (plans: ProjectAssignPlan[]) => void) => void;
+  unregisterProjectAssignHandler: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -159,6 +166,13 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   if (full.includes(AREA_ASSIGN_MARKER)) {
     const payload = tryParse(sliceArr(after(AREA_ASSIGN_MARKER)));
     if (Array.isArray(payload)) return { kind: 'goals', marker: AREA_ASSIGN_MARKER, payload, route: '/programs', label: 'Goals에 자동으로 반영', feedback: FEEDBACK.areaAssigned(payload.length), display: before(AREA_ASSIGN_MARKER) };
+  }
+  if (full.includes(PROJECT_ASSIGN_MARKER)) {
+    const payload = tryParse(sliceArr(after(PROJECT_ASSIGN_MARKER)));
+    if (Array.isArray(payload)) {
+      const cnt = (payload as ProjectAssignPlan[]).reduce((s, p) => s + (p.assign?.length ?? 0), 0);
+      return { kind: 'goals', marker: PROJECT_ASSIGN_MARKER, payload, route: '/programs', label: '프로젝트로 자동 정리', feedback: `데드라인 ${cnt}개를 프로젝트로 정리했어요. Goals에서 확인해보세요. 🌿`, display: before(PROJECT_ASSIGN_MARKER) };
+    }
   }
   if (full.includes(GOALS_MARKER)) {
     const payload = tryParse(sliceArr(after(GOALS_MARKER)));
@@ -224,6 +238,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const goalsHandlerRef = useRef<((ops: GoalsOperation[]) => void) | null>(null);
   const quarterPlanHandlerRef = useRef<((plans: QuarterPlan[]) => void) | null>(null);
   const areaAssignHandlerRef = useRef<((assigns: AreaAssignment[]) => void) | null>(null);
+  const projectAssignHandlerRef = useRef<((plans: ProjectAssignPlan[]) => void) | null>(null);
   // 페이지 핸들러가 등록될 때 대기 중인 액션을 반영(아래에서 실제 함수 주입)
   const flushPendingRef = useRef<((marker: string) => void) | null>(null);
 
@@ -248,6 +263,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const registerAreaAssignHandler = useCallback((handler: (assigns: AreaAssignment[]) => void) => {
     areaAssignHandlerRef.current = handler;
     flushPendingRef.current?.(AREA_ASSIGN_MARKER);
+  }, []);
+
+  const registerProjectAssignHandler = useCallback((handler: (plans: ProjectAssignPlan[]) => void) => {
+    projectAssignHandlerRef.current = handler;
+    flushPendingRef.current?.(PROJECT_ASSIGN_MARKER);
+  }, []);
+
+  const unregisterProjectAssignHandler = useCallback(() => {
+    projectAssignHandlerRef.current = null;
   }, []);
 
   const unregisterAreaAssignHandler = useCallback(() => {
@@ -393,6 +417,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           ? full.split(QUARTER_PLAN_MARKER)[0].trimEnd()
           : full.includes(AREA_ASSIGN_MARKER)
           ? full.split(AREA_ASSIGN_MARKER)[0].trimEnd()
+          : full.includes(PROJECT_ASSIGN_MARKER)
+          ? full.split(PROJECT_ASSIGN_MARKER)[0].trimEnd()
           : full;
 
         setMessages(prev => {
@@ -440,6 +466,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (marker === GOALS_MARKER && goalsHandlerRef.current) { goalsHandlerRef.current(payload as GoalsOperation[]); return true; }
     if (marker === QUARTER_PLAN_MARKER && quarterPlanHandlerRef.current) { quarterPlanHandlerRef.current(payload as QuarterPlan[]); return true; }
     if (marker === AREA_ASSIGN_MARKER && areaAssignHandlerRef.current) { areaAssignHandlerRef.current(payload as AreaAssignment[]); return true; }
+    if (marker === PROJECT_ASSIGN_MARKER && projectAssignHandlerRef.current) { projectAssignHandlerRef.current(payload as ProjectAssignPlan[]); return true; }
     return false;
   }, []);
 
@@ -526,6 +553,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       registerGoalsHandler, unregisterGoalsHandler,
       registerQuarterPlanHandler, unregisterQuarterPlanHandler,
       registerAreaAssignHandler, unregisterAreaAssignHandler,
+      registerProjectAssignHandler, unregisterProjectAssignHandler,
     }}>
       {children}
     </ChatContext.Provider>
