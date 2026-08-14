@@ -26,6 +26,8 @@ export default function FeedbackSurvey() {
   const [bad, setBad] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // 로그인 계정의 표시 이름 (없으면 이름 없이 표현)
+  const displayName = (user?.user_metadata?.full_name as string) || (user?.user_metadata?.name as string) || '';
   const storeKey = user ? `spira_survey_v1:${user.id}` : null;
   const readState = (): State => {
     if (!storeKey) return {};
@@ -76,7 +78,7 @@ export default function FeedbackSurvey() {
             <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
           </button>
         </div>
-        <p className="text-[13px] leading-relaxed mb-5" style={{ color: '#5B6560' }}>잠깐이면 돼요. 원영님의 한마디가 Spira를 더 좋게 만들어요.</p>
+        <p className="text-[13px] leading-relaxed mb-5" style={{ color: '#5B6560' }}>잠깐이면 돼요. {displayName ? `${displayName}님의` : '여러분의'} 한마디가 Spira를 더 좋게 만들어요.</p>
 
         {/* 만족도 */}
         <div className="flex justify-between gap-1.5 mb-5">
