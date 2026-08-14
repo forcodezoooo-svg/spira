@@ -98,6 +98,7 @@ export interface ProgramTodo {
   starred?: boolean; // 중요 표시 (별표)
   light?: boolean; // 가벼운 작업(외부에서도 가능). 기본 false = 무거운 작업(작업실 필요)
   startTime?: string; // 시작 예정 시각 "HH:MM"
+  durationDays?: number; // 대략 소요 일수 — 프로젝트 '일정 이어붙이기'에서 날짜를 순차 배치할 때 사용
 }
 
 // 프로그램 내 데드라인 항목 (depth 2)
@@ -112,6 +113,7 @@ export interface ProgramDeadline {
   doneAt?: string;       // 완료 시각 ISO
   totalSeconds?: number; // 완료 시점까지 이 데드라인 할일들에 기록된 총 소요시간(초)
   projectId?: string;    // 소속 프로젝트 (plan.projects[].id) — 프로젝트별 그룹핑/필터의 기준
+  durationDays?: number; // 대략 소요 일수 — 프로젝트 '일정 이어붙이기'용
 }
 
 export interface Program {

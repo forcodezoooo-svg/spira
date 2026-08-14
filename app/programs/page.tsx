@@ -335,6 +335,11 @@ export default function ProgramsPage() {
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [routineEditFor, setRoutineEditFor] = useState<string | null>(null); // 반복 기간 편집 중인 프로젝트 박스 key
+  const [projAddFor, setProjAddFor] = useState<string | null>(null); // 프로젝트 박스 안에서 데드라인 추가 중인 박스 key
+  const [projDlName, setProjDlName] = useState('');
+  const [projDlDate, setProjDlDate] = useState('');
+  const [projDlArea, setProjDlArea] = useState('');
+  const [projDlDays, setProjDlDays] = useState('');
   const [projMenuFor, setProjMenuFor] = useState<string | null>(null); // 프로젝트 배정 메뉴가 열린 영역 섹션 key
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string; foot?: string } | null>(null); // 깃발 증정 오버레이
   // 수익원 필터 (Resources에서 카테고리 클릭 시 진입)
@@ -809,6 +814,58 @@ export default function ProgramsPage() {
 
   const deleteDeadline = (p: ProgramWithWs, dlId: string) =>
     updateProg(p, (p.deadlines ?? []).filter(d => d.id !== dlId));
+
+  // 프로젝트 박스 안에서 데드라인 추가 (업무 영역 선택). 해당 영역 컨테이너가 없으면 생성.
+  const addDeadlineToProject = (wsId: string, projectId: string) => {
+    const name = projDlName.trim();
+    if (!name || !projDlArea) return;
+    const days = projDlDays ? Math.max(1, parseInt(projDlDays, 10)) : undefined;
+    const newDl = { id: uid(), name, date: projDlDate || getQuarterEndDate(year, quarter), todos: [], projectId, ...(days ? { durationDays: days } : {}) };
+    const entry = store.allWorkspacesEntries.find(e => e.workspace.id === wsId);
+    const existing = entry?.programs.find(p => p.workAreaId === projDlArea);
+    if (existing) store.updateProgramInWs(wsId, { ...existing, deadlines: [...(existing.deadlines ?? []), newDl] });
+    else {
+      const area = areasForWs(wsId).find(a => a.id === projDlArea);
+      store.addProgramToWs(wsId, { name: area?.name ?? '업무', goal: '', color: businessColor(wsId), year, quarter, quarters: [qKey(year, quarter)], order: nextOrder(), workAreaId: projDlArea, deadlines: [newDl] });
+    }
+    setProjAddFor(null); setProjDlName(''); setProjDlDate(''); setProjDlArea(''); setProjDlDays('');
+  };
+
+  // 소요 일수 지정
+  const setDeadlineDuration = (p: ProgramWithWs, dlId: string, days: number | undefined) =>
+    updateProg(p, (p.deadlines ?? []).map(d => d.id === dlId ? { ...d, durationDays: days } : d));
+  const setTodoDuration = (p: ProgramWithWs, dlId: string, todoId: string, days: number | undefined) =>
+    updateProg(p, (p.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === todoId ? { ...t, durationDays: days } : t) } : d));
+
+  // 프로젝트 일정 이어붙이기: 시작일(반복 시작 or 오늘)부터 소요 일수만큼 데드라인/업무 날짜를 순차 배치
+  const chainProjectSchedule = (box: { project: { id: string; routineStart?: string }; items: { p: ProgramWithWs }[] }) => {
+    let cursor = box.project.routineStart || todayKey;
+    const members: { p: ProgramWithWs; dl: NonNullable<ProgramWithWs['deadlines']>[number] }[] = [];
+    box.items.forEach(({ p }) => (p.deadlines ?? []).forEach(dl => { if (dl.projectId === box.project.id) members.push({ p, dl }); }));
+    members.sort((a, b) => (a.dl.date || '9999').localeCompare(b.dl.date || '9999'));
+    const byProg = new Map<string, { p: ProgramWithWs; map: Map<string, NonNullable<ProgramWithWs['deadlines']>[number]> }>();
+    members.forEach(({ p, dl }) => {
+      const dlStart = cursor;
+      let end = cursor;
+      const newTodos = (dl.todos ?? []).map(t => {
+        const dur = Math.max(1, t.durationDays ?? 1);
+        const tStart = cursor;
+        const tEnd = addDaysStr(cursor, dur - 1);
+        cursor = addDaysStr(cursor, dur);
+        end = tEnd;
+        return { ...t, date: tStart, deadline: tEnd };
+      });
+      if ((dl.todos ?? []).length === 0) {
+        const dur = Math.max(1, dl.durationDays ?? 1);
+        end = addDaysStr(cursor, dur - 1);
+        cursor = addDaysStr(cursor, dur);
+      }
+      const newDl = { ...dl, startDate: dlStart, date: end, todos: newTodos };
+      if (!byProg.has(p.id)) byProg.set(p.id, { p, map: new Map() });
+      byProg.get(p.id)!.map.set(dl.id, newDl);
+    });
+    byProg.forEach(({ p, map }) => store.updateProgramInWs(p.wsId, { ...stripWs(p), deadlines: (p.deadlines ?? []).map(d => map.get(d.id) ?? d) }));
+  };
 
   const startEditDeadline = (dl: { id: string; name: string; date: string }) => {
     setEditingDeadlineId(dl.id);
@@ -2034,6 +2091,12 @@ export default function ProgramsPage() {
                                 </div>
                               );
                             })()}
+                            {/* 소요 일수 (프로젝트 박스 안에서만 — 일정 이어붙이기 기준) */}
+                            {inProjectBox && (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }} title="이 데드라인의 대략 소요 일수 (업무가 없을 때 기준)">
+                                <input type="number" min={1} value={dl.durationDays ?? ''} onChange={e => setDeadlineDuration(p, dl.id, e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : undefined)} placeholder="일수" className="w-9 bg-neutral-50 border border-neutral-200 rounded px-1 py-0.5 text-[10px] outline-none focus:border-violet-400" />일
+                              </span>
+                            )}
                             {/* 일정 일괄 미루기 */}
                             {dl.todos.length > 0 && (
                               <div className="relative flex-shrink-0">
@@ -2169,6 +2232,11 @@ export default function ProgramsPage() {
                                     </span>
                                   )}
                                   <span className="flex-1" />
+                                  {inProjectBox && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }} title="이 업무의 대략 소요 일수">
+                                      <input type="number" min={1} value={t.durationDays ?? ''} onChange={e => setTodoDuration(p, dl.id, t.id, e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : undefined)} placeholder="일" className="w-8 bg-neutral-50 border border-neutral-200 rounded px-1 py-0.5 text-[10px] outline-none focus:border-violet-400" />일
+                                    </span>
+                                  )}
                                   <button onClick={() => startEditTodo(t)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-neutral-700 text-[10px] transition-all flex-shrink-0">편집</button>
                                   <button onClick={() => deleteTodo(p, dl.id, t.id)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-red-500 text-xs transition-all flex-shrink-0">×</button>
                                 </li>
@@ -2311,6 +2379,8 @@ export default function ProgramsPage() {
                   <div key={box.key} className="rounded-3xl overflow-hidden" style={{ backgroundColor: '#EAF0FB' }}>
                     <div className="w-full flex items-center gap-3 px-5 py-4">
                       <div onClick={() => toggleAreaCollapsed(box.key)} className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                        {/* 어느 비즈니스의 프로젝트인지 컬러닷으로 표시 */}
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(box.wsId) }} title={store.allWorkspaces.find(w => w.id === box.wsId)?.name} />
                         <span className="text-[12px]" style={{ color: '#5B5BD6' }}>📁</span>
                         <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{box.project.name}</h3>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={box.project.type === 'build' ? { backgroundColor: '#DEE4FF', color: '#5B5BD6' } : { backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>{box.project.type === 'build' ? '기획·개발' : '루틴'}</span>
@@ -2334,6 +2404,10 @@ export default function ProgramsPage() {
                           )}
                         </div>
                       )}
+                      {/* 소요 일수에 맞춰 데드라인·업무 날짜를 순차 배치 */}
+                      <button onClick={e => { e.stopPropagation(); chainProjectSchedule(box); }} className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors" style={{ backgroundColor: '#EEF1FF', color: '#5B5BD6' }} title="소요 일수에 맞춰 이 프로젝트의 업무 일정을 순서대로 이어 배치">
+                        🗓 일정 이어붙이기
+                      </button>
                       <button onClick={() => toggleAreaCollapsed(box.key)} className="flex-shrink-0">
                         <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
@@ -2341,6 +2415,29 @@ export default function ProgramsPage() {
                     {expanded && (
                       <div className="px-3 pb-3 space-y-3">
                         {box.items.map(({ p, idx }) => renderProgramCard(p, idx, box.project.id))}
+                        {/* 프로젝트 안에서 데드라인 추가 (업무 영역 선택) */}
+                        <div className="bg-white border rounded-2xl px-4 py-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                          {projAddFor === box.key ? (
+                            <div className="space-y-2">
+                              <input autoFocus value={projDlName} onChange={e => setProjDlName(e.target.value)} placeholder="데드라인 이름"
+                                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-violet-400" />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <select value={projDlArea} onChange={e => setProjDlArea(e.target.value)} className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-violet-400">
+                                  <option value="">업무 영역 선택</option>
+                                  {areasForWs(box.wsId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                                <input type="date" value={projDlDate} onChange={e => setProjDlDate(e.target.value)} className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-violet-400" />
+                                <span className="inline-flex items-center gap-1 text-xs text-neutral-500">소요 <input type="number" min={1} value={projDlDays} onChange={e => setProjDlDays(e.target.value)} placeholder="일수" className="w-14 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-violet-400" />일</span>
+                              </div>
+                              <div className="flex gap-2 pt-1">
+                                <button onClick={() => addDeadlineToProject(box.wsId, box.project.id)} disabled={!projDlName.trim() || !projDlArea} className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-700 disabled:opacity-30 rounded-lg text-xs text-white transition-colors">추가</button>
+                                <button onClick={() => { setProjAddFor(null); setProjDlName(''); setProjDlDate(''); setProjDlArea(''); setProjDlDays(''); }} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setProjAddFor(box.key); setProjDlName(''); setProjDlDate(getQuarterEndDate(year, quarter)); setProjDlArea(''); setProjDlDays(''); }} className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors">+ 데드라인 추가</button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
