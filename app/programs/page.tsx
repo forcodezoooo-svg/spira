@@ -1759,9 +1759,10 @@ export default function ProgramsPage() {
               ];
               if (filter === '__none__') deadlines = deadlines.filter(dl => !dl.projectId);
               else if (filter) deadlines = deadlines.filter(dl => dl.projectId === filter);
-              // 프로젝트 박스 안에서 이 영역에 해당 데드라인이 없으면 카드 자체를 렌더하지 않음
+              // 프로젝트 박스(특정 프로젝트) 안 여부 — 소요일수 입력/추가 버튼 숨김 등에 사용
               const inProjectBox = !!filter && filter !== '__none__';
-              if (deadlines.length === 0 && inProjectBox) return null;
+              // 필터가 걸린 카드(프로젝트 박스 or 프로젝트 미지정)에서 해당 데드라인이 없으면 카드 자체를 렌더 안 함
+              if (deadlines.length === 0 && filter) return null;
               const isEditing = editingProgramId === p.id;
               const goalDday = p.deadline ? calcDday(p.deadline) : null;
               const area = programArea(p);
@@ -1770,8 +1771,8 @@ export default function ProgramsPage() {
               return (
                 <div key={p.id} id={`prog-${p.id}`} data-teach={idx === 0 ? 'goal-card' : undefined} className={`bg-white border rounded-2xl overflow-hidden transition-all ${isOff ? 'border-neutral-200 opacity-60' : 'border-neutral-200'} ${highlightProg === p.id ? 'ring-2 ring-violet-500 ring-offset-2' : ''}`}>
                   <div className="h-1" style={{ backgroundColor: isOff ? '#d4d4d4' : businessColor(p.wsId) }} />
-                  {/* 프로젝트 박스 안에서는 이 데드라인들이 어느 업무 영역인지 라벨 표시 */}
-                  {inProjectBox && area && (
+                  {/* 어느 업무 영역인지 라벨 표시 (프로젝트 박스 안 + 프로젝트 미지정 낱개 카드) */}
+                  {filter && area && (
                     <div className="flex items-center gap-1.5 px-4 pt-2.5">
                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: area.color }} />
                       <span className="text-[11px] font-bold" style={{ color: '#5B6560' }}>{area.name}</span>
@@ -2288,64 +2289,6 @@ export default function ProgramsPage() {
               );
           };
 
-          // 업무 영역 접이식 박스 하나를 렌더 (업무영역 > 데드라인 > 업무)
-          const renderAreaSection = (sec: (typeof areaSections)[number]) => {
-                const expanded = expandedAreas.has(sec.key);
-                // 이 영역의 '이번 분기' 데드라인 중 '프로젝트 미지정'만 (프로젝트에 배정된 건 프로젝트 박스에서 표시)
-                const secDeadlines = sec.items
-                  .flatMap(({ p }) => dlInQuarter(p, year, quarter).map(dl => ({ dl, p })))
-                  .filter(({ dl }) => !dl.projectId);
-                return (
-                  <div key={sec.key} className="rounded-3xl overflow-hidden" style={{ backgroundColor: '#F1F1EB' }}>
-                    <div className="w-full flex items-center gap-3 px-5 py-4">
-                      <div onClick={() => toggleAreaCollapsed(sec.key)} className="flex flex-col gap-1 flex-1 min-w-0 cursor-pointer">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{sec.name}</h3>
-                          <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#E1E1DA', color: '#5B6560' }}>{secDeadlines.length}</span>
-                        </div>
-                      </div>
-                      {sec.key !== NONE && !filterWsId && (
-                        <div className="flex items-center flex-shrink-0">
-                          <button onClick={() => store.moveArea(sec.name, -1)} className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-neutral-700 transition-colors" title="영역 위로">
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          </button>
-                          <button onClick={() => store.moveArea(sec.name, 1)} className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-neutral-700 transition-colors" title="영역 아래로">
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          </button>
-                        </div>
-                      )}
-                      <button onClick={() => toggleAreaCollapsed(sec.key)} className="flex-shrink-0">
-                        <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      </button>
-                    </div>
-                    {/* 접힌 상태에서도 이번 분기 데드라인을 텍스트로 미리보기 */}
-                    {!expanded && secDeadlines.length > 0 && (
-                      <div onClick={() => toggleAreaCollapsed(sec.key)} className="px-3 pb-3 cursor-pointer">
-                        <div className="rounded-2xl px-4 py-3 flex flex-wrap gap-x-4 gap-y-2" style={{ backgroundColor: 'rgba(255,255,255,0.6)' }}>
-                          {secDeadlines.map(({ dl, p }) => {
-                            const done = (dl.todos ?? []).filter(t => t.done).length;
-                            const off = dl.enabled === false;
-                            return (
-                              <span key={dl.id} className="inline-flex items-center gap-1.5 text-[13px]" style={{ color: off ? '#9AA39D' : '#44514B' }}>
-                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
-                                <span className={`truncate max-w-[220px] ${off ? 'line-through' : ''}`}>{dl.name}</span>
-                                {dl.date && <span className="text-[12px] tabular-nums" style={{ color: '#9AA39D' }}>{dl.date.slice(5).replace('-', '.')}</span>}
-                                {(dl.todos?.length ?? 0) > 0 && <span className="text-[12px] tabular-nums" style={{ color: '#9AA39D' }}>{done}/{dl.todos.length}</span>}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {expanded && (
-                      <div className="px-3 pb-3 space-y-3">
-                        {sec.items.map(({ p, idx }) => renderProgramCard(p, idx, '__none__'))}
-                      </div>
-                    )}
-                  </div>
-                );
-          };
-
           // ── 프로젝트 박스: (사업 × 프로젝트)별로, 그 프로젝트에 배정된 데드라인을 가진 프로그램들을 묶는다 ──
           const projBoxes = (() => {
             const inQ = (p: (typeof quarterPrograms)[number]) => {
@@ -2443,8 +2386,10 @@ export default function ProgramsPage() {
                   </div>
                 );
               })}
-              {/* 업무 영역 박스 (프로젝트 미지정 데드라인) */}
-              {areaSections.map(renderAreaSection)}
+              {/* 프로젝트에 들어가지 않은 데드라인들 — 업무 영역 박스 없이 낱개 카드로 바깥에 표시 */}
+              {quarterPrograms
+                .filter(p => programArea(p)) // 미분류(업무 영역 없음) 제외
+                .map((p, idx) => renderProgramCard(p, idx, '__none__'))}
             </div>
           );
         })()}
