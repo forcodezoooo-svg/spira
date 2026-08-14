@@ -1022,7 +1022,7 @@ export default function ProgramsPage() {
   // ── 우측 캘린더 데이터 ────────────────────────────────────────────────────────
   const dstr = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   // 선택한 단계(목표/데드라인/업무)에 따라 기간 막대 생성. ghost = 상위 카테고리 일정(50%)
-  type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; ghost?: boolean };
+  type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; ghost?: boolean; readOnly?: boolean };
   // 목표/데드라인 기간 계산 헬퍼
   const progPeriod = (p: (typeof quarterPrograms)[number]) => {
     const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
@@ -1044,16 +1044,30 @@ export default function ProgramsPage() {
   const buildCalRanges = (): CalRange[] => {
     const real: CalRange[] = [];
     const ghosts: CalRange[] = [];
+    // ── 프로젝트 레벨: (사업×프로젝트)별로 소속 데드라인들의 전체 기간을 막대로 (읽기 전용 개요) ──
+    if (calLevel === 'program') {
+      const map = new Map<string, { wsId: string; name: string; programId: string; start: string; end: string }>();
+      for (const p of quarterPrograms) {
+        for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false)) {
+          if (!dl.projectId || !dl.date) continue;
+          const proj = resolveProject(p.wsId, dl.projectId);
+          if (!proj) continue;
+          const dp = dlPeriod(p, dl);
+          if (!dp) continue;
+          const key = `proj-${p.wsId}-${dl.projectId}`;
+          const cur = map.get(key);
+          if (!cur) map.set(key, { wsId: p.wsId, name: proj.name, programId: p.id, start: dp.start, end: dp.end });
+          else { if (dp.start < cur.start) cur.start = dp.start; if (dp.end > cur.end) cur.end = dp.end; }
+        }
+      }
+      map.forEach((v, key) => real.push({ key, level: 'program', start: v.start, end: v.end, name: v.name, wsId: v.wsId, programId: v.programId, color: businessColor(v.wsId), readOnly: true }));
+      return [...ghosts, ...real];
+    }
     for (const p of quarterPrograms) {
       const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
       // 캘린더 색은 오직 비즈니스(워크스페이스) 색으로만 구분
       const pColor = businessColor(p.wsId);
-      if (calLevel === 'program') {
-        const pp = progPeriod(p);
-        // 업무 영역 레벨: 막대 라벨은 업무 영역 이름(디자인/개발/기획…)으로
-        const areaName = programArea(p)?.name ?? p.name ?? '미분류';
-        if (pp) real.push({ key: `p-${p.id}`, level: 'program', ...pp, name: areaName, wsId: p.wsId, programId: p.id, color: pColor });
-      } else if (calLevel === 'deadline') {
+      if (calLevel === 'deadline') {
         // 데드라인 보기: 상위 라인 없이 소속 목표 색으로만 구분
         for (const dl of dls) {
           const dp = dlPeriod(p, dl);
@@ -1173,7 +1187,7 @@ export default function ProgramsPage() {
 
         {/* 3단계 보기 탭 */}
         <div className="flex gap-1 mb-5 rounded-full p-1" style={{ backgroundColor: '#F1F1EB' }}>
-          {([['program', '업무 영역'], ['deadline', '데드라인'], ['todo', '업무']] as [CalLevel, string][]).map(([lv, label]) => (
+          {([['program', '프로젝트'], ['deadline', '데드라인'], ['todo', '업무']] as [CalLevel, string][]).map(([lv, label]) => (
             <button
               key={lv}
               onClick={() => setCalLevel(lv)}
@@ -1317,16 +1331,16 @@ export default function ProgramsPage() {
                         key={`${li}-${bi}`}
                         data-cal-bar={b.r.key}
                         style={{ gridColumn: `${b.sc + 1} / ${b.ec + 2}`, gridRow: li + 1 }}
-                        className={`group/bar relative flex flex-col justify-start min-w-0 cursor-grab active:cursor-grabbing select-none ${dragging ? 'opacity-90' : ''}`}
-                        onMouseDown={e => startCalDrag(b.r, 'move', e)}
-                        title={`${b.r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
+                        className={`group/bar relative flex flex-col justify-start min-w-0 select-none ${b.r.readOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${dragging ? 'opacity-90' : ''}`}
+                        onMouseDown={b.r.readOnly ? undefined : e => startCalDrag(b.r, 'move', e)}
+                        title={b.r.readOnly ? `${b.r.name} (프로젝트 기간 개요)` : `${b.r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
                       >
                         {/* 클릭한 업무 강조 하이라이트 */}
                         {hot && <span className="absolute -inset-x-1.5 -top-1 -bottom-1 rounded-lg animate-pulse pointer-events-none z-0" style={{ backgroundColor: b.r.color, opacity: 0.2, boxShadow: `0 0 0 2px ${b.r.color}` }} />}
                         {/* 얇은 기간 라인 */}
                         <div className="relative h-[3px] mt-2.5 rounded-full" style={{ backgroundColor: b.r.color, opacity: dragging || hot ? 1 : 0.9 }}>
                           {/* 시작 그립 (드래그로 시작일 조절) */}
-                          {b.startsHere && (
+                          {!b.r.readOnly && b.startsHere && (
                             <div
                               onMouseDown={e => startCalDrag(b.r, 'resize-start', e)}
                               className="absolute -left-2 -top-2 w-4 h-[17px] flex items-center justify-center cursor-ew-resize z-20"
@@ -1336,7 +1350,7 @@ export default function ProgramsPage() {
                             </div>
                           )}
                           {/* 끝 그립 (드래그로 기간 연장/단축) */}
-                          {b.endsHere && (
+                          {!b.r.readOnly && b.endsHere && (
                             <div
                               onMouseDown={e => startCalDrag(b.r, 'resize-end', e)}
                               className="absolute -right-2 -top-2 w-4 h-[17px] flex items-center justify-center cursor-ew-resize z-20"
@@ -1349,7 +1363,7 @@ export default function ProgramsPage() {
                         {/* 라벨 (라인 아래, 중앙) */}
                         <span className={`relative z-10 mt-1.5 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: hot ? '#16211E' : '#7A857E' }}>{b.r.name}</span>
                         {/* X 삭제 — 호버 시 가운데 위에 표시 (양끝 그립과 겹치지 않게) */}
-                        {b.endsHere && (
+                        {!b.r.readOnly && b.endsHere && (
                           <button
                             onMouseDown={e => e.stopPropagation()}
                             onClick={e => { e.stopPropagation(); clearOneSchedule(b.r); }}
