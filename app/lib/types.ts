@@ -48,6 +48,7 @@ export interface Project {
   color?: string;
   goal?: string;    // 프로젝트 목표/설명
   order?: number;
+  workAreaIds?: string[]; // 이 프로젝트에 포함된 업무 영역(plan.workAreas[].id) 목록 — Goals 그룹핑의 기준
 }
 
 export interface PlanData {

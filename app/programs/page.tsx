@@ -469,6 +469,10 @@ export default function ProgramsPage() {
     ? [...(store.allWorkspacesEntries.find(e => e.workspace.id === projectWsId)?.plan.projects ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     : [];
   const projectFilterId = projectWsId ? selectedProjectId : null; // 포커스 사업이 없으면 프로젝트 필터 무시
+  // 선택된 프로젝트에 포함된 업무 영역 id 집합 (필터·그룹핑 기준)
+  const projFilterAreaIds = projectFilterId ? (projectsForWs.find(p => p.id === projectFilterId)?.workAreaIds ?? []) : null;
+  // 업무 영역(workAreaId)이 속한 프로젝트 찾기
+  const projectOfArea = (workAreaId?: string) => workAreaId ? (projectsForWs.find(pr => (pr.workAreaIds ?? []).includes(workAreaId)) ?? null) : null;
   // 사업별 컬러: Plan에서 설정한 고유 컬러 우선, 없으면 순서 기반 팔레트
   const businessColor = (id: string) => {
     const ws = businesses.find(b => b.id === id);
@@ -567,7 +571,7 @@ export default function ProgramsPage() {
       return d.getFullYear() === y && Math.floor(d.getMonth() / 3) + 1 === q;
     });
   const quarterPrograms = applyWsFilter(allContainers())
-    .filter(p => !projectFilterId || (p.projectId ?? null) === projectFilterId);
+    .filter(p => !projFilterAreaIds || projFilterAreaIds.includes(p.workAreaId ?? ''));
   const countByQuarter = (q: number) =>
     applyWsFilter(allContainers()).reduce((s, p) => s + dlInQuarter(p, year, q).length, 0);
 
@@ -698,10 +702,14 @@ export default function ProgramsPage() {
       quarters: [qKey(year, quarter)],
       order: nextOrder(),
       workAreaId: newProgramAreaId || undefined,
-      projectId: (projectWsId === targetWs ? projectFilterId : null) || undefined, // 선택된 프로젝트에 배정
       revenueSource: newProgramSource || undefined,
       deadlines: [],
     });
+    // 특정 프로젝트가 선택된 상태로 영역을 추가하면 그 프로젝트에 포함
+    if (projectFilterId && newProgramAreaId && projectWsId === targetWs) {
+      const pr = projectsForWs.find(p => p.id === projectFilterId);
+      if (pr && !(pr.workAreaIds ?? []).includes(newProgramAreaId)) store.updateProject(targetWs, pr.id, { workAreaIds: [...(pr.workAreaIds ?? []), newProgramAreaId] });
+    }
     setNewProgramName('');
     setNewProgramAreaId('');
     setNewProgramSource('');
@@ -716,9 +724,14 @@ export default function ProgramsPage() {
     setNewProjectName('');
     setAddingProject(false);
   };
-  // 영역 섹션의 프로그램(들)을 특정 프로젝트로 배정 (미지정 = null)
-  const assignSectionProject = (items: { p: ProgramWithWs }[], projectId: string | null) => {
-    items.forEach(({ p }) => store.updateProgramInWs(p.wsId, { ...stripWs(p), projectId: projectId ?? undefined }));
+  // 업무 영역(workAreaId)을 특정 프로젝트에 배정 (미지정 = null) — 프로젝트의 workAreaIds를 갱신
+  const assignAreaToProject = (workAreaId: string | undefined, projectId: string | null) => {
+    if (!projectWsId || !workAreaId) return;
+    projectsForWs.forEach(pr => {
+      const has = (pr.workAreaIds ?? []).includes(workAreaId);
+      if (projectId === pr.id && !has) store.updateProject(projectWsId, pr.id, { workAreaIds: [...(pr.workAreaIds ?? []), workAreaId] });
+      else if (projectId !== pr.id && has) store.updateProject(projectWsId, pr.id, { workAreaIds: (pr.workAreaIds ?? []).filter(x => x !== workAreaId) });
+    });
     setProjMenuFor(null);
   };
 
@@ -2199,10 +2212,8 @@ export default function ProgramsPage() {
               );
           };
 
-          // 항상 업무 영역별 접이식 박스로 렌더 (업무영역 > 데드라인 > 업무)
-          return (
-            <div className="space-y-3">
-              {areaSections.map(sec => {
+          // 업무 영역 접이식 박스 하나를 렌더 (업무영역 > 데드라인 > 업무)
+          const renderAreaSection = (sec: (typeof areaSections)[number]) => {
                 const expanded = expandedAreas.has(sec.key);
                 // 이 영역의 '이번 분기' 데드라인들 (컨테이너의 데드라인을 분기로 필터)
                 const secDeadlines = sec.items.flatMap(({ p }) => dlInQuarter(p, year, quarter).map(dl => ({ dl, p })));
@@ -2227,8 +2238,9 @@ export default function ProgramsPage() {
                       )}
                       {/* 프로젝트 배정 (포커스된 사업 + 미분류 아닌 영역) */}
                       {projectWsId && sec.key !== NONE && (() => {
-                        const curPid = sec.items[0]?.p.projectId ?? null;
-                        const curProj = projectsForWs.find(pr => pr.id === curPid);
+                        const areaId = sec.items[0]?.p.workAreaId;
+                        const curProj = projectOfArea(areaId);
+                        const curPid = curProj?.id ?? null;
                         return (
                           <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                             <button
@@ -2244,10 +2256,10 @@ export default function ProgramsPage() {
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setProjMenuFor(null)} />
                                 <div className="absolute right-0 top-full mt-1 w-40 bg-white border rounded-xl py-1 z-20" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
-                                  <button onClick={() => assignSectionProject(sec.items, null)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: curPid === null ? '#16211E' : '#5B6560', fontWeight: curPid === null ? 700 : 400 }}>미지정</button>
-                                  {projectsForWs.length === 0 && <p className="px-3 py-1.5 text-[11px] text-neutral-400">프로젝트를 먼저 만들어보세요</p>}
+                                  <button onClick={() => assignAreaToProject(areaId, null)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: curPid === null ? '#16211E' : '#5B6560', fontWeight: curPid === null ? 700 : 400 }}>미지정</button>
+                                  {projectsForWs.length === 0 && <p className="px-3 py-1.5 text-[11px] text-neutral-400">Plan에서 프로젝트를 먼저 만들어보세요</p>}
                                   {projectsForWs.map(pr => (
-                                    <button key={pr.id} onClick={() => assignSectionProject(sec.items, pr.id)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: curPid === pr.id ? '#16211E' : '#5B6560', fontWeight: curPid === pr.id ? 700 : 400 }}>{pr.name}</button>
+                                    <button key={pr.id} onClick={() => assignAreaToProject(areaId, pr.id)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: curPid === pr.id ? '#16211E' : '#5B6560', fontWeight: curPid === pr.id ? 700 : 400 }}>{pr.name}</button>
                                   ))}
                                 </div>
                               </>
@@ -2285,7 +2297,37 @@ export default function ProgramsPage() {
                     )}
                   </div>
                 );
-              })}
+          };
+
+          // 프로젝트별 그룹핑 (포커스 사업 O): 각 프로젝트를 카테고리로, 미지정은 마지막. (포커스 사업 X): 평면.
+          const projGroups: { project: (typeof projectsForWs)[number] | null; sections: typeof areaSections }[] = projectWsId
+            ? [
+                ...projectsForWs
+                  .filter(pr => !projectFilterId || pr.id === projectFilterId)
+                  .map(pr => ({ project: pr as (typeof projectsForWs)[number] | null, sections: areaSections.filter(s => s.key !== NONE && (pr.workAreaIds ?? []).includes(s.items[0]?.p.workAreaId ?? '')) })),
+                ...(projectFilterId ? [] : [{ project: null, sections: areaSections.filter(s => s.key === NONE || !projectOfArea(s.items[0]?.p.workAreaId)) }]),
+              ]
+            : [{ project: null, sections: areaSections }];
+
+          return (
+            <div className="space-y-6">
+              {projGroups.map(group => (
+                <div key={group.project?.id ?? '__none__'}>
+                  {projectWsId && group.project && (
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <span className="text-[14px] font-black" style={{ color: '#16211E' }}>{group.project.name}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={group.project.type === 'build' ? { backgroundColor: '#EEF1FF', color: '#5B5BD6' } : { backgroundColor: '#EAF7DD', color: '#3E6B1F' }}>{group.project.type === 'build' ? '기획·개발' : '루틴'}</span>
+                      <span className="text-[11px]" style={{ color: '#9AA39D' }}>{group.sections.length}개 영역</span>
+                    </div>
+                  )}
+                  {projectWsId && !group.project && group.sections.length > 0 && projectsForWs.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2 px-1"><span className="text-[13px] font-bold" style={{ color: '#9AA39D' }}>프로젝트 미지정</span></div>
+                  )}
+                  {group.sections.length === 0
+                    ? (projectWsId && group.project ? <p className="text-[12px] px-1 pb-1" style={{ color: '#B4BBB4' }}>이 프로젝트에 배정된 업무 영역이 없어요. 영역 헤더의 ‘프로젝트 지정’으로 넣어보세요.</p> : null)
+                    : <div className="space-y-3">{group.sections.map(renderAreaSection)}</div>}
+                </div>
+              ))}
             </div>
           );
         })()}

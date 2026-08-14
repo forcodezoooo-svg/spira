@@ -1127,10 +1127,11 @@ const PROJECT_TYPES: { key: ProjectType; label: string; desc: string }[] = [
 ];
 
 function ProjectsSection({
-  projects, onAdd, onUpdate, onRemove,
+  projects, workAreas, onAdd, onUpdate, onRemove,
 }: {
   projects: Project[];
-  onAdd: (name: string, type: ProjectType, goal: string) => void;
+  workAreas: WorkArea[];
+  onAdd: (data: { name: string; type: ProjectType; goal: string; workAreaIds: string[] }) => void;
   onUpdate: (id: string, patch: Partial<Project>) => void;
   onRemove: (id: string) => void;
 }) {
@@ -1139,11 +1140,14 @@ function ProjectsSection({
   const [name, setName] = useState('');
   const [type, setType] = useState<ProjectType>('routine');
   const [goal, setGoal] = useState('');
+  const [areaIds, setAreaIds] = useState<string[]>([]);
 
-  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setAdding(true); setEditingId(null); };
-  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setEditingId(p.id); setAdding(false); };
-  const saveAdd = () => { if (!name.trim()) return; onAdd(name.trim(), type, goal.trim()); setAdding(false); };
-  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim() }); setEditingId(null); };
+  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setAreaIds([]); setAdding(true); setEditingId(null); };
+  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setAreaIds(p.workAreaIds ?? []); setEditingId(p.id); setAdding(false); };
+  const saveAdd = () => { if (!name.trim()) return; onAdd({ name: name.trim(), type, goal: goal.trim(), workAreaIds: areaIds }); setAdding(false); };
+  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim(), workAreaIds: areaIds }); setEditingId(null); };
+  const toggleArea = (id: string) => setAreaIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const areaNames = (ids?: string[]) => (ids ?? []).map(id => workAreas.find(w => w.id === id)?.name).filter(Boolean);
 
   const form = (onSave: () => void, onCancel: () => void, isAdd: boolean) => (
     <div className="space-y-2.5">
@@ -1169,6 +1173,26 @@ function ProjectsSection({
         value={goal}
         onChange={e => setGoal(e.target.value)}
       />
+      {/* 포함할 업무 영역 선택 (Goals에서 이 프로젝트로 묶임) */}
+      <div>
+        <label className="text-[11px] font-medium text-neutral-400 block mb-1">포함할 업무 영역 <span className="text-neutral-300">(Goals에서 이 프로젝트로 묶여요)</span></label>
+        {workAreas.length === 0 ? (
+          <p className="text-[11px] text-neutral-400">먼저 아래 ‘업무 영역’을 추가하면 여기서 선택할 수 있어요.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {workAreas.map(w => {
+              const on = areaIds.includes(w.id);
+              return (
+                <button key={w.id} onClick={() => toggleArea(w.id)}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${on ? 'border-violet-400 bg-violet-50 text-violet-700 font-semibold' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'}`}>
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: w.color }} />
+                  {w.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
       <div className="flex gap-3 pt-1 border-t border-neutral-100">
         <button onClick={onSave} className="text-xs text-neutral-700 hover:text-neutral-900 font-medium transition-colors">{isAdd ? '추가' : '저장'}</button>
         <button onClick={onCancel} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
@@ -1198,6 +1222,13 @@ function ProjectsSection({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-neutral-800 leading-relaxed">{p.name}</p>
                   {p.goal && <p className="text-xs text-neutral-400 leading-relaxed mt-0.5 whitespace-pre-wrap">{p.goal}</p>}
+                  {areaNames(p.workAreaIds).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {areaNames(p.workAreaIds).map(n => (
+                        <span key={n} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#F1F1EB', color: '#5B6560' }}>{n}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <button onClick={() => startEdit(p)} className="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/proj:opacity-100 mt-0.5">수정</button>
               </div>
@@ -1749,8 +1780,8 @@ export default function PlanPage() {
 
   // 업무 영역
   // 프로젝트 CRUD — Plan의 로컬 plan 상태와 동기화되도록 update() 사용 (Goals와 같은 plan.projects)
-  const addProjectItem = (name: string, type: ProjectType, goal: string) =>
-    update({ projects: [...(plan.projects ?? []), { id: uid(), name, type, goal, order: (plan.projects ?? []).length }] });
+  const addProjectItem = (data: { name: string; type: ProjectType; goal: string; workAreaIds: string[] }) =>
+    update({ projects: [...(plan.projects ?? []), { id: uid(), ...data, order: (plan.projects ?? []).length }] });
   const updateProjectItem = (id: string, patch: Partial<Project>) =>
     update({ projects: (plan.projects ?? []).map(x => x.id === id ? { ...x, ...patch } : x) });
   const removeProjectItem = (id: string) => {
@@ -2015,6 +2046,7 @@ export default function PlanPage() {
 
         <ProjectsSection
           projects={plan.projects ?? []}
+          workAreas={plan.workAreas ?? []}
           onAdd={addProjectItem}
           onUpdate={updateProjectItem}
           onRemove={removeProjectItem}
