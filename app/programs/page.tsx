@@ -332,8 +332,6 @@ export default function ProgramsPage() {
 
   // 사업 필터 (null = 모든 사업)
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
-  // 프로젝트 필터 (null = 전체 프로젝트) — 특정 사업이 선택됐을 때만 노출
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [projMenuFor, setProjMenuFor] = useState<string | null>(null); // 프로젝트 배정 메뉴가 열린 영역 섹션 key
@@ -468,8 +466,9 @@ export default function ProgramsPage() {
   const projectsForWs = projectWsId
     ? [...(store.allWorkspacesEntries.find(e => e.workspace.id === projectWsId)?.plan.projects ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     : [];
-  const projectFilterId = projectWsId ? selectedProjectId : null; // 포커스 사업이 없으면 프로젝트 필터 무시
-  const projectById = (id?: string) => id ? (projectsForWs.find(p => p.id === id) ?? null) : null;
+  // 사업별 프로젝트 해석 (프로젝트 박스/데드라인 칩용) — 포커스와 무관하게 해당 사업 기준
+  const projectsOf = (wsId: string) => [...(store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.plan.projects ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const resolveProject = (wsId: string, id?: string) => id ? (projectsOf(wsId).find(p => p.id === id) ?? null) : null;
   // 사업별 컬러: Plan에서 설정한 고유 컬러 우선, 없으면 순서 기반 팔레트
   const businessColor = (id: string) => {
     const ws = businesses.find(b => b.id === id);
@@ -1412,31 +1411,9 @@ export default function ProgramsPage() {
         </div>
       )}
 
-      {/* ── 프로젝트 탭 (포커스된 사업이 있을 때) ──────────────────────────── */}
+      {/* ── 프로젝트 생성 (포커스된 사업일 때) — 목록의 프로젝트 박스는 아래에서 렌더 ── */}
       {projectWsId && (
         <div className="flex items-center gap-2 flex-wrap mb-4">
-          <span className="text-[12px] font-semibold mr-0.5" style={{ color: '#9AA39D' }}>프로젝트</span>
-          <button
-            onClick={() => setSelectedProjectId(null)}
-            className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors"
-            style={!selectedProjectId ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}
-          >
-            전체
-          </button>
-          {projectsForWs.map(pr => {
-            const sel = selectedProjectId === pr.id;
-            return (
-              <button
-                key={pr.id}
-                onClick={() => setSelectedProjectId(sel ? null : pr.id)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors"
-                style={sel ? { backgroundColor: '#DFF9C4', color: '#16211E' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}
-              >
-                {pr.name}
-                {pr.type && <span className="text-[10px] opacity-70">{pr.type === 'routine' ? '루틴' : '개발'}</span>}
-              </button>
-            );
-          })}
           {addingProject ? (
             <span className="inline-flex items-center gap-1">
               <input
@@ -1449,9 +1426,10 @@ export default function ProgramsPage() {
                 style={{ borderColor: 'var(--spira-border-strong)' }}
               />
               <button onClick={addProjectHandler} disabled={!newProjectName.trim()} className="text-[13px] font-semibold px-2 py-1 text-neutral-700 disabled:opacity-30">추가</button>
+              <button onClick={() => { setAddingProject(false); setNewProjectName(''); }} className="text-[13px] text-neutral-400 px-1">취소</button>
             </span>
           ) : (
-            <button onClick={() => setAddingProject(true)} className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5EA63A', backgroundColor: '#EEF7E4' }}>+ 새 프로젝트</button>
+            <button onClick={() => setAddingProject(true)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5B5BD6', backgroundColor: '#EEF1FF' }}>📁 새 프로젝트</button>
           )}
         </div>
       )}
@@ -1711,15 +1689,21 @@ export default function ProgramsPage() {
             )}
           </div>
         ) : (() => {
-          const renderProgramCard = (p: (typeof quarterPrograms)[number], idx: number) => {
+          // filter: undefined=전체, '__none__'=프로젝트 미지정만, 그 외=해당 projectId만
+          const renderProgramCard = (p: (typeof quarterPrograms)[number], idx: number, filter?: string) => {
               // 이 분기 데드라인 + '미배치(날짜 없음)' 데드라인 — 캘린더에서 일정만 지워도 항목은 목록에 남게.
               // (미배치는 현재 실제 분기 뷰에서만 노출해 탭마다 중복되지 않게)
               const curQ = Math.floor(now.getMonth() / 3) + 1;
               const showUnscheduled = year === now.getFullYear() && quarter === curQ;
-              const deadlines = [
+              let deadlines = [
                 ...dlInQuarter(p, year, quarter).sort((a, b) => (a.date || '').localeCompare(b.date || '')),
                 ...(showUnscheduled ? (p.deadlines ?? []).filter(dl => !dl.date) : []),
               ];
+              if (filter === '__none__') deadlines = deadlines.filter(dl => !dl.projectId);
+              else if (filter) deadlines = deadlines.filter(dl => dl.projectId === filter);
+              // 프로젝트 박스 안에서 이 영역에 해당 데드라인이 없으면 카드 자체를 렌더하지 않음
+              const inProjectBox = !!filter && filter !== '__none__';
+              if (deadlines.length === 0 && inProjectBox) return null;
               const isEditing = editingProgramId === p.id;
               const goalDday = p.deadline ? calcDday(p.deadline) : null;
               const area = programArea(p);
@@ -1728,6 +1712,13 @@ export default function ProgramsPage() {
               return (
                 <div key={p.id} id={`prog-${p.id}`} data-teach={idx === 0 ? 'goal-card' : undefined} className={`bg-white border rounded-2xl overflow-hidden transition-all ${isOff ? 'border-neutral-200 opacity-60' : 'border-neutral-200'} ${highlightProg === p.id ? 'ring-2 ring-violet-500 ring-offset-2' : ''}`}>
                   <div className="h-1" style={{ backgroundColor: isOff ? '#d4d4d4' : businessColor(p.wsId) }} />
+                  {/* 프로젝트 박스 안에서는 이 데드라인들이 어느 업무 영역인지 라벨 표시 */}
+                  {inProjectBox && area && (
+                    <div className="flex items-center gap-1.5 px-4 pt-2.5">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: area.color }} />
+                      <span className="text-[11px] font-bold" style={{ color: '#5B6560' }}>{area.name}</span>
+                    </div>
+                  )}
 
                   {/* (목표 헤더 제거 — 업무영역이 상위 컨테이너이므로 영역 섹션 헤더가 제목 역할) */}
                   <div className="hidden">
@@ -2012,9 +2003,10 @@ export default function ProgramsPage() {
                             >
                               {dlOff ? 'OFF' : 'ON'}
                             </button>
-                            {/* 프로젝트 배정 (포커스된 사업일 때) — 데드라인 단위 */}
-                            {projectWsId && (() => {
-                              const curProj = projectById(dl.projectId);
+                            {/* 프로젝트 배정 — 데드라인 단위 */}
+                            {(() => {
+                              const wsProjects = projectsOf(p.wsId);
+                              const curProj = resolveProject(p.wsId, dl.projectId);
                               const menuKey = `proj-${dl.id}`;
                               return (
                                 <div className="relative flex-shrink-0">
@@ -2031,8 +2023,8 @@ export default function ProgramsPage() {
                                       <div className="fixed inset-0 z-10" onClick={() => setProjMenuFor(null)} />
                                       <div className="absolute right-0 top-full mt-1 w-40 bg-white border rounded-xl py-1 z-20" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
                                         <button onClick={() => assignDeadlineProject(p, dl.id, null)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: !dl.projectId ? '#16211E' : '#5B6560', fontWeight: !dl.projectId ? 700 : 400 }}>미지정</button>
-                                        {projectsForWs.length === 0 && <p className="px-3 py-1.5 text-[11px] text-neutral-400">Plan에서 프로젝트를 먼저 만들어보세요</p>}
-                                        {projectsForWs.map(pr => (
+                                        {wsProjects.length === 0 && <p className="px-3 py-1.5 text-[11px] text-neutral-400">Plan에서 프로젝트를 먼저 만들어보세요</p>}
+                                        {wsProjects.map(pr => (
                                           <button key={pr.id} onClick={() => assignDeadlineProject(p, dl.id, pr.id)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: dl.projectId === pr.id ? '#16211E' : '#5B6560', fontWeight: dl.projectId === pr.id ? 700 : 400 }}>{pr.name}</button>
                                         ))}
                                       </div>
@@ -2195,8 +2187,8 @@ export default function ProgramsPage() {
                       );
                     })}
 
-                    {/* 데드라인 추가 */}
-                    {addDeadlineFor === p.id ? (
+                    {/* 데드라인 추가 (프로젝트 박스 안에서는 숨김 — 영역 박스에서 추가) */}
+                    {inProjectBox ? null : addDeadlineFor === p.id ? (
                       <div className="flex gap-2 items-center">
                         <input
                           autoFocus
@@ -2230,12 +2222,10 @@ export default function ProgramsPage() {
           // 업무 영역 접이식 박스 하나를 렌더 (업무영역 > 데드라인 > 업무)
           const renderAreaSection = (sec: (typeof areaSections)[number]) => {
                 const expanded = expandedAreas.has(sec.key);
-                // 이 영역의 '이번 분기' 데드라인들 (컨테이너의 데드라인을 분기로 필터). 프로젝트 탭 선택 시 그 프로젝트 데드라인만.
+                // 이 영역의 '이번 분기' 데드라인 중 '프로젝트 미지정'만 (프로젝트에 배정된 건 프로젝트 박스에서 표시)
                 const secDeadlines = sec.items
                   .flatMap(({ p }) => dlInQuarter(p, year, quarter).map(dl => ({ dl, p })))
-                  .filter(({ dl }) => !projectFilterId || dl.projectId === projectFilterId);
-                // 프로젝트 필터가 걸렸는데 이 영역에 해당 데드라인이 없으면 영역 자체를 숨김
-                if (projectFilterId && secDeadlines.length === 0) return null;
+                  .filter(({ dl }) => !dl.projectId);
                 return (
                   <div key={sec.key} className="rounded-3xl overflow-hidden" style={{ backgroundColor: '#F1F1EB' }}>
                     <div className="w-full flex items-center gap-3 px-5 py-4">
@@ -2280,16 +2270,65 @@ export default function ProgramsPage() {
                     )}
                     {expanded && (
                       <div className="px-3 pb-3 space-y-3">
-                        {sec.items.map(({ p, idx }) => renderProgramCard(p, idx))}
+                        {sec.items.map(({ p, idx }) => renderProgramCard(p, idx, '__none__'))}
                       </div>
                     )}
                   </div>
                 );
           };
 
-          // 업무 영역별 접이식 박스로 렌더 (프로젝트 탭 선택 시 각 영역의 데드라인이 그 프로젝트로 필터됨)
+          // ── 프로젝트 박스: (사업 × 프로젝트)별로, 그 프로젝트에 배정된 데드라인을 가진 프로그램들을 묶는다 ──
+          const projBoxes = (() => {
+            const inQ = (p: (typeof quarterPrograms)[number]) => {
+              const curQ = Math.floor(now.getMonth() / 3) + 1;
+              const showUnscheduled = year === now.getFullYear() && quarter === curQ;
+              return [...dlInQuarter(p, year, quarter), ...(showUnscheduled ? (p.deadlines ?? []).filter(dl => !dl.date) : [])];
+            };
+            const map = new Map<string, { key: string; project: (typeof projectsForWs)[number]; wsId: string; items: { p: (typeof quarterPrograms)[number]; idx: number }[]; count: number }>();
+            quarterPrograms.forEach((p, idx) => {
+              const byPid = new Map<string, number>();
+              inQ(p).forEach(dl => { if (dl.projectId) byPid.set(dl.projectId, (byPid.get(dl.projectId) ?? 0) + 1); });
+              byPid.forEach((cnt, pid) => {
+                const proj = resolveProject(p.wsId, pid);
+                if (!proj) return;
+                const key = `${p.wsId}::${pid}`;
+                if (!map.has(key)) map.set(key, { key, project: proj, wsId: p.wsId, items: [], count: 0 });
+                const g = map.get(key)!;
+                g.items.push({ p, idx });
+                g.count += cnt;
+              });
+            });
+            return [...map.values()].sort((a, b) => (a.project.order ?? 0) - (b.project.order ?? 0));
+          })();
+
           return (
             <div className="space-y-3">
+              {/* 프로젝트 박스 (업무 영역 박스와 같은 묶음 역할) */}
+              {projBoxes.map(box => {
+                const expanded = expandedAreas.has(box.key);
+                return (
+                  <div key={box.key} className="rounded-3xl overflow-hidden" style={{ backgroundColor: '#EAF0FB' }}>
+                    <div className="w-full flex items-center gap-3 px-5 py-4">
+                      <div onClick={() => toggleAreaCollapsed(box.key)} className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                        <span className="text-[12px]" style={{ color: '#5B5BD6' }}>📁</span>
+                        <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{box.project.name}</h3>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={box.project.type === 'build' ? { backgroundColor: '#DEE4FF', color: '#5B5BD6' } : { backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>{box.project.type === 'build' ? '기획·개발' : '루틴'}</span>
+                        <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#DCE3F5', color: '#5B6560' }}>{box.count}</span>
+                        {businesses.length > 1 && <span className="text-[11px] truncate" style={{ color: '#9AA39D' }}>· {store.allWorkspaces.find(w => w.id === box.wsId)?.name}</span>}
+                      </div>
+                      <button onClick={() => toggleAreaCollapsed(box.key)} className="flex-shrink-0">
+                        <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div className="px-3 pb-3 space-y-3">
+                        {box.items.map(({ p, idx }) => renderProgramCard(p, idx, box.project.id))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* 업무 영역 박스 (프로젝트 미지정 데드라인) */}
               {areaSections.map(renderAreaSection)}
             </div>
           );
