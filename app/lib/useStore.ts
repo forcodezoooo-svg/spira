@@ -372,12 +372,18 @@ export function useStore() {
     updateWorkspace(wsId, e => ({ ...e, plan: { ...e.plan, projects: [...(e.plan.projects ?? []), { ...p, id: uid() }] } }));
   const updateProject = (wsId: string, id: string, patch: Partial<Project>) =>
     updateWorkspace(wsId, e => ({ ...e, plan: { ...e.plan, projects: (e.plan.projects ?? []).map(x => x.id === id ? { ...x, ...patch } : x) } }));
-  // 프로젝트 삭제 — 소속 업무 영역(프로그램)은 유지하되 미지정으로 되돌린다.
+  // 프로젝트 삭제 — 소속 데드라인은 유지하되 미지정으로 되돌린다.
   const removeProject = (wsId: string, id: string) =>
     updateWorkspace(wsId, e => ({
       ...e,
       plan: { ...e.plan, projects: (e.plan.projects ?? []).filter(x => x.id !== id) },
-      programs: e.programs.map(pr => pr.projectId === id ? { ...pr, projectId: undefined } : pr),
+      programs: e.programs.map(pr => ({ ...pr, deadlines: (pr.deadlines ?? []).map(d => d.projectId === id ? { ...d, projectId: undefined } : d) })),
+    }));
+  // 데드라인을 프로젝트에 배정/해제 (projectId undefined = 미지정)
+  const setDeadlineProject = (wsId: string, programId: string, deadlineId: string, projectId?: string) =>
+    updateWorkspace(wsId, e => ({
+      ...e,
+      programs: e.programs.map(pr => pr.id !== programId ? pr : { ...pr, deadlines: (pr.deadlines ?? []).map(d => d.id !== deadlineId ? d : { ...d, projectId }) }),
     }));
 
   const setWorkspace = (workspace: Workspace) =>
@@ -654,7 +660,7 @@ export function useStore() {
     addRoutineSystem, updateRoutineSystem, deleteRoutineSystem,
     addRoutineToWs, updateRoutineInWs, deleteRoutineInWs,
     updatePlanInWs,
-    addProject, updateProject, removeProject,
+    addProject, updateProject, removeProject, setDeadlineProject,
     todayRoutines, toggleTask, isCompleted,
     addResource, deleteResource, deleteResourceInWs,
     addSubscription, deleteSubscription, updateSubscription, deleteSubscriptionInWs, updateSubscriptionInWs,

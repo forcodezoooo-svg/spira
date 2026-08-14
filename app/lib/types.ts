@@ -48,7 +48,8 @@ export interface Project {
   color?: string;
   goal?: string;    // 프로젝트 목표/설명
   order?: number;
-  workAreaIds?: string[]; // 이 프로젝트에 포함된 업무 영역(plan.workAreas[].id) 목록 — Goals 그룹핑의 기준
+  // 멤버십은 데드라인 단위: 각 데드라인(ProgramDeadline)이 projectId로 이 프로젝트에 속함.
+  // (프로젝트 = 여러 업무 영역의 데드라인을 묶는 '일의 순서/루틴')
 }
 
 export interface PlanData {
@@ -108,6 +109,7 @@ export interface ProgramDeadline {
   done?: boolean;        // 데드라인 완료(끝내기) 여부 — 완료 시 여정 깃발 증정
   doneAt?: string;       // 완료 시각 ISO
   totalSeconds?: number; // 완료 시점까지 이 데드라인 할일들에 기록된 총 소요시간(초)
+  projectId?: string;    // 소속 프로젝트 (plan.projects[].id) — 프로젝트별 그룹핑/필터의 기준
 }
 
 export interface Program {
