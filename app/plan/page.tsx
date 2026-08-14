@@ -1748,13 +1748,17 @@ export default function PlanPage() {
   };
 
   // 업무 영역
-  // 프로젝트 CRUD — Goals와 같은 plan.projects. 삭제는 store로(소속 업무 영역을 미지정으로 되돌림)
+  // 프로젝트 CRUD — Plan의 로컬 plan 상태와 동기화되도록 update() 사용 (Goals와 같은 plan.projects)
   const addProjectItem = (name: string, type: ProjectType, goal: string) =>
-    store.addProject(selectedWsId, { name, type, goal, order: (plan.projects ?? []).length });
+    update({ projects: [...(plan.projects ?? []), { id: uid(), name, type, goal, order: (plan.projects ?? []).length }] });
   const updateProjectItem = (id: string, patch: Partial<Project>) =>
-    store.updateProject(selectedWsId, id, patch);
-  const removeProjectItem = (id: string) =>
-    store.removeProject(selectedWsId, id);
+    update({ projects: (plan.projects ?? []).map(x => x.id === id ? { ...x, ...patch } : x) });
+  const removeProjectItem = (id: string) => {
+    update({ projects: (plan.projects ?? []).filter(x => x.id !== id) });
+    // 소속 업무 영역(프로그램)은 유지하되 미지정으로 되돌림 (programs는 plan과 별개라 store로 처리)
+    const entry = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    entry?.programs.forEach(pr => { if (pr.projectId === id) store.updateProgramInWs(selectedWsId, { ...pr, projectId: undefined }); });
+  };
 
   const addWorkArea = (a: WorkArea) =>
     update({ workAreas: [...(plan.workAreas ?? []), a] });
