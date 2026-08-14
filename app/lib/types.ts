@@ -48,6 +48,8 @@ export interface Project {
   color?: string;
   goal?: string;    // 프로젝트 목표/설명
   order?: number;
+  routineStart?: string; // 루틴형 프로젝트의 반복 기간 시작일 (YYYY-MM-DD)
+  routineEnd?: string;   // 루틴형 프로젝트의 반복 기간 종료일 (YYYY-MM-DD)
   // 멤버십은 데드라인 단위: 각 데드라인(ProgramDeadline)이 projectId로 이 프로젝트에 속함.
   // (프로젝트 = 여러 업무 영역의 데드라인을 묶는 '일의 순서/루틴')
 }

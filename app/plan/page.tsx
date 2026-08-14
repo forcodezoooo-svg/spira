@@ -1134,7 +1134,7 @@ function ProjectsSection({
 }: {
   projects: Project[];
   deadlines: PlanDeadlineRef[];
-  onAdd: (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[] }) => void;
+  onAdd: (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineStart?: string; routineEnd?: string }) => void;
   onUpdate: (id: string, patch: Partial<Project>) => void;
   onRemove: (id: string) => void;
   onAssign: (projectId: string, deadlineId: string, programId: string, on: boolean) => void;
@@ -1144,17 +1144,19 @@ function ProjectsSection({
   const [name, setName] = useState('');
   const [type, setType] = useState<ProjectType>('routine');
   const [goal, setGoal] = useState('');
+  const [rStart, setRStart] = useState('');
+  const [rEnd, setREnd] = useState('');
   const [picked, setPicked] = useState<string[]>([]); // 추가 모드에서 고른 deadlineId 목록
 
-  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setPicked([]); setAdding(true); setEditingId(null); };
-  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setEditingId(p.id); setAdding(false); };
+  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setRStart(''); setREnd(''); setPicked([]); setAdding(true); setEditingId(null); };
+  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setRStart(p.routineStart ?? ''); setREnd(p.routineEnd ?? ''); setEditingId(p.id); setAdding(false); };
   const saveAdd = () => {
     if (!name.trim()) return;
     const members = deadlines.filter(d => picked.includes(d.deadlineId)).map(d => ({ deadlineId: d.deadlineId, programId: d.programId }));
-    onAdd({ name: name.trim(), type, goal: goal.trim(), members });
+    onAdd({ name: name.trim(), type, goal: goal.trim(), members, routineStart: type === 'routine' ? (rStart || undefined) : undefined, routineEnd: type === 'routine' ? (rEnd || undefined) : undefined });
     setAdding(false);
   };
-  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim() }); setEditingId(null); };
+  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim(), routineStart: type === 'routine' ? (rStart || undefined) : undefined, routineEnd: type === 'routine' ? (rEnd || undefined) : undefined }); setEditingId(null); };
 
   // 데드라인 목록을 업무 영역별로 그룹
   const grouped = (() => {
@@ -1229,6 +1231,17 @@ function ProjectsSection({
         value={goal}
         onChange={e => setGoal(e.target.value)}
       />
+      {/* 루틴형: 반복 기간 */}
+      {type === 'routine' && (
+        <div>
+          <label className="text-[11px] font-medium text-neutral-400 block mb-1">루틴 반복 기간</label>
+          <div className="flex items-center gap-2">
+            <input type="date" value={rStart} onChange={e => setRStart(e.target.value)} className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm text-neutral-900 outline-none focus:border-violet-400" />
+            <span className="text-neutral-400 text-xs">~</span>
+            <input type="date" value={rEnd} onChange={e => setREnd(e.target.value)} className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm text-neutral-900 outline-none focus:border-violet-400" />
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -1265,7 +1278,12 @@ function ProjectsSection({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-neutral-800 leading-relaxed">{p.name}</p>
                   {p.goal && <p className="text-xs text-neutral-400 leading-relaxed mt-0.5 whitespace-pre-wrap">{p.goal}</p>}
-                  <p className="text-[11px] text-neutral-400 mt-1">데드라인 {memberCount(p.id)}개</p>
+                  <p className="text-[11px] text-neutral-400 mt-1">
+                    데드라인 {memberCount(p.id)}개
+                    {p.type === 'routine' && (p.routineStart || p.routineEnd) && (
+                      <span> · 반복 {p.routineStart ?? '…'} ~ {p.routineEnd ?? '…'}</span>
+                    )}
+                  </p>
                 </div>
                 <button onClick={() => startEdit(p)} className="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/proj:opacity-100 mt-0.5">수정</button>
               </div>
@@ -1824,9 +1842,9 @@ export default function PlanPage() {
 
   // 업무 영역
   // 프로젝트 CRUD — plan.projects는 update()로(로컬 동기화), 데드라인 멤버십은 store로.
-  const addProjectItem = (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[] }) => {
+  const addProjectItem = (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineStart?: string; routineEnd?: string }) => {
     const id = uid();
-    update({ projects: [...(plan.projects ?? []), { id, name: data.name, type: data.type, goal: data.goal, order: (plan.projects ?? []).length }] });
+    update({ projects: [...(plan.projects ?? []), { id, name: data.name, type: data.type, goal: data.goal, routineStart: data.routineStart, routineEnd: data.routineEnd, order: (plan.projects ?? []).length }] });
     data.members.forEach(m => store.setDeadlineProject(selectedWsId, m.programId, m.deadlineId, id));
   };
   const updateProjectItem = (id: string, patch: Partial<Project>) =>
@@ -1846,7 +1864,8 @@ export default function PlanPage() {
     const refs: PlanDeadlineRef[] = [];
     entry?.programs.forEach(pr => {
       const area = areas.find(a => a.id === pr.workAreaId);
-      (pr.deadlines ?? []).forEach(d => refs.push({ deadlineId: d.id, programId: pr.id, name: d.name, date: d.date, areaName: area?.name ?? '미분류', areaColor: area?.color ?? '#C4CCC4', projectId: d.projectId }));
+      if (!area) return; // 미분류(업무 영역 없음/삭제됨)는 제외 — Goals에 안 보이는 잔여 데이터
+      (pr.deadlines ?? []).forEach(d => refs.push({ deadlineId: d.id, programId: pr.id, name: d.name, date: d.date, areaName: area.name, areaColor: area.color, projectId: d.projectId }));
     });
     return refs;
   })();

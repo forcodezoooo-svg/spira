@@ -334,6 +334,7 @@ export default function ProgramsPage() {
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [routineEditFor, setRoutineEditFor] = useState<string | null>(null); // 반복 기간 편집 중인 프로젝트 박스 key
   const [projMenuFor, setProjMenuFor] = useState<string | null>(null); // 프로젝트 배정 메뉴가 열린 영역 섹션 key
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string; foot?: string } | null>(null); // 깃발 증정 오버레이
   // 수익원 필터 (Resources에서 카테고리 클릭 시 진입)
@@ -2316,6 +2317,23 @@ export default function ProgramsPage() {
                         <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#DCE3F5', color: '#5B6560' }}>{box.count}</span>
                         {businesses.length > 1 && <span className="text-[11px] truncate" style={{ color: '#9AA39D' }}>· {store.allWorkspaces.find(w => w.id === box.wsId)?.name}</span>}
                       </div>
+                      {/* 루틴형: 반복 기간 표시/편집 */}
+                      {box.project.type === 'routine' && (
+                        <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          {routineEditFor === box.key ? (
+                            <div className="flex items-center gap-1.5">
+                              <input type="date" value={box.project.routineStart ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { routineStart: e.target.value || undefined })} className="bg-white border rounded-lg px-2 py-1 text-[11px] outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
+                              <span className="text-[10px] text-neutral-400">~</span>
+                              <input type="date" value={box.project.routineEnd ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { routineEnd: e.target.value || undefined })} className="bg-white border rounded-lg px-2 py-1 text-[11px] outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
+                              <button onClick={() => setRoutineEditFor(null)} className="text-[11px] font-semibold text-neutral-600 px-1">완료</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setRoutineEditFor(box.key)} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors" style={{ backgroundColor: '#DDF4C4', color: '#3E7A2E' }} title="루틴 반복 기간 설정">
+                              🔁 {(box.project.routineStart || box.project.routineEnd) ? `${box.project.routineStart?.slice(5).replace('-', '.') ?? '…'} ~ ${box.project.routineEnd?.slice(5).replace('-', '.') ?? '…'}` : '반복 기간'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                       <button onClick={() => toggleAreaCollapsed(box.key)} className="flex-shrink-0">
                         <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
