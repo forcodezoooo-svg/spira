@@ -30,6 +30,7 @@ export interface Message {
 export interface SendOptions {
   hideUser?: boolean;  // 사용자 말풍선 없이 조용히 요청
   intro?: string;      // 답변 문구를 이 문구로 고정 (모델 산문 대신)
+  autoApply?: boolean; // 응답에 반영 액션이 있으면 버튼 없이 바로 반영 (시작 칩용)
 }
 
 export interface ChatSession {
@@ -241,6 +242,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const projectAssignHandlerRef = useRef<((plans: ProjectAssignPlan[]) => void) | null>(null);
   // 페이지 핸들러가 등록될 때 대기 중인 액션을 반영(아래에서 실제 함수 주입)
   const flushPendingRef = useRef<((marker: string) => void) | null>(null);
+  // autoApply용: 액션을 즉시 반영하는 함수(아래에서 주입)
+  const runActionRef = useRef<((idx: number, action: ChatAction) => void) | null>(null);
 
   const registerGoalsHandler = useCallback((handler: (ops: GoalsOperation[]) => void) => {
     goalsHandlerRef.current = handler;
@@ -433,11 +436,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const action = extractAction(full);
       if (action) {
         const { display, ...act } = action;
+        const targetIdx = messagesRef.current.length - 1; // 마지막 assistant 메시지 인덱스
         setMessages(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: 'assistant', content: opts?.intro ?? display ?? '', action: act };
           return updated;
         });
+        // 시작 칩 등에서 autoApply면 버튼 없이 즉시 반영 (게이트는 그대로 — 무료는 유료 안내)
+        if (opts?.autoApply) runActionRef.current?.(targetIdx, act);
       } else if (opts?.intro) {
         setMessages(prev => {
           const updated = [...prev];
@@ -492,19 +498,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [applyToHandler, markActionDone]);
   flushPendingRef.current = flushPending;
 
-  // 버튼 클릭 → 앱 반영. Pro/온보딩이 아니면 유료 알림 팝업. 핸들러가 없으면 해당 페이지로 이동 후 반영.
+  // 액션 실제 반영. Pro/온보딩이 아니면 유료 알림 팝업. 핸들러가 없으면 해당 페이지로 이동 후 반영.
+  const runAction = useCallback((idx: number, action: ChatAction) => {
+    const canAutofill = isProRef.current || isOnboardingActive();
+    if (!canAutofill) { upgradeRef.current('autofill'); return; }
+    if (applyToHandler(action.marker, action.payload)) {
+      markActionDone(idx);
+    } else {
+      pendingApplyRef.current = { idx, marker: action.marker, payload: action.payload };
+      router.push(action.route);
+    }
+  }, [applyToHandler, markActionDone, router]);
+  runActionRef.current = runAction;
+
+  // 버튼 클릭 → 앱 반영.
   const applyAction = useCallback((idx: number) => {
     const m = messagesRef.current[idx];
     if (!m?.action || m.action.done) return;
-    const canAutofill = isProRef.current || isOnboardingActive();
-    if (!canAutofill) { upgradeRef.current('autofill'); return; }
-    if (applyToHandler(m.action.marker, m.action.payload)) {
-      markActionDone(idx);
-    } else {
-      pendingApplyRef.current = { idx, marker: m.action.marker, payload: m.action.payload };
-      router.push(m.action.route);
-    }
-  }, [applyToHandler, markActionDone, router]);
+    runAction(idx, m.action);
+  }, [runAction]);
 
   const openWithContext = useCallback((label: string, content: string) => {
     if (loadingRef.current) return;

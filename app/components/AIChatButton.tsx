@@ -314,7 +314,7 @@ export default function AIChatButton() {
                       {STARTERS.map(c => (
                         <button
                           key={c.label}
-                          onClick={() => { if (!loading && chat) chat.sendMessage(c.message); }}
+                          onClick={() => { if (!loading && chat) chat.sendMessage(c.message, undefined, { autoApply: true }); }}
                           className="text-[13px] font-medium rounded-full px-4 py-2 transition-colors text-left"
                           style={{ backgroundColor: '#F1F1EB', color: '#5B6560' }}
                           onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#DFF9C4'; e.currentTarget.style.color = '#3E6B1F'; }}
