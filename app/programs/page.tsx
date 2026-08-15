@@ -4,7 +4,22 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
-import { Program } from '../lib/types';
+import { Program, RoutineCycle } from '../lib/types';
+
+// 루틴 반복 주기 선택지 (Plan과 동일)
+const ROUTINE_CYCLES: { key: RoutineCycle; label: string }[] = [
+  { key: 'weekly', label: '주 1회' },
+  { key: 'biweekly', label: '2주 1회' },
+  { key: 'monthly', label: '월 1회' },
+  { key: 'quarterly', label: '분기 1회' },
+  { key: 'yearly', label: '연 1회' },
+];
+const cycleLabelOf = (c?: RoutineCycle) => ROUTINE_CYCLES.find(x => x.key === c)?.label;
+const IMPORTANCE_META: Record<number, { label: string; color: string; bg: string }> = {
+  1: { label: '낮음', color: '#9AA39D', bg: '#F0F0EA' },
+  2: { label: '보통', color: '#5B6560', bg: '#E7E7E1' },
+  3: { label: '높음', color: '#C24B4B', bg: '#FCEBEB' },
+};
 import { uid } from '../lib/store';
 import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '../lib/ChatContext';
 import MusicTimer from '../components/MusicTimer';
@@ -347,7 +362,6 @@ export default function ProgramsPage() {
   const [projDlName, setProjDlName] = useState('');
   const [projDlDate, setProjDlDate] = useState('');
   const [projDlArea, setProjDlArea] = useState('');
-  const [projDlDays, setProjDlDays] = useState('');
   const [projMenuFor, setProjMenuFor] = useState<string | null>(null); // 프로젝트 배정 메뉴가 열린 영역 섹션 key
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string; foot?: string } | null>(null); // 깃발 증정 오버레이
   // 수익원 필터 (Resources에서 카테고리 클릭 시 진입)
@@ -881,8 +895,7 @@ export default function ProgramsPage() {
   const addDeadlineToProject = (wsId: string, projectId: string) => {
     const name = projDlName.trim();
     if (!name || !projDlArea) return;
-    const days = projDlDays ? Math.max(1, parseInt(projDlDays, 10)) : undefined;
-    const newDl = { id: uid(), name, date: projDlDate || getQuarterEndDate(year, quarter), todos: [], projectId, ...(days ? { durationDays: days } : {}) };
+    const newDl = { id: uid(), name, date: projDlDate || getQuarterEndDate(year, quarter), todos: [], projectId };
     const entry = store.allWorkspacesEntries.find(e => e.workspace.id === wsId);
     const existing = entry?.programs.find(p => p.workAreaId === projDlArea);
     if (existing) store.updateProgramInWs(wsId, { ...existing, deadlines: [...(existing.deadlines ?? []), newDl] });
@@ -890,43 +903,7 @@ export default function ProgramsPage() {
       const area = areasForWs(wsId).find(a => a.id === projDlArea);
       store.addProgramToWs(wsId, { name: area?.name ?? '업무', goal: '', color: businessColor(wsId), year, quarter, quarters: [qKey(year, quarter)], order: nextOrder(), workAreaId: projDlArea, deadlines: [newDl] });
     }
-    setProjAddFor(null); setProjDlName(''); setProjDlDate(''); setProjDlArea(''); setProjDlDays('');
-  };
-
-  // 소요 일수 지정
-  const setDeadlineDuration = (p: ProgramWithWs, dlId: string, days: number | undefined) =>
-    updateProg(p, (p.deadlines ?? []).map(d => d.id === dlId ? { ...d, durationDays: days } : d));
-  const setTodoDuration = (p: ProgramWithWs, dlId: string, todoId: string, days: number | undefined) =>
-    updateProg(p, (p.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === todoId ? { ...t, durationDays: days } : t) } : d));
-
-  // 프로젝트 일정 이어붙이기: 시작일(반복 시작 or 오늘)부터 소요 일수만큼 데드라인/업무 날짜를 순차 배치
-  const chainProjectSchedule = (box: { project: { id: string; routineStart?: string }; items: { p: ProgramWithWs }[] }) => {
-    let cursor = box.project.routineStart || todayKey;
-    const members: { p: ProgramWithWs; dl: NonNullable<ProgramWithWs['deadlines']>[number] }[] = [];
-    box.items.forEach(({ p }) => (p.deadlines ?? []).forEach(dl => { if (dl.projectId === box.project.id) members.push({ p, dl }); }));
-    members.sort((a, b) => (a.dl.date || '9999').localeCompare(b.dl.date || '9999'));
-    const byProg = new Map<string, { p: ProgramWithWs; map: Map<string, NonNullable<ProgramWithWs['deadlines']>[number]> }>();
-    members.forEach(({ p, dl }) => {
-      const dlStart = cursor;
-      let end = cursor;
-      const newTodos = (dl.todos ?? []).map(t => {
-        const dur = Math.max(1, t.durationDays ?? 1);
-        const tStart = cursor;
-        const tEnd = addDaysStr(cursor, dur - 1);
-        cursor = addDaysStr(cursor, dur);
-        end = tEnd;
-        return { ...t, date: tStart, deadline: tEnd };
-      });
-      if ((dl.todos ?? []).length === 0) {
-        const dur = Math.max(1, dl.durationDays ?? 1);
-        end = addDaysStr(cursor, dur - 1);
-        cursor = addDaysStr(cursor, dur);
-      }
-      const newDl = { ...dl, startDate: dlStart, date: end, todos: newTodos };
-      if (!byProg.has(p.id)) byProg.set(p.id, { p, map: new Map() });
-      byProg.get(p.id)!.map.set(dl.id, newDl);
-    });
-    byProg.forEach(({ p, map }) => store.updateProgramInWs(p.wsId, { ...stripWs(p), deadlines: (p.deadlines ?? []).map(d => map.get(d.id) ?? d) }));
+    setProjAddFor(null); setProjDlName(''); setProjDlDate(''); setProjDlArea('');
   };
 
   const startEditDeadline = (dl: { id: string; name: string; date: string }) => {
@@ -2168,12 +2145,6 @@ export default function ProgramsPage() {
                                 </div>
                               );
                             })()}
-                            {/* 소요 일수 (프로젝트 박스 안에서만 — 일정 이어붙이기 기준) */}
-                            {inProjectBox && (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }} title="이 데드라인의 대략 소요 일수 (업무가 없을 때 기준)">
-                                <input type="number" min={1} value={dl.durationDays ?? ''} onChange={e => setDeadlineDuration(p, dl.id, e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : undefined)} placeholder="일수" className="w-9 bg-neutral-50 border border-neutral-200 rounded px-1 py-0.5 text-[10px] outline-none focus:border-violet-400" />일
-                              </span>
-                            )}
                             {/* 일정 일괄 미루기 */}
                             {dl.todos.length > 0 && (
                               <div className="relative flex-shrink-0">
@@ -2309,11 +2280,6 @@ export default function ProgramsPage() {
                                     </span>
                                   )}
                                   <span className="flex-1" />
-                                  {inProjectBox && (
-                                    <span className="inline-flex items-center gap-0.5 text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }} title="이 업무의 대략 소요 일수">
-                                      <input type="number" min={1} value={t.durationDays ?? ''} onChange={e => setTodoDuration(p, dl.id, t.id, e.target.value ? Math.max(1, parseInt(e.target.value, 10)) : undefined)} placeholder="일" className="w-8 bg-neutral-50 border border-neutral-200 rounded px-1 py-0.5 text-[10px] outline-none focus:border-violet-400" />일
-                                    </span>
-                                  )}
                                   <button onClick={() => startEditTodo(t)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-neutral-700 text-[10px] transition-all flex-shrink-0">편집</button>
                                   <button onClick={() => deleteTodo(p, dl.id, t.id)} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 text-neutral-300 hover:text-red-500 text-xs transition-all flex-shrink-0">×</button>
                                 </li>
@@ -2403,30 +2369,35 @@ export default function ProgramsPage() {
                         <span className="text-[12px]" style={{ color: '#5B5BD6' }}>📁</span>
                         <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{box.project.name}</h3>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={box.project.type === 'build' ? { backgroundColor: '#DEE4FF', color: '#5B5BD6' } : { backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>{box.project.type === 'build' ? '기획·개발' : '루틴'}</span>
+                        {box.project.importance && box.project.importance !== 2 && IMPORTANCE_META[box.project.importance] && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: IMPORTANCE_META[box.project.importance].bg, color: IMPORTANCE_META[box.project.importance].color }} title="중요도">중요도 {IMPORTANCE_META[box.project.importance].label}</span>
+                        )}
                         <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#DCE3F5', color: '#5B6560' }}>{box.count}</span>
                         {businesses.length > 1 && <span className="text-[11px] truncate" style={{ color: '#9AA39D' }}>· {store.allWorkspaces.find(w => w.id === box.wsId)?.name}</span>}
                       </div>
-                      {/* 루틴형: 반복 기간 표시/편집 */}
+                      {/* 프로젝트 전체 데드라인 */}
+                      {box.project.deadline && (
+                        <span className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }} title="프로젝트 전체 데드라인">📅 {box.project.deadline.slice(5).replace('-', '.')}</span>
+                      )}
+                      {/* 루틴형: 반복 주기 표시/편집 */}
                       {box.project.type === 'routine' && (
-                        <div className="flex-shrink-0" onClick={e => e.stopPropagation()}>
-                          {routineEditFor === box.key ? (
-                            <div className="flex items-center gap-1.5">
-                              <input type="date" value={box.project.routineStart ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { routineStart: e.target.value || undefined })} className="bg-white border rounded-lg px-2 py-1 text-[11px] outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
-                              <span className="text-[10px] text-neutral-400">~</span>
-                              <input type="date" value={box.project.routineEnd ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { routineEnd: e.target.value || undefined })} className="bg-white border rounded-lg px-2 py-1 text-[11px] outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
-                              <button onClick={() => setRoutineEditFor(null)} className="text-[11px] font-semibold text-neutral-600 px-1">완료</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => setRoutineEditFor(box.key)} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors" style={{ backgroundColor: '#DDF4C4', color: '#3E7A2E' }} title="루틴 반복 기간 설정">
-                              🔁 {(box.project.routineStart || box.project.routineEnd) ? `${box.project.routineStart?.slice(5).replace('-', '.') ?? '…'} ~ ${box.project.routineEnd?.slice(5).replace('-', '.') ?? '…'}` : '반복 기간'}
-                            </button>
+                        <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setRoutineEditFor(routineEditFor === box.key ? null : box.key)} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors" style={{ backgroundColor: '#DDF4C4', color: '#3E7A2E' }} title="반복 주기 설정">
+                            🔁 {cycleLabelOf(box.project.routineCycle) ?? '반복 주기'}
+                          </button>
+                          {routineEditFor === box.key && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setRoutineEditFor(null)} />
+                              <div className="absolute right-0 top-full mt-1 w-28 bg-white border rounded-xl py-1 z-20" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+                                {ROUTINE_CYCLES.map(c => (
+                                  <button key={c.key} onClick={() => { store.updateProject(box.wsId, box.project.id, { routineCycle: c.key }); setRoutineEditFor(null); }} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: box.project.routineCycle === c.key ? '#16211E' : '#5B6560', fontWeight: box.project.routineCycle === c.key ? 700 : 400 }}>{c.label}</button>
+                                ))}
+                                <button onClick={() => { store.updateProject(box.wsId, box.project.id, { routineCycle: undefined }); setRoutineEditFor(null); }} className="block w-full text-left px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-100 transition-colors">없음</button>
+                              </div>
+                            </>
                           )}
                         </div>
                       )}
-                      {/* 소요 일수에 맞춰 데드라인·업무 날짜를 순차 배치 */}
-                      <button onClick={e => { e.stopPropagation(); chainProjectSchedule(box); }} className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors" style={{ backgroundColor: '#EEF1FF', color: '#5B5BD6' }} title="소요 일수에 맞춰 이 프로젝트의 업무 일정을 순서대로 이어 배치">
-                        🗓 일정 이어붙이기
-                      </button>
                       <button onClick={() => toggleAreaCollapsed(box.key)} className="flex-shrink-0">
                         <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
@@ -2446,15 +2417,14 @@ export default function ProgramsPage() {
                                   {areasForWs(box.wsId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                                 </select>
                                 <input type="date" value={projDlDate} onChange={e => setProjDlDate(e.target.value)} className="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-violet-400" />
-                                <span className="inline-flex items-center gap-1 text-xs text-neutral-500">소요 <input type="number" min={1} value={projDlDays} onChange={e => setProjDlDays(e.target.value)} placeholder="일수" className="w-14 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-violet-400" />일</span>
                               </div>
                               <div className="flex gap-2 pt-1">
                                 <button onClick={() => addDeadlineToProject(box.wsId, box.project.id)} disabled={!projDlName.trim() || !projDlArea} className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-700 disabled:opacity-30 rounded-lg text-xs text-white transition-colors">추가</button>
-                                <button onClick={() => { setProjAddFor(null); setProjDlName(''); setProjDlDate(''); setProjDlArea(''); setProjDlDays(''); }} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
+                                <button onClick={() => { setProjAddFor(null); setProjDlName(''); setProjDlDate(''); setProjDlArea(''); }} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => { setProjAddFor(box.key); setProjDlName(''); setProjDlDate(getQuarterEndDate(year, quarter)); setProjDlArea(''); setProjDlDays(''); }} className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors">+ 데드라인 추가</button>
+                            <button onClick={() => { setProjAddFor(box.key); setProjDlName(''); setProjDlDate(getQuarterEndDate(year, quarter)); setProjDlArea(''); }} className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors">+ 데드라인 추가</button>
                           )}
                         </div>
                       </div>

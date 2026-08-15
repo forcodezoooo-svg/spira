@@ -41,6 +41,7 @@ export interface WorkArea {
 // 프로젝트 — 업무 영역을 묶는 상위 단위. Plan에서 정의하고 Goals에서 조직화한다.
 // (Goals 구조: 프로젝트 > 업무 영역 > 데드라인 > 업무)
 export type ProjectType = 'routine' | 'build'; // 루틴형(반복 운영) / 기획·신규개발형
+export type RoutineCycle = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 export interface Project {
   id: string;
   name: string;
@@ -48,8 +49,9 @@ export interface Project {
   color?: string;
   goal?: string;    // 프로젝트 목표/설명
   order?: number;
-  routineStart?: string; // 루틴형 프로젝트의 반복 기간 시작일 (YYYY-MM-DD)
-  routineEnd?: string;   // 루틴형 프로젝트의 반복 기간 종료일 (YYYY-MM-DD)
+  routineCycle?: RoutineCycle; // 루틴형 프로젝트의 반복 주기 (주1회/2주1회/월1회/분기1회/연1회)
+  importance?: number; // 중요도 (1=낮음, 2=보통, 3=높음)
+  deadline?: string;   // 프로젝트 전체 데드라인 (YYYY-MM-DD)
   // 멤버십은 데드라인 단위: 각 데드라인(ProgramDeadline)이 projectId로 이 프로젝트에 속함.
   // (프로젝트 = 여러 업무 영역의 데드라인을 묶는 '일의 순서/루틴')
 }
