@@ -872,18 +872,18 @@ function BrandImageSection({
       </div>
 
       <div
-        className={`grid grid-cols-3 gap-2 rounded-xl p-2 transition-colors ${dragging && !isFull ? 'bg-violet-50 ring-2 ring-violet-300 ring-dashed' : ''}`}
+        className={`flex flex-wrap gap-2 rounded-xl p-2 transition-colors ${dragging && !isFull ? 'bg-violet-50 ring-2 ring-violet-300 ring-dashed' : ''}`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
         {images.map((src, i) => (
-          <div key={i} className="relative group aspect-square rounded-xl overflow-hidden bg-neutral-100">
+          <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden bg-neutral-100">
             <img src={src} alt={`brand-${i}`} className="w-full h-full object-cover" />
             <button
               onClick={() => onRemove(i)}
-              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/50 text-neutral-900 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-sm leading-none hover:bg-white/70"
+              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-white/60 text-neutral-900 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none hover:bg-white/80"
             >
               ×
             </button>
@@ -892,23 +892,15 @@ function BrandImageSection({
         {!isFull && (
           <button
             onClick={() => fileRef.current?.click()}
-            className={`aspect-square rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all ${
+            className={`w-16 h-16 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-0.5 transition-all ${
               dragging ? 'border-violet-400 text-neutral-600' : 'border-neutral-200 text-neutral-700 hover:text-neutral-600 hover:border-violet-300'
             }`}
           >
-            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
               <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            <span className="text-xs">{dragging ? '여기에 놓기' : '이미지 추가'}</span>
+            <span className="text-[10px]">{dragging ? '놓기' : '추가'}</span>
           </button>
-        )}
-        {dragging && !isFull && images.length === 0 && (
-          <div className="col-span-3 py-4 flex flex-col items-center justify-center gap-1 text-neutral-600 pointer-events-none">
-            <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <p className="text-sm font-medium">이미지를 여기에 놓으세요</p>
-          </div>
         )}
       </div>
 
@@ -2022,26 +2014,53 @@ export default function PlanPage() {
       </div>
 
       <div className="space-y-6">
-        <BrandImageSection
-          images={plan.brandImages ?? []}
-          onAdd={v => update({ brandImages: [...(plan.brandImages ?? []), v] })}
-          onRemove={i => update({ brandImages: (plan.brandImages ?? []).filter((_, idx) => idx !== i) })}
-        />
+        {/* ── 상단 브랜드 요약 박스 (아이덴티티·키워드·한 줄 소개·업무 영역·솔루션 2~3칼럼) ── */}
+        <div className="bg-neutral-50 border border-neutral-200 rounded-3xl p-5 sm:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6 items-start">
+            <BrandImageSection
+              images={plan.brandImages ?? []}
+              onAdd={v => update({ brandImages: [...(plan.brandImages ?? []), v] })}
+              onRemove={i => update({ brandImages: (plan.brandImages ?? []).filter((_, idx) => idx !== i) })}
+            />
 
-        <BrandingKeywordsSection
-          keywords={plan.brandingKeywords ?? []}
-          onAdd={addKeyword}
-          onRemove={removeKeyword}
-          onGenerate={chat && !chat.loading ? handleGenerateBrandingKeywords : undefined}
-        />
+            <BrandingKeywordsSection
+              keywords={plan.brandingKeywords ?? []}
+              onAdd={addKeyword}
+              onRemove={removeKeyword}
+              onGenerate={chat && !chat.loading ? handleGenerateBrandingKeywords : undefined}
+            />
 
-        <TextSection
-          label="브랜드 한 줄 소개"
-          hint={HINTS.tagline}
-          value={plan.tagline}
-          onChange={v => update({ tagline: v })}
-          placeholder="브랜드를 한 문장으로 소개하세요."
-        />
+            <TextSection
+              label="브랜드 한 줄 소개"
+              hint={HINTS.tagline}
+              value={plan.tagline}
+              onChange={v => update({ tagline: v })}
+              placeholder="브랜드를 한 문장으로 소개하세요."
+            />
+
+            <div className="md:col-span-2 lg:col-span-1">
+              <WorkAreasSection
+                areas={plan.workAreas ?? []}
+                onAdd={addWorkArea}
+                onUpdate={updateWorkArea}
+                onRemove={removeWorkArea}
+                onGenerate={chat && !chat.loading ? handleGenerateWorkAreas : undefined}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <CardListSection
+                label="솔루션/제품"
+                hint={HINTS.solutions}
+                items={plan.solutions}
+                onAdd={v => addPlanItem('solutions', v)}
+                onUpdate={(i, v) => updatePlanItem('solutions', i, v)}
+                onRemove={i => removePlanItem('solutions', i)}
+                onGenerate={chat && !chat.loading ? handleGenerateSolutions : undefined}
+              />
+            </div>
+          </div>
+        </div>
 
         <ListSection
           label="문제 정의"
@@ -2093,16 +2112,6 @@ export default function PlanPage() {
         />
 
         <CardListSection
-          label="솔루션/제품"
-          hint={HINTS.solutions}
-          items={plan.solutions}
-          onAdd={v => addPlanItem('solutions', v)}
-          onUpdate={(i, v) => updatePlanItem('solutions', i, v)}
-          onRemove={i => removePlanItem('solutions', i)}
-          onGenerate={chat && !chat.loading ? handleGenerateSolutions : undefined}
-        />
-
-        <CardListSection
           label="수익 구조"
           hint={HINTS.revenueModel}
           items={plan.revenueModel}
@@ -2140,14 +2149,6 @@ export default function PlanPage() {
           onUpdate={updateProjectItem}
           onRemove={removeProjectItem}
           onAssign={assignDeadlineToProject}
-        />
-
-        <WorkAreasSection
-          areas={plan.workAreas ?? []}
-          onAdd={addWorkArea}
-          onUpdate={updateWorkArea}
-          onRemove={removeWorkArea}
-          onGenerate={chat && !chat.loading ? handleGenerateWorkAreas : undefined}
         />
       </div>
     </div>
