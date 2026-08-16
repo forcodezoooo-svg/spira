@@ -1144,7 +1144,7 @@ function ProjectsSection({
 }: {
   projects: Project[];
   deadlines: PlanDeadlineRef[];
-  onAdd: (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineCycle?: import('../lib/types').RoutineCycle; importance?: number; deadline?: string }) => void;
+  onAdd: (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineCycle?: import('../lib/types').RoutineCycle }) => void;
   onUpdate: (id: string, patch: Partial<Project>) => void;
   onRemove: (id: string) => void;
   onAssign: (projectId: string, deadlineId: string, programId: string, on: boolean) => void;
@@ -1155,19 +1155,17 @@ function ProjectsSection({
   const [type, setType] = useState<ProjectType>('routine');
   const [goal, setGoal] = useState('');
   const [cycle, setCycle] = useState<import('../lib/types').RoutineCycle | undefined>(undefined);
-  const [importance, setImportance] = useState<number>(2);
-  const [pdeadline, setPDeadline] = useState('');
   const [picked, setPicked] = useState<string[]>([]); // 추가 모드에서 고른 deadlineId 목록
 
-  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setCycle(undefined); setImportance(2); setPDeadline(''); setPicked([]); setAdding(true); setEditingId(null); };
-  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setCycle(p.routineCycle); setImportance(p.importance ?? 2); setPDeadline(p.deadline ?? ''); setEditingId(p.id); setAdding(false); };
+  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setCycle(undefined); setPicked([]); setAdding(true); setEditingId(null); };
+  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setCycle(p.routineCycle); setEditingId(p.id); setAdding(false); };
   const saveAdd = () => {
     if (!name.trim()) return;
     const members = deadlines.filter(d => picked.includes(d.deadlineId)).map(d => ({ deadlineId: d.deadlineId, programId: d.programId }));
-    onAdd({ name: name.trim(), type, goal: goal.trim(), members, routineCycle: type === 'routine' ? cycle : undefined, importance, deadline: pdeadline || undefined });
+    onAdd({ name: name.trim(), type, goal: goal.trim(), members, routineCycle: type === 'routine' ? cycle : undefined });
     setAdding(false);
   };
-  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim(), routineCycle: type === 'routine' ? cycle : undefined, importance, deadline: pdeadline || undefined }); setEditingId(null); };
+  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim(), routineCycle: type === 'routine' ? cycle : undefined }); setEditingId(null); };
 
   // 데드라인 목록을 업무 영역별로 그룹
   const grouped = (() => {
@@ -1256,24 +1254,6 @@ function ProjectsSection({
           </div>
         </div>
       )}
-      {/* 중요도 */}
-      <div>
-        <label className="text-[11px] font-medium text-neutral-400 block mb-1">중요도</label>
-        <div className="flex gap-1.5">
-          {IMPORTANCE.map(im => (
-            <button key={im.v} onClick={() => setImportance(im.v)}
-              className={`px-3 py-1 rounded-full text-xs border transition-colors ${importance === im.v ? 'border-neutral-900 font-semibold' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'}`}
-              style={importance === im.v ? { backgroundColor: im.bg, color: im.color } : undefined}>
-              {im.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* 프로젝트 전체 데드라인 */}
-      <div>
-        <label className="text-[11px] font-medium text-neutral-400 block mb-1">프로젝트 전체 데드라인</label>
-        <input type="date" value={pdeadline} onChange={e => setPDeadline(e.target.value)} className="bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm text-neutral-900 outline-none focus:border-violet-400" />
-      </div>
     </>
   );
 
@@ -1308,17 +1288,11 @@ function ProjectsSection({
                   {p.type === 'build' ? '기획·개발' : '루틴'}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-sm font-semibold text-neutral-800 leading-relaxed">{p.name}</p>
-                    {importanceMeta(p.importance) && p.importance !== 2 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: importanceMeta(p.importance)!.bg, color: importanceMeta(p.importance)!.color }}>중요도 {importanceMeta(p.importance)!.label}</span>
-                    )}
-                  </div>
+                  <p className="text-sm font-semibold text-neutral-800 leading-relaxed">{p.name}</p>
                   {p.goal && <p className="text-xs text-neutral-400 leading-relaxed mt-0.5 whitespace-pre-wrap">{p.goal}</p>}
                   <p className="text-[11px] text-neutral-400 mt-1">
                     데드라인 {memberCount(p.id)}개
                     {p.type === 'routine' && cycleLabel(p.routineCycle) && <span> · 🔁 {cycleLabel(p.routineCycle)}</span>}
-                    {p.deadline && <span> · 마감 {p.deadline.slice(5).replace('-', '.')}</span>}
                   </p>
                 </div>
                 <button onClick={() => startEdit(p)} className="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/proj:opacity-100 mt-0.5">수정</button>
@@ -1878,9 +1852,9 @@ export default function PlanPage() {
 
   // 업무 영역
   // 프로젝트 CRUD — plan.projects는 update()로(로컬 동기화), 데드라인 멤버십은 store로.
-  const addProjectItem = (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineCycle?: import('../lib/types').RoutineCycle; importance?: number; deadline?: string }) => {
+  const addProjectItem = (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineCycle?: import('../lib/types').RoutineCycle }) => {
     const id = uid();
-    update({ projects: [...(plan.projects ?? []), { id, name: data.name, type: data.type, goal: data.goal, routineCycle: data.routineCycle, importance: data.importance, deadline: data.deadline, order: (plan.projects ?? []).length }] });
+    update({ projects: [...(plan.projects ?? []), { id, name: data.name, type: data.type, goal: data.goal, routineCycle: data.routineCycle, order: (plan.projects ?? []).length }] });
     data.members.forEach(m => store.setDeadlineProject(selectedWsId, m.programId, m.deadlineId, id));
   };
   const updateProjectItem = (id: string, patch: Partial<Project>) =>

@@ -357,7 +357,9 @@ export default function ProgramsPage() {
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [routineEditFor, setRoutineEditFor] = useState<string | null>(null); // 반복 기간 편집 중인 프로젝트 박스 key
+  const [routineEditFor, setRoutineEditFor] = useState<string | null>(null); // 반복 주기 편집 중인 프로젝트 박스 key
+  const [importanceEditFor, setImportanceEditFor] = useState<string | null>(null);
+  const [deadlineEditFor, setDeadlineEditFor] = useState<string | null>(null);
   const [projAddFor, setProjAddFor] = useState<string | null>(null); // 프로젝트 박스 안에서 데드라인 추가 중인 박스 key
   const [projDlName, setProjDlName] = useState('');
   const [projDlDate, setProjDlDate] = useState('');
@@ -1522,31 +1524,8 @@ export default function ProgramsPage() {
         </div>
       )}
 
-      {/* ── 프로젝트 생성 (포커스된 사업일 때) — 목록의 프로젝트 박스는 아래에서 렌더 ── */}
-      {projectWsId && (
-        <div className="flex items-center gap-2 flex-wrap mb-4">
-          {addingProject ? (
-            <span className="inline-flex items-center gap-1">
-              <input
-                autoFocus
-                value={newProjectName}
-                onChange={e => setNewProjectName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addProjectHandler(); if (e.key === 'Escape') { setAddingProject(false); setNewProjectName(''); } }}
-                placeholder="프로젝트 이름"
-                className="bg-white border rounded-full px-3 py-1.5 text-[13px] outline-none focus:border-violet-400"
-                style={{ borderColor: 'var(--spira-border-strong)' }}
-              />
-              <button onClick={addProjectHandler} disabled={!newProjectName.trim()} className="text-[13px] font-semibold px-2 py-1 text-neutral-700 disabled:opacity-30">추가</button>
-              <button onClick={() => { setAddingProject(false); setNewProjectName(''); }} className="text-[13px] text-neutral-400 px-1">취소</button>
-            </span>
-          ) : (
-            <button onClick={() => setAddingProject(true)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5B5BD6', backgroundColor: '#EEF1FF' }}>📁 새 프로젝트</button>
-          )}
-        </div>
-      )}
-
       {/* ── 분기 탭 ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-2.5 mb-5">
+      <div className="grid grid-cols-4 gap-2.5 mb-3">
         {QUARTERS.map(q => {
           const active = q === quarter;
           const cnt = countByQuarter(q);
@@ -1567,6 +1546,29 @@ export default function ProgramsPage() {
           );
         })}
       </div>
+
+      {/* ── 새 프로젝트 추가 (분기 탭 아래, 포커스된 사업일 때) ─────────────── */}
+      {projectWsId && (
+        <div className="flex items-center gap-2 flex-wrap mb-5">
+          {addingProject ? (
+            <span className="inline-flex items-center gap-1">
+              <input
+                autoFocus
+                value={newProjectName}
+                onChange={e => setNewProjectName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addProjectHandler(); if (e.key === 'Escape') { setAddingProject(false); setNewProjectName(''); } }}
+                placeholder="프로젝트 이름"
+                className="bg-white border rounded-full px-3 py-1.5 text-[13px] outline-none focus:border-violet-400"
+                style={{ borderColor: 'var(--spira-border-strong)' }}
+              />
+              <button onClick={addProjectHandler} disabled={!newProjectName.trim()} className="text-[13px] font-semibold px-2 py-1 text-neutral-700 disabled:opacity-30">추가</button>
+              <button onClick={() => { setAddingProject(false); setNewProjectName(''); }} className="text-[13px] text-neutral-400 px-1">취소</button>
+            </span>
+          ) : (
+            <button onClick={() => setAddingProject(true)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5B5BD6', backgroundColor: '#EEF1FF' }}>📁 새 프로젝트</button>
+          )}
+        </div>
+      )}
 
       {/* ── 수익원 필터 배너 (Resources에서 진입) ─────────────────────────── */}
       {sourceFilter && (
@@ -2361,24 +2363,43 @@ export default function ProgramsPage() {
               {projBoxes.map(box => {
                 const expanded = expandedAreas.has(box.key);
                 return (
-                  <div key={box.key} className="rounded-3xl overflow-hidden" style={{ backgroundColor: '#EAF0FB' }}>
+                  <div key={box.key} className="rounded-3xl" style={{ backgroundColor: '#EAF0FB' }}>
                     <div className="w-full flex items-center gap-3 px-5 py-4">
                       <div onClick={() => toggleAreaCollapsed(box.key)} className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
                         {/* 어느 비즈니스의 프로젝트인지 컬러닷으로 표시 */}
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(box.wsId) }} title={store.allWorkspaces.find(w => w.id === box.wsId)?.name} />
-                        <span className="text-[12px]" style={{ color: '#5B5BD6' }}>📁</span>
                         <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{box.project.name}</h3>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={box.project.type === 'build' ? { backgroundColor: '#DEE4FF', color: '#5B5BD6' } : { backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>{box.project.type === 'build' ? '기획·개발' : '루틴'}</span>
-                        {box.project.importance && box.project.importance !== 2 && IMPORTANCE_META[box.project.importance] && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: IMPORTANCE_META[box.project.importance].bg, color: IMPORTANCE_META[box.project.importance].color }} title="중요도">중요도 {IMPORTANCE_META[box.project.importance].label}</span>
-                        )}
+                        {/* 중요도 (편집 가능) */}
+                        <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setImportanceEditFor(importanceEditFor === box.key ? null : box.key)} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: IMPORTANCE_META[box.project.importance ?? 2].bg, color: IMPORTANCE_META[box.project.importance ?? 2].color }} title="중요도 설정">중요도 {IMPORTANCE_META[box.project.importance ?? 2].label}</button>
+                          {importanceEditFor === box.key && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setImportanceEditFor(null)} />
+                              <div className="absolute left-0 top-full mt-1 w-24 bg-white border rounded-xl py-1 z-20" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+                                {[3, 2, 1].map(v => (
+                                  <button key={v} onClick={() => { store.updateProject(box.wsId, box.project.id, { importance: v }); setImportanceEditFor(null); }} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-100 transition-colors" style={{ color: (box.project.importance ?? 2) === v ? '#16211E' : '#5B6560', fontWeight: (box.project.importance ?? 2) === v ? 700 : 400 }}>{IMPORTANCE_META[v].label}</button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
                         <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#DCE3F5', color: '#5B6560' }}>{box.count}</span>
                         {businesses.length > 1 && <span className="text-[11px] truncate" style={{ color: '#9AA39D' }}>· {store.allWorkspaces.find(w => w.id === box.wsId)?.name}</span>}
                       </div>
-                      {/* 프로젝트 전체 데드라인 */}
-                      {box.project.deadline && (
-                        <span className="flex-shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }} title="프로젝트 전체 데드라인">📅 {box.project.deadline.slice(5).replace('-', '.')}</span>
-                      )}
+                      {/* 프로젝트 전체 데드라인 (편집 가능) */}
+                      <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setDeadlineEditFor(deadlineEditFor === box.key ? null : box.key)} className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: box.project.deadline ? '#5B6560' : '#9AA39D' }} title="프로젝트 전체 데드라인">📅 {box.project.deadline ? box.project.deadline.slice(5).replace('-', '.') : '마감'}</button>
+                        {deadlineEditFor === box.key && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setDeadlineEditFor(null)} />
+                            <div className="absolute right-0 top-full mt-1 bg-white border rounded-xl p-2 z-20 flex items-center gap-2" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+                              <input type="date" value={box.project.deadline ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { deadline: e.target.value || undefined })} className="bg-neutral-50 border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
+                              {box.project.deadline && <button onClick={() => { store.updateProject(box.wsId, box.project.id, { deadline: undefined }); setDeadlineEditFor(null); }} className="text-[11px] text-neutral-400 hover:text-neutral-600">지우기</button>}
+                            </div>
+                          </>
+                        )}
+                      </div>
                       {/* 루틴형: 반복 주기 표시/편집 */}
                       {box.project.type === 'routine' && (
                         <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
