@@ -2266,7 +2266,20 @@ export default function ProgramsPage() {
                 g.count += cnt;
               });
             });
-            return [...map.values()].sort((a, b) => (a.project.order ?? 0) - (b.project.order ?? 0));
+            // 프로젝트를 '전체 데드라인 가까운 순서'로 나열 (수동 지정 우선, 없으면 소속 데드라인 중 가장 늦은 날짜)
+            const boxes = [...map.values()];
+            const boxDeadline = (g: (typeof boxes)[number]) => {
+              if (g.project.deadline) return g.project.deadline;
+              const dates = g.items.flatMap(({ p }) => (p.deadlines ?? []).filter(dl => dl.projectId === g.project.id && dl.date).map(dl => dl.date as string));
+              return dates.length ? [...dates].sort().slice(-1)[0] : undefined;
+            };
+            return boxes.sort((a, b) => {
+              const da = boxDeadline(a), db = boxDeadline(b);
+              if (da && db) return da < db ? -1 : da > db ? 1 : 0;
+              if (da) return -1; // 데드라인 있는 프로젝트를 앞으로
+              if (db) return 1;
+              return (a.project.order ?? 0) - (b.project.order ?? 0); // 둘 다 없으면 기존 순서
+            });
           })();
 
           // '영역별' 보기: 예전처럼 업무 영역 접이식 박스로 그룹 (그 영역의 모든 데드라인 표시)
