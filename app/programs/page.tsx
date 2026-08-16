@@ -357,6 +357,7 @@ export default function ProgramsPage() {
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectWsId, setNewProjectWsId] = useState<string | null>(null); // '전체' 보기에서 어느 사업에 만들지 선택
   const [routineEditFor, setRoutineEditFor] = useState<string | null>(null); // 반복 주기 편집 중인 프로젝트 박스 key
   const [importanceEditFor, setImportanceEditFor] = useState<string | null>(null);
   const [deadlineEditFor, setDeadlineEditFor] = useState<string | null>(null);
@@ -790,12 +791,14 @@ export default function ProgramsPage() {
     setShowAddProgram(false);
   };
 
-  // 프로젝트 생성 (포커스된 사업에)
+  // 프로젝트 생성 — 포커스된 사업이 있으면 그 사업에, '전체' 보기면 선택한 사업에
   const addProjectHandler = () => {
     const name = newProjectName.trim();
-    if (!name || !projectWsId) return;
-    store.addProject(projectWsId, { name, order: projectsForWs.length });
+    const targetWs = projectWsId ?? newProjectWsId;
+    if (!name || !targetWs) return;
+    store.addProject(targetWs, { name, order: projectsOf(targetWs).length });
     setNewProjectName('');
+    setNewProjectWsId(null);
     setAddingProject(false);
   };
   // 데드라인을 특정 프로젝트에 배정/해제 (미지정 = null)
@@ -1547,29 +1550,6 @@ export default function ProgramsPage() {
         })}
       </div>
 
-      {/* ── 새 프로젝트 추가 (분기 탭 아래, 포커스된 사업일 때) ─────────────── */}
-      {projectWsId && (
-        <div className="flex items-center gap-2 flex-wrap mb-5">
-          {addingProject ? (
-            <span className="inline-flex items-center gap-1">
-              <input
-                autoFocus
-                value={newProjectName}
-                onChange={e => setNewProjectName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addProjectHandler(); if (e.key === 'Escape') { setAddingProject(false); setNewProjectName(''); } }}
-                placeholder="프로젝트 이름"
-                className="bg-white border rounded-full px-3 py-1.5 text-[13px] outline-none focus:border-violet-400"
-                style={{ borderColor: 'var(--spira-border-strong)' }}
-              />
-              <button onClick={addProjectHandler} disabled={!newProjectName.trim()} className="text-[13px] font-semibold px-2 py-1 text-neutral-700 disabled:opacity-30">추가</button>
-              <button onClick={() => { setAddingProject(false); setNewProjectName(''); }} className="text-[13px] text-neutral-400 px-1">취소</button>
-            </span>
-          ) : (
-            <button onClick={() => setAddingProject(true)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5B5BD6', backgroundColor: '#EEF1FF' }}>📁 새 프로젝트</button>
-          )}
-        </div>
-      )}
-
       {/* ── 수익원 필터 배너 (Resources에서 진입) ─────────────────────────── */}
       {sourceFilter && (
         <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 mb-4">
@@ -1684,16 +1664,50 @@ export default function ProgramsPage() {
           </div>
         )}
 
-        {/* 보기 모드 토글 (프로젝트별 / 영역별) */}
-        {quarterPrograms.length > 0 && (
-          <div className="flex items-center gap-1 mb-4 rounded-full p-1 w-fit" style={{ backgroundColor: '#F1F1EB' }}>
-            {(['project', 'area'] as const).map(v => (
-              <button key={v} onClick={() => setGoalsView(v)} className="px-4 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={goalsView === v ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#5B6560' }}>
-                {v === 'project' ? '프로젝트별' : '영역별'}
-              </button>
-            ))}
+        {/* 보기 모드 토글 (프로젝트별 / 영역별) + 새 프로젝트 추가 (같은 라인 우측) */}
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          {quarterPrograms.length > 0 ? (
+            <div className="flex items-center gap-1 rounded-full p-1 w-fit" style={{ backgroundColor: '#F1F1EB' }}>
+              {(['project', 'area'] as const).map(v => (
+                <button key={v} onClick={() => setGoalsView(v)} className="px-4 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={goalsView === v ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#5B6560' }}>
+                  {v === 'project' ? '프로젝트별' : '영역별'}
+                </button>
+              ))}
+            </div>
+          ) : <span />}
+
+          {/* 새 프로젝트 추가 — 포커스된 사업이면 그 사업에, '전체'면 사업 선택 */}
+          <div className="flex items-center gap-2 flex-wrap ml-auto">
+            {addingProject ? (
+              <span className="inline-flex items-center gap-1 flex-wrap">
+                {!projectWsId && (
+                  <select
+                    value={newProjectWsId ?? ''}
+                    onChange={e => setNewProjectWsId(e.target.value || null)}
+                    className="bg-white border rounded-full px-3 py-1.5 text-[13px] outline-none focus:border-violet-400"
+                    style={{ borderColor: 'var(--spira-border-strong)' }}
+                  >
+                    <option value="">사업 선택</option>
+                    {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                )}
+                <input
+                  autoFocus
+                  value={newProjectName}
+                  onChange={e => setNewProjectName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addProjectHandler(); if (e.key === 'Escape') { setAddingProject(false); setNewProjectName(''); setNewProjectWsId(null); } }}
+                  placeholder="프로젝트 이름"
+                  className="bg-white border rounded-full px-3 py-1.5 text-[13px] outline-none focus:border-violet-400"
+                  style={{ borderColor: 'var(--spira-border-strong)' }}
+                />
+                <button onClick={addProjectHandler} disabled={!newProjectName.trim() || (!projectWsId && !newProjectWsId)} className="text-[13px] font-semibold px-2 py-1 text-neutral-700 disabled:opacity-30">추가</button>
+                <button onClick={() => { setAddingProject(false); setNewProjectName(''); setNewProjectWsId(null); }} className="text-[13px] text-neutral-400 px-1">취소</button>
+              </span>
+            ) : (
+              <button onClick={() => setAddingProject(true)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors" style={{ color: '#5B5BD6', backgroundColor: '#EEF1FF' }}>📁 새 프로젝트</button>
+            )}
           </div>
-        )}
+        </div>
 
         {quarterPrograms.length === 0 ? (
           <div className="bg-white border rounded-2xl" style={{ borderColor: 'var(--spira-border-subtle)' }}>
