@@ -879,11 +879,11 @@ function BrandImageSection({
         onDrop={handleDrop}
       >
         {images.map((src, i) => (
-          <div key={i} className="relative group w-16 h-16 rounded-lg overflow-hidden bg-neutral-100">
+          <div key={i} className="relative group w-32 h-32 rounded-xl overflow-hidden bg-neutral-100">
             <img src={src} alt={`brand-${i}`} className="w-full h-full object-cover" />
             <button
               onClick={() => onRemove(i)}
-              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-white/60 text-neutral-900 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none hover:bg-white/80"
+              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/60 text-neutral-900 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-sm leading-none hover:bg-white/80"
             >
               ×
             </button>
@@ -892,14 +892,14 @@ function BrandImageSection({
         {!isFull && (
           <button
             onClick={() => fileRef.current?.click()}
-            className={`w-16 h-16 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-0.5 transition-all ${
+            className={`w-32 h-32 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-all ${
               dragging ? 'border-violet-400 text-neutral-600' : 'border-neutral-200 text-neutral-700 hover:text-neutral-600 hover:border-violet-300'
             }`}
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
               <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            <span className="text-[10px]">{dragging ? '놓기' : '추가'}</span>
+            <span className="text-xs">{dragging ? '놓기' : '추가'}</span>
           </button>
         )}
       </div>
@@ -1787,31 +1787,35 @@ export default function PlanPage() {
       </div>
 
       <div className="space-y-6">
-        {/* ── 상단 브랜드 요약 박스 (아이덴티티·키워드·한 줄 소개·업무 영역·솔루션 2~3칼럼) ── */}
+        {/* ── 상단 브랜드 요약 박스 (좌: 아이덴티티·한 줄 소개·키워드 / 우: 업무 영역·연계 비즈니스) ── */}
         <div className="bg-neutral-50 border border-neutral-200 rounded-3xl p-5 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-6 items-start">
-            <BrandImageSection
-              images={plan.brandImages ?? []}
-              onAdd={v => update({ brandImages: [...(plan.brandImages ?? []), v] })}
-              onRemove={i => update({ brandImages: (plan.brandImages ?? []).filter((_, idx) => idx !== i) })}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-6 items-start">
+            {/* 왼쪽 (1칼럼): 브랜드 아이덴티티 · 한 줄 소개 · 브랜딩 키워드 */}
+            <div className="lg:col-span-1 space-y-6">
+              <BrandImageSection
+                images={plan.brandImages ?? []}
+                onAdd={v => update({ brandImages: [...(plan.brandImages ?? []), v] })}
+                onRemove={i => update({ brandImages: (plan.brandImages ?? []).filter((_, idx) => idx !== i) })}
+              />
 
-            <BrandingKeywordsSection
-              keywords={plan.brandingKeywords ?? []}
-              onAdd={addKeyword}
-              onRemove={removeKeyword}
-              onGenerate={chat && !chat.loading ? handleGenerateBrandingKeywords : undefined}
-            />
+              <TextSection
+                label="브랜드 한 줄 소개"
+                hint={HINTS.tagline}
+                value={plan.tagline}
+                onChange={v => update({ tagline: v })}
+                placeholder="브랜드를 한 문장으로 소개하세요."
+              />
 
-            <TextSection
-              label="브랜드 한 줄 소개"
-              hint={HINTS.tagline}
-              value={plan.tagline}
-              onChange={v => update({ tagline: v })}
-              placeholder="브랜드를 한 문장으로 소개하세요."
-            />
+              <BrandingKeywordsSection
+                keywords={plan.brandingKeywords ?? []}
+                onAdd={addKeyword}
+                onRemove={removeKeyword}
+                onGenerate={chat && !chat.loading ? handleGenerateBrandingKeywords : undefined}
+              />
+            </div>
 
-            <div className="md:col-span-2 lg:col-span-1">
+            {/* 오른쪽 (2칼럼): 업무 영역 · 연계 비즈니스 */}
+            <div className="lg:col-span-2 space-y-6">
               <WorkAreasSection
                 areas={plan.workAreas ?? []}
                 onAdd={addWorkArea}
@@ -1819,9 +1823,7 @@ export default function PlanPage() {
                 onRemove={removeWorkArea}
                 onGenerate={chat && !chat.loading ? handleGenerateWorkAreas : undefined}
               />
-            </div>
 
-            <div className="md:col-span-2 lg:col-span-1">
               <ProductsSection
                 items={plan.products ?? []}
                 businesses={store.allWorkspaces.filter(w => w.id !== selectedWsId).map(w => ({ id: w.id, name: w.name }))}
