@@ -7,7 +7,7 @@ import { useUpgrade } from './UpgradeContext';
 import { isOnboardingActive } from './onboarding';
 import { createClient } from './supabase/client';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER } from './ai/markers';
-import { START_MESSAGES, FEEDBACK, AI_COPY } from './ai/messages';
+import { FEEDBACK, AI_COPY } from './ai/messages';
 
 // 대화 내용에서 인식된 '앱에 자동 반영' 액션. 버튼으로 노출되며, 클릭 시 실제 반영(Pro/온보딩 게이트).
 export interface ChatAction {
@@ -530,12 +530,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const registerPlanHandler = useCallback((handler: (patch: PlanPatch) => void) => {
     planHandlerRef.current = handler;
     planModeRef.current = true;
-    if (messagesRef.current.length === 0) {
-      setMessages([{
-        role: 'assistant',
-        content: START_MESSAGES.business,
-      }]);
-    }
+    // (예전엔 여기서 환영 메시지를 넣어 Plan에선 채팅으로 시작했지만,
+    //  이제 모든 화면이 동일하게 '예시 버튼' 시작 화면으로 시작하도록 주입하지 않는다)
     flushPendingRef.current?.(PLAN_MARKER);
   }, []);
 

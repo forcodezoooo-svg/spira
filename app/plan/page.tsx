@@ -814,7 +814,7 @@ function BrandImageSection({
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
-  const MAX = 10;
+  const MAX = 1;
   const isFull = images.length >= MAX;
 
   const readFiles = (files: File[]) => {
@@ -864,11 +864,8 @@ function BrandImageSection({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-neutral-900">브랜드 아이덴티티</h2>
-          <Hint text="로고, 무드보드 등 브랜드를 대표하는 이미지를 최대 10장 업로드하세요." />
+          <Hint text="로고 등 브랜드를 대표하는 이미지 1장을 업로드하세요." />
         </div>
-        <span className={`text-xs ${images.length >= MAX ? 'text-neutral-600 font-medium' : 'text-neutral-700'}`}>
-          {images.length}/{MAX}
-        </span>
       </div>
 
       <div
