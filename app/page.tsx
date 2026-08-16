@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ReactNode } from 'react';
 
 // 공개 랜딩 페이지 (비로그인 방문자용). 로그인한 사용자는 proxy.ts에서 /home 으로 보냄.
 // 앱 크롬(사이드바 등)은 AppFrame의 bare 처리로 렌더되지 않는다.
@@ -9,6 +10,12 @@ const DARK = '#16271B';   // 다크 그린 카드 배경
 const LIME = '#9DFE3B';   // 포인트 라임
 const INK = '#16211E';    // 본문 진한 텍스트
 const EMBLEM = '#002929'; // 시안 엠블럼(딥 틸) — 히어로 카피/버튼·활성 메뉴 아이콘
+const HL = '#2E9E1E';     // 본문 강조(브랜드 그린, 채도 ↑) — 흰 배경에서 잘 읽히는 톤
+
+// 본문 속 중요 문구를 부분 볼드 + 브랜드 그린으로 강조 (내용이 바로 읽히게)
+function Em({ children, color = HL }: { children: ReactNode; color?: string }) {
+  return <b style={{ color }}>{children}</b>;
+}
 
 // ── 아이콘(마스크) : 단색 SVG를 지정 색으로 렌더 ──────────────────────────────
 function MaskIcon({ src, size = 18, color = LIME }: { src: string; size?: number; color?: string }) {
@@ -82,11 +89,11 @@ function HomeMock() {
 }
 
 // ── 공감 카드 항목 ──────────────────────────────────────────────────────────
-const PAINS = [
-  '하루 종일 바빴는데 정작 중요한 일은 못 한 것 같다.',
-  '프로젝트가 너무 많아서 머릿속이 복잡하고 할 일 정리가 안 된다.',
-  '장기 목표를 세웠지만 제대로 그 목표로 향해가고 있는 건지 모르겠다.',
-  '가장 먼저 뭘 해야 하는지 계속 고민하느라 결국 시작을 못 했다.',
+const PAINS: ReactNode[] = [
+  <>하루 종일 바빴는데 <Em>정작 중요한 일은 못 한 것</Em> 같다.</>,
+  <>프로젝트가 너무 많아서 <Em>머릿속이 복잡하고 할 일 정리가 안 된다.</Em></>,
+  <>장기 목표를 세웠지만 <Em>제대로 그 목표로 향해가고 있는 건지</Em> 모르겠다.</>,
+  <>가장 먼저 뭘 해야 하는지 고민하느라 <Em>결국 시작을 못 했다.</Em></>,
 ];
 
 // 4단계 흐름
@@ -102,7 +109,7 @@ const FEATURES = [
   {
     icon: '/plan_icon.svg',
     title: '비즈니스의 기획과\n방향성을 정리해요',
-    desc: 'Plan에서 비즈니스의 방향과 성장 목표를 체계적으로 정리하세요. 막연한 부분은 Sparky의 도움을 받아 채우고, 완성된 계획은 하나의 문서로 확인할 수 있어요.',
+    desc: <>Plan에서 <Em>비즈니스의 방향과 성장 목표</Em>를 체계적으로 정리하세요. 막연한 부분은 <Em>Sparky의 도움</Em>을 받아 채우고, 완성된 계획은 하나의 문서로 확인할 수 있어요.</>,
     mock: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/feature-plan.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300, filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.10))' }} />
@@ -112,7 +119,7 @@ const FEATURES = [
   {
     icon: '/goals_icon.svg',
     title: '각기 다른 성격의 일들도\n일정을 나눠서 차근차근',
-    desc: 'Goals에서 업무 영역별 목표와 데드라인을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 Sparky가 함께 도와줘요.',
+    desc: <>Goals에서 <Em>업무 영역별 목표와 데드라인</Em>을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 <Em>Sparky가 함께 도와줘요.</Em></>,
     mock: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/feature-goals.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300 }} />
@@ -122,7 +129,7 @@ const FEATURES = [
   {
     icon: '/resources_icon.svg',
     title: '비용과 수익을 관리하며\n비즈니스 성장을 직관적으로',
-    desc: 'Resources에서 수익과 비용을 기록하고 매달 달라지는 비즈니스의 성장을 확인하세요. 다음 목표를 설정하면 Sparky가 이를 달성하기 위한 계획도 함께 세워줘요.',
+    desc: <>Resources에서 <Em>수익과 비용을 기록</Em>하고 매달 달라지는 <Em>비즈니스의 성장</Em>을 확인하세요. 다음 목표를 설정하면 <Em>Sparky가 계획도 함께 세워줘요.</Em></>,
     mock: (
       <div className="w-full space-y-3" style={{ maxWidth: 300 }}>
         <ResourceCard income="+124,000" expense="-78,000" net="+46,000" />
@@ -134,7 +141,7 @@ const FEATURES = [
   {
     icon: '/home_icon.svg',
     title: '오늘 할 일에만 집중하면\n목표를 향해 나아가요',
-    desc: 'Home에서 오늘 할 일과 데드라인, 프로젝트 진행 상황을 한눈에 확인하세요. 업무를 시작하면 타이머로 실제 작업 시간까지 기록할 수 있어요.',
+    desc: <>Home에서 <Em>오늘 할 일과 데드라인</Em>, 프로젝트 진행 상황을 한눈에 확인하세요. 업무를 시작하면 <Em>타이머로 실제 작업 시간까지 기록</Em>할 수 있어요.</>,
     mock: <HomeMock />,
     reverse: true,
   },
@@ -207,8 +214,8 @@ export default function LandingPage() {
             나만의 비즈니스를 준비하면서<br />이런 경험 있나요?
           </h2>
           <ul className="space-y-3.5 max-w-md mx-auto">
-            {PAINS.map(t => (
-              <li key={t} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#3E4A44' }}>
+            {PAINS.map((t, i) => (
+              <li key={i} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#3E4A44' }}>
                 <Check />{t}
               </li>
             ))}
@@ -219,9 +226,9 @@ export default function LandingPage() {
       {/* ══ 포지셔닝 ══ */}
       <section className="max-w-xl mx-auto px-6 pb-16 text-center">
         <p className="text-[15px] sm:text-[16px] leading-[1.85]" style={{ color: '#44514B' }}>
-          <b style={{ color: INK }}>Spira</b>는 단순히 생산성을 높이는 To-do 앱이 아니에요.
-          혼자 사업을 만들어가는 창업자를 위해 <b style={{ color: INK }}>비즈니스의 방향과 우선순위</b>를 관리하고,
-          지금 가장 중요한 <b style={{ color: INK }}>다음 한 걸음</b>을 제안하는 AI 워크스페이스예요.
+          <Em>Spira</Em>는 단순히 생산성을 높이는 To-do 앱이 아니에요.
+          혼자 사업을 만들어가는 창업자를 위해 <Em>비즈니스의 방향과 우선순위</Em>를 관리하고,
+          지금 가장 중요한 <Em>다음 한 걸음</Em>을 제안하는 AI 워크스페이스예요.
         </p>
       </section>
 
@@ -268,7 +275,7 @@ export default function LandingPage() {
           Spira의 전용 AI assistant, Sparky.
         </h2>
         <p className="text-[15px] leading-relaxed max-w-md mx-auto" style={{ color: '#5B6560' }}>
-          어렵고 잘 몰라도 괜찮아요. 막연한 아이디어와 고민들을 자유롭게 털어놓으면 Sparky가 정리해줄 거예요.
+          <Em>어렵고 잘 몰라도 괜찮아요.</Em> 막연한 아이디어와 고민들을 자유롭게 털어놓으면 <Em>Sparky가 정리해줄 거예요.</Em>
         </p>
       </section>
 
@@ -302,7 +309,7 @@ export default function LandingPage() {
             당신의 비즈니스가<br />길을 잃지 않고 나아갈 수 있도록
           </h2>
           <p className="text-[14px] sm:text-[15px] leading-relaxed mb-8 max-w-md mx-auto" style={{ color: '#9FB3A0' }}>
-            혼자 사업을 만들어가는 당신을 위한 AI 워크스페이스.<br className="hidden sm:block" /> 지금 무료로 시작해보세요.
+            혼자 사업을 만들어가는 당신을 위한 <Em color={LIME}>AI 워크스페이스.</Em><br className="hidden sm:block" /> <Em color={LIME}>지금 무료로 시작해보세요.</Em>
           </p>
           <Link
             href="/login"
