@@ -216,7 +216,7 @@ export default function LandingPage() {
           <ul className="space-y-3.5 max-w-md mx-auto">
             {PAINS.map((t, i) => (
               <li key={i} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#3E4A44' }}>
-                <Check />{t}
+                <Check /><span>{t}</span>
               </li>
             ))}
           </ul>
