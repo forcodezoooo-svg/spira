@@ -333,13 +333,13 @@ function ProductsSection({
 
   const form = (i: number | null) => (
     <div className="space-y-2">
-      <AutoTextarea value={title} onChange={setTitle} placeholder="프로덕트 이름" />
+      <AutoTextarea value={title} onChange={setTitle} placeholder="연계 비즈니스 이름" />
       <div className="border-t border-neutral-100 pt-2">
         <AutoTextarea value={memo} onChange={setMemo} placeholder="상세 내용 (선택)" />
       </div>
       {businesses.length > 0 && (
         <div className="border-t border-neutral-100 pt-2">
-          <label className="text-[11px] font-medium text-neutral-400 block mb-1">계열사 연동 (선택) — 이 프로덕트를 다른 비즈니스로 저장</label>
+          <label className="text-[11px] font-medium text-neutral-400 block mb-1">계열사 연동 (선택) — 이 항목을 다른 비즈니스로 저장</label>
           <select value={linkedWsId} onChange={e => setLinkedWsId(e.target.value)} className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400">
             <option value="">연동 안 함</option>
             {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -357,11 +357,11 @@ function ProductsSection({
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
-        <div className={onGenerate ? 'flex items-center gap-1 cursor-pointer group' : 'flex items-center'} onClick={onGenerate} title={onGenerate ? 'AI가 프로덕트 목록 제안' : undefined}>
-          <h2 className={`text-sm font-semibold text-neutral-900 ${onGenerate ? 'group-hover:text-neutral-700 transition-colors' : ''}`}>프로덕트 목록</h2>
+        <div className={onGenerate ? 'flex items-center gap-1 cursor-pointer group' : 'flex items-center'} onClick={onGenerate} title={onGenerate ? 'AI가 연계 비즈니스 제안' : undefined}>
+          <h2 className={`text-sm font-semibold text-neutral-900 ${onGenerate ? 'group-hover:text-neutral-700 transition-colors' : ''}`}>연계 비즈니스</h2>
           {onGenerate && <svg className="w-3 h-3 text-neutral-500 group-hover:text-neutral-600 transition-colors ml-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
         </div>
-        <Hint text="이 사업에서 판매·출시하는 것(웹앱·앱·굿즈 등). 다른 비즈니스를 '계열사'로 연동하면, 그 비즈니스가 이 사업의 프로덕트로 종속되어 여기에만 표시돼요." />
+        <Hint text="이 사업과 연결된 비즈니스(계열사·제품 라인 등). 다른 비즈니스를 '계열사'로 연동하면, 그 비즈니스가 이 사업 안에 종속되어 여기에만 표시돼요." />
       </div>
 
       <div className="space-y-2">
@@ -391,7 +391,7 @@ function ProductsSection({
         {adding ? (
           <div className="bg-white border border-violet-300 ring-2 ring-violet-400 rounded-xl px-4 py-3">{form(null)}</div>
         ) : (
-          <button onClick={startAdd} className="w-full py-2.5 rounded-xl border-2 border-dashed border-neutral-200 text-xs text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 프로덕트 추가</button>
+          <button onClick={startAdd} className="w-full py-2.5 rounded-xl border-2 border-dashed border-neutral-200 text-xs text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 연계 비즈니스 추가</button>
         )}
       </div>
     </section>
@@ -2059,6 +2059,18 @@ export default function PlanPage() {
                 onGenerate={chat && !chat.loading ? handleGenerateSolutions : undefined}
               />
             </div>
+
+            <div className="md:col-span-2 lg:col-span-1">
+              <ProductsSection
+                items={plan.products ?? []}
+                businesses={store.allWorkspaces.filter(w => w.id !== selectedWsId).map(w => ({ id: w.id, name: w.name }))}
+                onAdd={v => addPlanItem('products', v)}
+                onUpdate={(i, v) => updatePlanItem('products', i, v)}
+                onRemove={i => removePlanItem('products', i)}
+                onGenerate={chat && !chat.loading ? handleGenerateProducts : undefined}
+                onOpenBusiness={wsId => { store.switchWorkspace(wsId); setSelectedWsId(wsId); }}
+              />
+            </div>
           </div>
         </div>
 
@@ -2119,16 +2131,6 @@ export default function PlanPage() {
           onUpdate={(i, v) => updatePlanItem('revenueModel', i, v)}
           onRemove={i => removePlanItem('revenueModel', i)}
           onGenerate={chat && !chat.loading ? handleGenerateRevenueModel : undefined}
-        />
-
-        <ProductsSection
-          items={plan.products ?? []}
-          businesses={store.allWorkspaces.filter(w => w.id !== selectedWsId).map(w => ({ id: w.id, name: w.name }))}
-          onAdd={v => addPlanItem('products', v)}
-          onUpdate={(i, v) => updatePlanItem('products', i, v)}
-          onRemove={i => removePlanItem('products', i)}
-          onGenerate={chat && !chat.loading ? handleGenerateProducts : undefined}
-          onOpenBusiness={wsId => { store.switchWorkspace(wsId); setSelectedWsId(wsId); }}
         />
 
         <GrowthStagesSection
