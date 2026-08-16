@@ -170,31 +170,38 @@ export default function PricingPage() {
           <div className="mt-7 py-3 rounded-2xl text-center text-[14px] font-bold" style={{ backgroundColor: '#F1F1EB', color: '#9AA39D' }}>{isPro ? '기본 플랜' : '현재 이용 중'}</div>
         </div>
 
-        {/* Pro */}
-        <div className="rounded-3xl p-7 relative" style={{ backgroundColor: '#16211E', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
-          <span className="absolute top-6 right-6 text-[11px] font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추천</span>
-          <p className="text-[14px] font-bold mb-1" style={{ color: '#9DFE3B' }}>Pro</p>
-          <div className="flex items-end gap-1.5 mb-1">
-            <p className="text-[30px] font-black" style={{ color: '#F8F8F8' }}>₩{fmt(proPrice)}</p>
-            <p className="text-[14px] mb-1.5" style={{ color: '#AEB8AE' }}>/ {cycle === 'monthly' ? '월' : '년'}</p>
-          </div>
-          <p className="text-[13px] mb-6" style={{ color: '#AEB8AE' }}>
-            {cycle === 'yearly' ? `월 ₩${fmt(proPerMonth)} 꼴 · 매년 청구` : '매월 청구 · 언제든 해지'}
+        {/* Pro — 정식 결제 오픈 전이면 그레이톤 + '오픈예정'(금액 숨김) */}
+        {(() => {
+        const proLocked = BETA_LOCKED && !isPro;
+        return (
+        <div className="rounded-3xl p-7 relative" style={proLocked ? { backgroundColor: '#ECECE6', border: '1px solid rgba(0,41,41,0.08)' } : { backgroundColor: '#16211E', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+          <span className="absolute top-6 right-6 text-[11px] font-bold px-2.5 py-1 rounded-full" style={proLocked ? { backgroundColor: '#DDDDD5', color: '#8A938A' } : { backgroundColor: '#9DFE3B', color: '#16211E' }}>{proLocked ? '오픈예정' : '추천'}</span>
+          <p className="text-[14px] font-bold mb-1" style={{ color: proLocked ? '#8A938A' : '#9DFE3B' }}>Pro</p>
+          {proLocked ? (
+            <p className="text-[30px] font-black mb-1" style={{ color: '#8A938A' }}>오픈예정</p>
+          ) : (
+            <div className="flex items-end gap-1.5 mb-1">
+              <p className="text-[30px] font-black" style={{ color: '#F8F8F8' }}>₩{fmt(proPrice)}</p>
+              <p className="text-[14px] mb-1.5" style={{ color: '#AEB8AE' }}>/ {cycle === 'monthly' ? '월' : '년'}</p>
+            </div>
+          )}
+          <p className="text-[13px] mb-6" style={{ color: proLocked ? '#A8B0A8' : '#AEB8AE' }}>
+            {proLocked ? '더 많은 분들이 모이면 곧 열려요.' : (cycle === 'yearly' ? `월 ₩${fmt(proPerMonth)} 꼴 · 매년 청구` : '매월 청구 · 언제든 해지')}
           </p>
           <ul className="space-y-2.5">
             {PRO_FEATURES.map(f => (
-              <li key={f} className="flex items-start gap-2 text-[14px]" style={{ color: '#F8F8F8' }}>
-                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" viewBox="0 0 12 12" fill="none" style={{ color: '#9DFE3B' }}><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <li key={f} className="flex items-start gap-2 text-[14px]" style={{ color: proLocked ? '#5B6560' : '#F8F8F8' }}>
+                <svg className="w-4 h-4 mt-0.5 flex-shrink-0" viewBox="0 0 12 12" fill="none" style={{ color: proLocked ? '#A8B0A8' : '#9DFE3B' }}><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 {f}
               </li>
             ))}
           </ul>
           {!isPro ? (
             BETA_LOCKED ? (
-              // 무료 베타 — 구독 잠금(그레이톤 + 안내)
+              // 무료 베타 — 구독 잠금(그레이톤 + '오픈예정' 안내)
               <div className="mt-7">
-                <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold cursor-not-allowed" style={{ backgroundColor: 'rgba(255,255,255,0.12)', color: '#8D9A8D' }}>Pro 구독하기</div>
-                <p className="text-center text-[12px] mt-2.5" style={{ color: '#AEB8AE' }}>정식 버전 출시 후 구독할 수 있어요.</p>
+                <div className="w-full py-3 rounded-2xl text-center text-[15px] font-bold cursor-not-allowed" style={{ backgroundColor: '#DDDDD5', color: '#9AA39D' }}>오픈예정</div>
+                <p className="text-center text-[12px] mt-2.5" style={{ color: '#A8B0A8' }}>정식 버전 출시 후 구독할 수 있어요.</p>
               </div>
             ) : (
               // 미구독 → 첫 구독(즉시 결제)
@@ -249,6 +256,8 @@ export default function PricingPage() {
             </div>
           )}
         </div>
+        );
+        })()}
       </div>
 
       <p className="text-center text-[12px] mt-6" style={{ color: '#C4CCC4' }}>
