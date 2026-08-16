@@ -2323,8 +2323,10 @@ export default function ProgramsPage() {
                 const autoDeadline = memberDates.length ? memberDates.sort().slice(-1)[0] : undefined;
                 const effDeadline = box.project.deadline ?? autoDeadline;
                 const deadlineManual = !!box.project.deadline;
+                // 중요도 '높음'이면 박스 자체를 붉은 톤으로 강조
+                const isHigh = (box.project.importance ?? 2) === 3;
                 return (
-                  <div key={box.key} className="rounded-3xl" style={{ backgroundColor: '#EAF0FB' }}>
+                  <div key={box.key} className="rounded-3xl" style={{ backgroundColor: isHigh ? '#FBE3E3' : '#EAF0FB' }}>
                     <div className="w-full flex items-center gap-3 px-5 py-4">
                       <div onClick={() => toggleAreaCollapsed(box.key)} className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
                         {/* 어느 비즈니스의 프로젝트인지 컬러닷으로 표시 */}
