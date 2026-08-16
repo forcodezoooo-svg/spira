@@ -2362,6 +2362,11 @@ export default function ProgramsPage() {
               {/* 프로젝트 박스 (업무 영역 박스와 같은 묶음 역할) */}
               {projBoxes.map(box => {
                 const expanded = expandedAreas.has(box.key);
+                // 프로젝트 전체 데드라인: 수동 지정값 우선, 없으면 소속 데드라인 중 가장 늦은 날짜로 자동
+                const memberDates = box.items.flatMap(({ p }) => (p.deadlines ?? []).filter(dl => dl.projectId === box.project.id && dl.date).map(dl => dl.date as string));
+                const autoDeadline = memberDates.length ? memberDates.sort().slice(-1)[0] : undefined;
+                const effDeadline = box.project.deadline ?? autoDeadline;
+                const deadlineManual = !!box.project.deadline;
                 return (
                   <div key={box.key} className="rounded-3xl" style={{ backgroundColor: '#EAF0FB' }}>
                     <div className="w-full flex items-center gap-3 px-5 py-4">
@@ -2369,7 +2374,6 @@ export default function ProgramsPage() {
                         {/* 어느 비즈니스의 프로젝트인지 컬러닷으로 표시 */}
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(box.wsId) }} title={store.allWorkspaces.find(w => w.id === box.wsId)?.name} />
                         <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{box.project.name}</h3>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={box.project.type === 'build' ? { backgroundColor: '#DEE4FF', color: '#5B5BD6' } : { backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>{box.project.type === 'build' ? '기획·개발' : '루틴'}</span>
                         {/* 중요도 (편집 가능) */}
                         <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                           <button onClick={() => setImportanceEditFor(importanceEditFor === box.key ? null : box.key)} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: IMPORTANCE_META[box.project.importance ?? 2].bg, color: IMPORTANCE_META[box.project.importance ?? 2].color }} title="중요도 설정">중요도 {IMPORTANCE_META[box.project.importance ?? 2].label}</button>
@@ -2387,15 +2391,15 @@ export default function ProgramsPage() {
                         <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#DCE3F5', color: '#5B6560' }}>{box.count}</span>
                         {businesses.length > 1 && <span className="text-[11px] truncate" style={{ color: '#9AA39D' }}>· {store.allWorkspaces.find(w => w.id === box.wsId)?.name}</span>}
                       </div>
-                      {/* 프로젝트 전체 데드라인 (편집 가능) */}
+                      {/* 프로젝트 전체 데드라인 — 기본은 소속 데드라인 중 가장 늦은 날짜(자동), 클릭해 수동 지정 가능 */}
                       <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setDeadlineEditFor(deadlineEditFor === box.key ? null : box.key)} className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: box.project.deadline ? '#5B6560' : '#9AA39D' }} title="프로젝트 전체 데드라인">📅 {box.project.deadline ? box.project.deadline.slice(5).replace('-', '.') : '마감'}</button>
+                        <button onClick={() => setDeadlineEditFor(deadlineEditFor === box.key ? null : box.key)} className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: effDeadline ? '#5B6560' : '#9AA39D' }} title={deadlineManual ? '프로젝트 전체 데드라인 (직접 지정)' : '프로젝트 전체 데드라인 (자동: 가장 늦은 데드라인). 클릭해 직접 지정'}>📅 {effDeadline ? `${effDeadline.slice(5).replace('-', '.')}${deadlineManual ? '' : ' (자동)'}` : '마감'}</button>
                         {deadlineEditFor === box.key && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setDeadlineEditFor(null)} />
                             <div className="absolute right-0 top-full mt-1 bg-white border rounded-xl p-2 z-20 flex items-center gap-2" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
-                              <input type="date" value={box.project.deadline ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { deadline: e.target.value || undefined })} className="bg-neutral-50 border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
-                              {box.project.deadline && <button onClick={() => { store.updateProject(box.wsId, box.project.id, { deadline: undefined }); setDeadlineEditFor(null); }} className="text-[11px] text-neutral-400 hover:text-neutral-600">지우기</button>}
+                              <input type="date" value={box.project.deadline ?? autoDeadline ?? ''} onChange={e => store.updateProject(box.wsId, box.project.id, { deadline: e.target.value || undefined })} className="bg-neutral-50 border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: 'var(--spira-border-strong)' }} />
+                              {deadlineManual && <button onClick={() => { store.updateProject(box.wsId, box.project.id, { deadline: undefined }); setDeadlineEditFor(null); }} className="text-[11px] text-neutral-400 hover:text-neutral-600" title="자동(가장 늦은 데드라인)으로 되돌리기">자동으로</button>}
                             </div>
                           </>
                         )}
