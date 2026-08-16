@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const access = await checkAiAccess();
   if ('error' in access) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  const { name, description, goal } = await request.json();
+  const { name, category, description, goal } = await request.json();
 
   const system = `당신은 1인 창업가를 위한 사업 운영 OS 'Spira'의 온보딩 어시스턴트예요.
 사용자가 알려준 사업 정보를 바탕으로 초기 기획서·분기별 목표·업무 영역을 제안합니다.
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 - workAreas: 목표 달성에 필요한 업무 영역(예: 기획, 디자인, 개발, 마케팅) 3~5개.
 - solutions 2~3개, revenueModel 1~3개, problems 2~3개.`;
 
-  const user = `사업 이름: ${name || '(미입력)'}\n사업 설명: ${description || '(미입력)'}\n이루고 싶은 첫 목표: ${goal || '(미입력)'}`;
+  const user = `사업 이름: ${name || '(미입력)'}\n비즈니스 카테고리: ${category || '(미입력)'}\n사업 설명: ${description || '(미입력)'}\n이루고 싶은 첫 목표: ${goal || '(미입력)'}`;
 
   try {
     const res = await getClient().chat.completions.create({

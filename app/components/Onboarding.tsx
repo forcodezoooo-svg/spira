@@ -9,6 +9,16 @@ import type { PlanItem } from '../lib/types';
 const PALETTE = ['#5EA63A', '#4E7CF5', '#E0913C', '#9B6BD6', '#3CB8A6', '#E0648C'];
 type NamedGoal = { name: string; goal: string };
 
+// 비즈니스 카테고리 선택지 (온보딩)
+const CATEGORIES: { key: string; label: string; emoji: string; desc: string }[] = [
+  { key: '제품', label: '제품', emoji: '📦', desc: '물리적·디지털 제품을 만들어 판매' },
+  { key: '서비스', label: '서비스', emoji: '🛠️', desc: '고객에게 서비스를 제공' },
+  { key: '콘텐츠', label: '콘텐츠', emoji: '🎬', desc: '영상·글·이미지 등 콘텐츠 창작' },
+  { key: '커머스', label: '커머스', emoji: '🛒', desc: '상품을 사입·유통·판매' },
+  { key: '커뮤니티', label: '커뮤니티', emoji: '👥', desc: '사람을 모으는 커뮤니티·플랫폼' },
+  { key: '기타', label: '기타', emoji: '✨', desc: '아직 정하지 않았거나 그 외' },
+];
+
 // 편집 가능한 리스트(분기목표/업무영역 공통). 모듈 레벨 — 렌더마다 재생성돼 포커스 풀리는 것 방지.
 // withDesc=true 이면 이름 아래 한 줄 설명(goal) 입력도 함께 표시.
 function EditList({ items, setItems, placeholder, descPlaceholder, numbered = false, withDesc = false }: { items: NamedGoal[]; setItems: (v: NamedGoal[]) => void; placeholder: string; descPlaceholder?: string; numbered?: boolean; withDesc?: boolean }) {
@@ -41,9 +51,10 @@ export default function Onboarding() {
   const router = useRouter();
   const { toast } = useToast();
   const [visible, setVisible] = useState(false);
-  const [step, setStep] = useState(0);   // 0 이름 · 1 설명 · 2 목표 · 3 분기목표검토 · 4 업무영역검토 · 5 완료
+  const [step, setStep] = useState(0);   // 0 이름 · 1 카테고리 · 2 설명 · 3 목표 · 4 분기목표검토 · 5 업무영역검토 · 6 완료
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
   const [desc, setDesc] = useState('');
   const [goal, setGoal] = useState('');
   const [qGoals, setQGoals] = useState<NamedGoal[]>([]);
@@ -69,7 +80,7 @@ export default function Onboarding() {
       const res = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: desc.trim(), goal: goal.trim() }),
+        body: JSON.stringify({ name: name.trim(), category, description: desc.trim(), goal: goal.trim() }),
       });
       const d = await res.json();
       if (!res.ok || d.error) throw new Error();
@@ -91,7 +102,7 @@ export default function Onboarding() {
       setWAreas([]);
     } finally {
       setLoading(false);
-      setStep(3);
+      setStep(4);
     }
   };
 
@@ -110,7 +121,7 @@ export default function Onboarding() {
       workAreas: wAreas.filter(w => w.name.trim()).map((w, i) => ({ id: uid(), name: w.name.trim(), color: PALETTE[i % PALETTE.length], goal: w.goal.trim() })),
     });
     qGoals.filter(g => g.name.trim()).forEach((g, i) => store.addProgramToWs(wsId, { name: g.name.trim(), goal: g.goal.trim() || g.name.trim(), color: PALETTE[i % PALETTE.length] }));
-    setStep(5);
+    setStep(6);
   };
 
   const finish = (goPlan: boolean) => {
@@ -129,7 +140,7 @@ export default function Onboarding() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Spira" className="w-6 h-auto" />
           <div className="flex-1" />
-          {[0, 1, 2, 3, 4].map(i => (
+          {[0, 1, 2, 3, 4, 5].map(i => (
             <span key={i} className="w-1.5 h-1.5 rounded-full transition-colors" style={{ backgroundColor: i <= step ? '#9DFE3B' : '#E1E1DA' }} />
           ))}
         </div>
@@ -154,17 +165,47 @@ export default function Onboarding() {
             </>
           ) : step === 1 ? (
             <>
+              <h2 className="text-[20px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>어떤 종류의<br />비즈니스인가요?</h2>
+              <p className="text-[13px] leading-relaxed mb-4" style={{ color: '#5B6560' }}>가장 가까운 카테고리를 골라주세요. Sparky가 이 유형에 맞춰 기획과 목표를 제안해줘요.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {CATEGORIES.map(c => {
+                  const on = category === c.key;
+                  return (
+                    <button
+                      key={c.key}
+                      onClick={() => setCategory(c.key)}
+                      className="text-left rounded-2xl border px-3.5 py-3 transition-all"
+                      style={on
+                        ? { borderColor: '#9DFE3B', backgroundColor: '#F4FBEA', boxShadow: '0 0 0 2px rgba(157,254,59,0.5)' }
+                        : { borderColor: 'var(--spira-border-strong)', backgroundColor: '#fff' }}
+                    >
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[15px]">{c.emoji}</span>
+                        <span className="text-[14px] font-bold" style={{ color: '#16211E' }}>{c.label}</span>
+                      </div>
+                      <p className="text-[11px] leading-snug" style={{ color: '#8A938C' }}>{c.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setStep(0)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
+                <button onClick={() => setStep(2)} disabled={!category} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
+              </div>
+            </>
+          ) : step === 2 ? (
+            <>
               <h2 className="text-[20px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>그 비즈니스/브랜드에<br />대해 설명해주세요</h2>
               <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>무엇을, 누구를 위해, 어떻게 만드는 비즈니스/브랜드인지 자유롭게 적어주세요. 이후에 수정할 수 있으니 간단한 내용이어도 괜찮아요.</p>
               <textarea autoFocus value={desc} onChange={e => setDesc(e.target.value)} rows={5}
                 placeholder="예: 1인 창업가들이 사업을 체계적으로 운영하도록 돕는 웹 서비스예요. 목표·업무·수익을 한곳에서…"
                 className={`${inputCls} resize-none leading-relaxed`} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E', alignContent: 'start' }} />
               <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(0)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
-                <button onClick={() => setStep(2)} disabled={!desc.trim()} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
+                <button onClick={() => setStep(1)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
+                <button onClick={() => setStep(3)} disabled={!desc.trim()} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
               </div>
             </>
-          ) : step === 2 ? (
+          ) : step === 3 ? (
             <>
               <h2 className="text-[20px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>이 프로젝트에서<br />이루고 싶은 첫 목표는?</h2>
               <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>예: “앱 런칭 후 사용자 10만 달성”. 이 목표를 Sparky가 분기별로 나눠 제안할게요.</p>
@@ -172,27 +213,27 @@ export default function Onboarding() {
                 onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && goal.trim() && analyze()}
                 placeholder="예: 앱 런칭 후 사용자 10만 달성" className={inputCls} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E' }} />
               <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(1)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
+                <button onClick={() => setStep(2)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
                 <button onClick={analyze} disabled={!goal.trim()} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>AI로 분석하기</button>
               </div>
             </>
-          ) : step === 3 ? (
+          ) : step === 4 ? (
             <>
               <h2 className="text-[19px] font-black leading-snug mb-1" style={{ color: '#16211E' }}>분기별 목표 제안</h2>
               <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>첫 목표를 이루기 위한 단계예요. 수정·추가·삭제할 수 있고, 나중에 Goals에서도 바꿀 수 있어요.</p>
               <EditList items={qGoals} setItems={setQGoals} placeholder="목표 이름" numbered />
               <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(2)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
-                <button onClick={() => setStep(4)} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
+                <button onClick={() => setStep(3)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
+                <button onClick={() => setStep(5)} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
               </div>
             </>
-          ) : step === 4 ? (
+          ) : step === 5 ? (
             <>
               <h2 className="text-[19px] font-black leading-snug mb-1" style={{ color: '#16211E' }}>업무 영역 제안</h2>
               <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>목표 달성에 필요한 업무 영역이에요. 수정·추가·삭제할 수 있고, 나중에 Plan에서도 바꿀 수 있어요.</p>
               <EditList items={wAreas} setItems={setWAreas} placeholder="업무 영역 이름" descPlaceholder="이 영역이 하는 일을 한 줄로" withDesc />
               <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(3)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
+                <button onClick={() => setStep(4)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
                 <button onClick={createAll} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>완료</button>
               </div>
             </>
@@ -205,8 +246,7 @@ export default function Onboarding() {
               <p className="text-[14px] leading-relaxed mb-6" style={{ color: '#5B6560' }}>
                 ‘{name.trim()}’ 기획서 초안·분기별 목표·업무 영역을 만들었어요. Plan에서 기획서를 다듬고, Goals에서 목표를 데드라인·업무로 쪼개 캘린더에 배치해보세요.
               </p>
-              <button onClick={() => finish(true)} className="w-full py-3 rounded-2xl text-[15px] font-bold mb-2 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>Plan에서 기획서 보기</button>
-              <button onClick={() => finish(false)} className="w-full py-2.5 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560' }}>먼저 둘러볼게요</button>
+              <button onClick={() => finish(true)} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>내 비즈니스 시작하기</button>
             </>
           )}
         </div>
