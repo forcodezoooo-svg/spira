@@ -109,8 +109,8 @@ export default function ProgramsPage() {
   type CalLevel = 'program' | 'deadline' | 'todo';
   const [calMonth, setCalMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [calLevel, setCalLevel] = useState<CalLevel>('todo');
-  // 보기 모드: 영역별(기본) / 우선순위
-  const [goalsView, setGoalsView] = useState<'area' | 'priority'>('area');
+  // 보기 모드: 프로젝트별(기본) / 영역별
+  const [goalsView, setGoalsView] = useState<'project' | 'area'>('project');
   const [priorityOrder, setPriorityOrder] = useState<string[]>([]); // 같은 날짜 내 수동 우선순위(데드라인 id 순서)
   const [selectedDls, setSelectedDls] = useState<Set<string>>(new Set()); // 디데이 쪼개기 선택
   const [prioDrag, setPrioDrag] = useState<string | null>(null);
@@ -119,7 +119,7 @@ export default function ProgramsPage() {
   const togglePrioExpand = (id: string) => setExpandedPrio(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [pushMenuDl, setPushMenuDl] = useState<string | null>(null); // '일정 미루기' 드롭다운이 열린 데드라인 id
   useEffect(() => {
-    const v = localStorage.getItem('spira_goals_view'); if (v === 'priority' || v === 'area') setGoalsView(v);
+    const v = localStorage.getItem('spira_goals_view'); if (v === 'project' || v === 'area') setGoalsView(v);
     try { setPriorityOrder(JSON.parse(localStorage.getItem('spira_goals_prio') || '[]')); } catch { /* empty */ }
   }, []);
   useEffect(() => { localStorage.setItem('spira_goals_view', goalsView); }, [goalsView]);
@@ -1684,12 +1684,12 @@ export default function ProgramsPage() {
           </div>
         )}
 
-        {/* 보기 모드 토글 (영역별 / 우선순위) */}
+        {/* 보기 모드 토글 (프로젝트별 / 영역별) */}
         {quarterPrograms.length > 0 && (
           <div className="flex items-center gap-1 mb-4 rounded-full p-1 w-fit" style={{ backgroundColor: '#F1F1EB' }}>
-            {(['area', 'priority'] as const).map(v => (
+            {(['project', 'area'] as const).map(v => (
               <button key={v} onClick={() => setGoalsView(v)} className="px-4 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={goalsView === v ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#5B6560' }}>
-                {v === 'area' ? '영역별' : '우선순위'}
+                {v === 'project' ? '프로젝트별' : '영역별'}
               </button>
             ))}
           </div>
@@ -1698,108 +1698,6 @@ export default function ProgramsPage() {
         {quarterPrograms.length === 0 ? (
           <div className="bg-white border rounded-2xl" style={{ borderColor: 'var(--spira-border-subtle)' }}>
             <EmptyState title="아직 업무 영역이 없어요" description="Plan 페이지에서 업무 영역을 추가하면, 각 영역에 데드라인과 업무를 등록할 수 있어요." />
-          </div>
-        ) : goalsView === 'priority' ? (
-          <div className="space-y-3">
-            {/* 디데이 쪼개기 툴바 */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-[13px]" style={{ color: '#9AA39D' }}>
-                {selectedDls.size > 0 ? `${selectedDls.size}개 선택됨 — 우선순위 순서대로 날짜를 나눠요` : '디데이 날짜순 정렬 · 같은 날짜는 드래그로 순서 조정'}
-              </p>
-              <div className="flex items-center gap-1.5">
-                {selectedDls.size > 0 && (
-                  <button onClick={() => setSelectedDls(new Set())} className="text-[13px] font-semibold px-3 py-1.5 transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>선택 해제</button>
-                )}
-                <button onClick={splitDday} disabled={selectedDls.size < 2} className="text-[13px] font-bold px-4 py-1.5 rounded-full transition-transform hover:-translate-y-0.5 disabled:opacity-30 disabled:translate-y-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>디데이 쪼개기</button>
-              </div>
-            </div>
-
-            {priorityItems.length === 0 ? (
-              <div className="bg-white border rounded-2xl" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                <EmptyState title="이번 분기 데드라인이 없어요" description="‘영역별’ 보기에서 데드라인을 추가해보세요." />
-              </div>
-            ) : (
-              <ul className="space-y-2">
-                {priorityItems.map(({ dl, p }) => {
-                  const dd = dl.date ? calcDday(dl.date) : null;
-                  const sel = selectedDls.has(dl.id);
-                  const todos = (dl.todos ?? []);
-                  const expanded = expandedPrio.has(dl.id);
-                  return (
-                    <li key={dl.id}
-                      className="bg-white border rounded-2xl overflow-hidden"
-                      style={{ borderColor: prioOver === dl.id ? '#C4B5FD' : 'var(--spira-border-subtle)' }}
-                    >
-                      <div
-                        draggable
-                        onDragStart={() => setPrioDrag(dl.id)}
-                        onDragOver={e => { e.preventDefault(); setPrioOver(dl.id); }}
-                        onDrop={() => handlePrioDrop(dl.id)}
-                        onDragEnd={() => { setPrioDrag(null); setPrioOver(null); }}
-                        className="flex items-center gap-3 px-4 py-3"
-                      >
-                        <span className="flex-shrink-0 text-neutral-300 cursor-grab active:cursor-grabbing" title="드래그로 순서 조정">
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="currentColor"><circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" /><circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" /><circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" /></svg>
-                        </span>
-                        <button onClick={() => toggleSelectDl(dl.id)} className="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors" style={sel ? { backgroundColor: '#16211E', borderColor: '#16211E' } : { borderColor: '#C7CEC7' }}>
-                          {sel && <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                        </button>
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
-                        <button
-                          onClick={() => togglePrioExpand(dl.id)}
-                          className="min-w-0 flex-1 text-left"
-                          title={todos.length ? (expanded ? '업무 접기' : '업무 펼치기') : undefined}
-                        >
-                          <div className="text-[14px] font-semibold truncate" style={{ color: '#16211E' }}>{dl.name}</div>
-                          <div className="text-[12px] truncate" style={{ color: '#9AA39D' }}>{store.allWorkspaces.find(w => w.id === p.wsId)?.name}{programArea(p)?.name ? ` · ${programArea(p)!.name}` : ''}{todos.length ? ` · 업무 ${todos.length}` : ''}</div>
-                        </button>
-                        {dl.date ? (
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${dd?.cls ?? ''}`}>{dd?.label} · {dl.date.slice(5).replace('-', '.')}</span>
-                        ) : (
-                          <span className="text-[11px] font-medium text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 flex-shrink-0">📅 미배치</span>
-                        )}
-                        {todos.length > 0 && (
-                          <button onClick={() => togglePrioExpand(dl.id)} className="flex-shrink-0 text-neutral-400 hover:text-neutral-700 transition-colors" title={expanded ? '접기' : '펼치기'}>
-                            <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          </button>
-                        )}
-                      </div>
-                      {expanded && todos.length > 0 && (
-                        <ul className="px-4 pb-3 pl-11 space-y-1.5 border-t pt-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                          {todos.map(t => {
-                            const effDeadline = t.deadline || dl.date;
-                            const recurring = (t.days?.length ?? 0) > 0;
-                            const tDday = effDeadline ? calcDday(effDeadline) : null;
-                            const shownDone = t.done || (recurring && !!effDeadline && effDeadline < todayKey);
-                            return (
-                              <li key={t.id} className="flex items-center gap-2">
-                                <button
-                                  onClick={() => toggleTodo(p, dl.id, t.id)}
-                                  title="완료 표시 / 해제"
-                                  className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${shownDone ? 'bg-neutral-900 border-neutral-900' : 'border-neutral-300 hover:border-neutral-600'}`}
-                                >
-                                  {shownDone && <svg className="w-2 h-2 text-white" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                                </button>
-                                <span className={`text-[13px] min-w-0 truncate ${shownDone ? 'line-through text-neutral-400' : 'text-neutral-700'}`}>{t.name}</span>
-                                {recurring && (
-                                  <span className="text-[10px] text-violet-800 bg-violet-100 rounded-full px-1.5 py-0.5 flex-shrink-0">매주 {t.days!.map(d => DOW[d]).join('·')}</span>
-                                )}
-                                {t.date && (
-                                  <span className="text-[10px] text-neutral-500 bg-neutral-100 rounded-full px-1.5 py-0.5 flex-shrink-0 tabular-nums">시작 {t.date.slice(5).replace('-', '.')}</span>
-                                )}
-                                {tDday && !recurring && (
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${tDday.cls}`}>{tDday.label}</span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
           </div>
         ) : (() => {
           // filter: undefined=전체, '__none__'=프로젝트 미지정만, 그 외=해당 projectId만
@@ -2356,6 +2254,37 @@ export default function ProgramsPage() {
             });
             return [...map.values()].sort((a, b) => (a.project.order ?? 0) - (b.project.order ?? 0));
           })();
+
+          // '영역별' 보기: 예전처럼 업무 영역 접이식 박스로 그룹 (그 영역의 모든 데드라인 표시)
+          const renderAreaSection = (sec: (typeof areaSections)[number]) => {
+            const expanded = expandedAreas.has(sec.key);
+            const secDeadlines = sec.items.flatMap(({ p }) => dlInQuarter(p, year, quarter).map(dl => ({ dl, p })));
+            return (
+              <div key={sec.key} className="rounded-3xl" style={{ backgroundColor: '#F1F1EB' }}>
+                <div className="w-full flex items-center gap-3 px-5 py-4">
+                  <div onClick={() => toggleAreaCollapsed(sec.key)} className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                    <h3 className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{sec.name}</h3>
+                    <span className="text-[12px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#E1E1DA', color: '#5B6560' }}>{secDeadlines.length}</span>
+                  </div>
+                  {sec.key !== NONE && !filterWsId && (
+                    <div className="flex items-center flex-shrink-0">
+                      <button onClick={() => store.moveArea(sec.name, -1)} className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-neutral-700 transition-colors" title="영역 위로"><svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                      <button onClick={() => store.moveArea(sec.name, 1)} className="w-6 h-6 flex items-center justify-center text-neutral-300 hover:text-neutral-700 transition-colors" title="영역 아래로"><svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                    </div>
+                  )}
+                  <button onClick={() => toggleAreaCollapsed(sec.key)} className="flex-shrink-0"><svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                </div>
+                {expanded && (
+                  <div className="px-3 pb-3 space-y-3">
+                    {sec.items.map(({ p, idx }) => renderProgramCard(p, idx))}
+                  </div>
+                )}
+              </div>
+            );
+          };
+          if (goalsView === 'area') {
+            return <div className="space-y-3">{areaSections.map(renderAreaSection)}</div>;
+          }
 
           return (
             <div className="space-y-3">
