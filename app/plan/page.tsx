@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, forwardRef } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { ListSkeleton } from '../components/Skeleton';
-import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, Project, ProjectType } from '../lib/types';
+import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea } from '../lib/types';
 import TargetCustomerModal, { Avatar } from '../components/TargetCustomerModal';
 import { uid } from '../lib/store';
 import { useChatContext } from '../lib/ChatContext';
@@ -1112,204 +1112,6 @@ function GrowthStagesSection({
 
 const DEFAULT_WORK_AREAS = ['기획', '디자인', '개발', '마케팅', '운영'];
 
-// ── Projects section (프로젝트 — 업무 영역을 묶는 상위 단위, Goals와 연동) ──────
-const PROJECT_TYPES: { key: ProjectType; label: string; desc: string }[] = [
-  { key: 'routine', label: '루틴형', desc: '반복 운영하는 프로젝트' },
-  { key: 'build', label: '기획·신규개발형', desc: '새로 기획하거나 개발하는 프로젝트' },
-];
-export const ROUTINE_CYCLES: { key: import('../lib/types').RoutineCycle; label: string }[] = [
-  { key: 'weekly', label: '주 1회' },
-  { key: 'biweekly', label: '2주 1회' },
-  { key: 'monthly', label: '월 1회' },
-  { key: 'quarterly', label: '분기 1회' },
-  { key: 'yearly', label: '연 1회' },
-];
-export const cycleLabel = (c?: import('../lib/types').RoutineCycle) => ROUTINE_CYCLES.find(x => x.key === c)?.label;
-export const IMPORTANCE = [{ v: 1, label: '낮음', color: '#9AA39D', bg: '#F0F0EA' }, { v: 2, label: '보통', color: '#5B6560', bg: '#E7E7E1' }, { v: 3, label: '높음', color: '#C24B4B', bg: '#FCEBEB' }];
-export const importanceMeta = (v?: number) => IMPORTANCE.find(x => x.v === v);
-
-// Plan에서 다루는 데드라인 참조 (Goals 데이터에서 뽑아옴)
-export type PlanDeadlineRef = { deadlineId: string; programId: string; name: string; date?: string; areaName: string; areaColor: string; projectId?: string };
-
-function ProjectsSection({
-  projects, deadlines, onAdd, onUpdate, onRemove, onAssign,
-}: {
-  projects: Project[];
-  deadlines: PlanDeadlineRef[];
-  onAdd: (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineCycle?: import('../lib/types').RoutineCycle }) => void;
-  onUpdate: (id: string, patch: Partial<Project>) => void;
-  onRemove: (id: string) => void;
-  onAssign: (projectId: string, deadlineId: string, programId: string, on: boolean) => void;
-}) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState('');
-  const [type, setType] = useState<ProjectType>('routine');
-  const [goal, setGoal] = useState('');
-  const [cycle, setCycle] = useState<import('../lib/types').RoutineCycle | undefined>(undefined);
-  const [picked, setPicked] = useState<string[]>([]); // 추가 모드에서 고른 deadlineId 목록
-
-  const startAdd = () => { setName(''); setType('routine'); setGoal(''); setCycle(undefined); setPicked([]); setAdding(true); setEditingId(null); };
-  const startEdit = (p: Project) => { setName(p.name); setType(p.type ?? 'routine'); setGoal(p.goal ?? ''); setCycle(p.routineCycle); setEditingId(p.id); setAdding(false); };
-  const saveAdd = () => {
-    if (!name.trim()) return;
-    const members = deadlines.filter(d => picked.includes(d.deadlineId)).map(d => ({ deadlineId: d.deadlineId, programId: d.programId }));
-    onAdd({ name: name.trim(), type, goal: goal.trim(), members, routineCycle: type === 'routine' ? cycle : undefined });
-    setAdding(false);
-  };
-  const saveEdit = (id: string) => { if (!name.trim()) return; onUpdate(id, { name: name.trim(), type, goal: goal.trim(), routineCycle: type === 'routine' ? cycle : undefined }); setEditingId(null); };
-
-  // 데드라인 목록을 업무 영역별로 그룹
-  const grouped = (() => {
-    const m = new Map<string, { color: string; items: PlanDeadlineRef[] }>();
-    deadlines.forEach(d => {
-      const g = m.get(d.areaName) ?? { color: d.areaColor, items: [] };
-      g.items.push(d); m.set(d.areaName, g);
-    });
-    return [...m.entries()];
-  })();
-
-  // 데드라인 선택 UI: 추가 모드면 로컬 picked, 편집 모드면 dl.projectId로 즉시 토글
-  const deadlinePicker = (mode: 'add' | string) => (
-    <div>
-      <label className="text-[11px] font-medium text-neutral-400 block mb-1">포함할 데드라인 <span className="text-neutral-300">(여러 업무 영역에서 골라 담을 수 있어요)</span></label>
-      {deadlines.length === 0 ? (
-        <p className="text-[11px] text-neutral-400">Goals에서 데드라인을 먼저 추가하면 여기서 담을 수 있어요.</p>
-      ) : (
-        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-          {grouped.map(([areaName, g]) => (
-            <div key={areaName}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }} />
-                <span className="text-[11px] font-semibold text-neutral-500">{areaName}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {g.items.map(d => {
-                  const on = mode === 'add' ? picked.includes(d.deadlineId) : d.projectId === mode;
-                  const takenElse = mode !== 'add' && d.projectId && d.projectId !== mode;
-                  return (
-                    <button key={d.deadlineId}
-                      onClick={() => {
-                        if (mode === 'add') setPicked(prev => prev.includes(d.deadlineId) ? prev.filter(x => x !== d.deadlineId) : [...prev, d.deadlineId]);
-                        else onAssign(mode, d.deadlineId, d.programId, !on);
-                      }}
-                      title={takenElse ? '다른 프로젝트에 배정돼 있어요 (선택 시 이 프로젝트로 이동)' : undefined}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${on ? 'border-violet-400 bg-violet-50 text-violet-700 font-semibold' : takenElse ? 'border-neutral-200 text-neutral-300' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'}`}>
-                      {on && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                      {d.name}{d.date ? ` · ${d.date.slice(5).replace('-', '.')}` : ''}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  const commonFields = (
-    <>
-      <input
-        autoFocus
-        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400 transition-colors"
-        placeholder="프로젝트 이름 (예: 모바일 앱 신규 출시)"
-        value={name}
-        onChange={e => setName(e.target.value)}
-      />
-      <div className="flex gap-1.5">
-        {PROJECT_TYPES.map(t => (
-          <button key={t.key} onClick={() => setType(t.key)} title={t.desc}
-            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${type === t.key ? 'bg-neutral-900 border-neutral-900 text-white' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <textarea
-        rows={2}
-        className="w-full resize-none bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400 transition-colors leading-relaxed"
-        placeholder="이 프로젝트의 목표·설명 (선택)"
-        value={goal}
-        onChange={e => setGoal(e.target.value)}
-      />
-      {/* 루틴형: 반복 주기 */}
-      {type === 'routine' && (
-        <div>
-          <label className="text-[11px] font-medium text-neutral-400 block mb-1">반복 주기</label>
-          <div className="flex flex-wrap gap-1.5">
-            {ROUTINE_CYCLES.map(c => (
-              <button key={c.key} onClick={() => setCycle(cycle === c.key ? undefined : c.key)}
-                className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${cycle === c.key ? 'border-violet-400 bg-violet-50 text-violet-700 font-semibold' : 'border-neutral-200 text-neutral-500 hover:border-neutral-300'}`}>
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  );
-
-  const memberCount = (id: string) => deadlines.filter(d => d.projectId === id).length;
-
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-neutral-900">프로젝트</h2>
-          <Hint text="여러 업무 영역의 데드라인을 묶어 '일의 순서/루틴'으로 관리하는 단위예요. 루틴형(반복 운영)과 기획·신규개발형으로 나눠 관리하고, Goals에서도 데드라인별로 프로젝트를 지정할 수 있어요." />
-        </div>
-        <button onClick={startAdd} className="text-xs text-neutral-600 hover:text-neutral-900 transition-colors">+ 프로젝트 추가</button>
-      </div>
-
-      <div className="space-y-2">
-        {projects.map(p => (
-          <div key={p.id} className={`bg-white border rounded-xl px-4 py-3 transition-all ${editingId === p.id ? 'ring-2 ring-violet-400 border-violet-300' : 'border-neutral-200'}`}>
-            {editingId === p.id ? (
-              <div className="space-y-2.5">
-                {commonFields}
-                {deadlinePicker(p.id)}
-                <div className="flex gap-3 pt-1 border-t border-neutral-100">
-                  <button onClick={() => saveEdit(p.id)} className="text-xs text-neutral-700 hover:text-neutral-900 font-medium transition-colors">저장</button>
-                  <button onClick={() => setEditingId(null)} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
-                  <button onClick={() => { onRemove(p.id); setEditingId(null); }} className="text-xs text-neutral-700 hover:text-red-400 transition-colors ml-auto">삭제</button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-start gap-3 group/proj">
-                <span className="flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-full mt-0.5" style={p.type === 'build' ? { backgroundColor: '#EEF1FF', color: '#5B5BD6' } : { backgroundColor: '#EAF7DD', color: '#3E6B1F' }}>
-                  {p.type === 'build' ? '기획·개발' : '루틴'}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-neutral-800 leading-relaxed">{p.name}</p>
-                  {p.goal && <p className="text-xs text-neutral-400 leading-relaxed mt-0.5 whitespace-pre-wrap">{p.goal}</p>}
-                  <p className="text-[11px] text-neutral-400 mt-1">
-                    데드라인 {memberCount(p.id)}개
-                    {p.type === 'routine' && cycleLabel(p.routineCycle) && <span> · 🔁 {cycleLabel(p.routineCycle)}</span>}
-                  </p>
-                </div>
-                <button onClick={() => startEdit(p)} className="flex-shrink-0 text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/proj:opacity-100 mt-0.5">수정</button>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {adding ? (
-          <div className="bg-white border border-violet-300 ring-2 ring-violet-400 rounded-xl px-4 py-3 space-y-2.5">
-            {commonFields}
-            {deadlinePicker('add')}
-            <div className="flex gap-3 pt-1 border-t border-neutral-100">
-              <button onClick={saveAdd} className="text-xs text-neutral-700 hover:text-neutral-900 font-medium transition-colors">추가</button>
-              <button onClick={() => setAdding(false)} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
-            </div>
-          </div>
-        ) : projects.length === 0 && (
-          <button onClick={startAdd} className="w-full py-2.5 rounded-xl border-2 border-dashed border-neutral-200 text-xs text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 첫 번째 프로젝트 추가</button>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function WorkAreasSection({
   areas, onAdd, onUpdate, onRemove, onGenerate,
 }: {
@@ -1843,35 +1645,6 @@ export default function PlanPage() {
   };
 
   // 업무 영역
-  // 프로젝트 CRUD — plan.projects는 update()로(로컬 동기화), 데드라인 멤버십은 store로.
-  const addProjectItem = (data: { name: string; type: ProjectType; goal: string; members: { deadlineId: string; programId: string }[]; routineCycle?: import('../lib/types').RoutineCycle }) => {
-    const id = uid();
-    update({ projects: [...(plan.projects ?? []), { id, name: data.name, type: data.type, goal: data.goal, routineCycle: data.routineCycle, order: (plan.projects ?? []).length }] });
-    data.members.forEach(m => store.setDeadlineProject(selectedWsId, m.programId, m.deadlineId, id));
-  };
-  const updateProjectItem = (id: string, patch: Partial<Project>) =>
-    update({ projects: (plan.projects ?? []).map(x => x.id === id ? { ...x, ...patch } : x) });
-  const removeProjectItem = (id: string) => {
-    update({ projects: (plan.projects ?? []).filter(x => x.id !== id) });
-    // 소속 데드라인은 유지하되 미지정으로 되돌림 (programs는 plan과 별개라 store로 처리)
-    const entry = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
-    entry?.programs.forEach(pr => (pr.deadlines ?? []).forEach(d => { if (d.projectId === id) store.setDeadlineProject(selectedWsId, pr.id, d.id, undefined); }));
-  };
-  const assignDeadlineToProject = (projectId: string, deadlineId: string, programId: string, on: boolean) =>
-    store.setDeadlineProject(selectedWsId, programId, deadlineId, on ? projectId : undefined);
-  // Plan에서 다룰 데드라인 목록 (이 사업의 프로그램 → 데드라인, 업무 영역 정보 포함)
-  const planDeadlines: PlanDeadlineRef[] = (() => {
-    const entry = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
-    const areas = plan.workAreas ?? [];
-    const refs: PlanDeadlineRef[] = [];
-    entry?.programs.forEach(pr => {
-      const area = areas.find(a => a.id === pr.workAreaId);
-      if (!area) return; // 미분류(업무 영역 없음/삭제됨)는 제외 — Goals에 안 보이는 잔여 데이터
-      (pr.deadlines ?? []).forEach(d => refs.push({ deadlineId: d.id, programId: pr.id, name: d.name, date: d.date, areaName: area.name, areaColor: area.color, projectId: d.projectId }));
-    });
-    return refs;
-  })();
-
   const addWorkArea = (a: WorkArea) =>
     update({ workAreas: [...(plan.workAreas ?? []), a] });
   const updateWorkArea = (id: string, patch: Partial<WorkArea>) =>
@@ -2048,18 +1821,6 @@ export default function PlanPage() {
               />
             </div>
 
-            <div className="md:col-span-2">
-              <CardListSection
-                label="솔루션/제품"
-                hint={HINTS.solutions}
-                items={plan.solutions}
-                onAdd={v => addPlanItem('solutions', v)}
-                onUpdate={(i, v) => updatePlanItem('solutions', i, v)}
-                onRemove={i => removePlanItem('solutions', i)}
-                onGenerate={chat && !chat.loading ? handleGenerateSolutions : undefined}
-              />
-            </div>
-
             <div className="md:col-span-2 lg:col-span-1">
               <ProductsSection
                 items={plan.products ?? []}
@@ -2107,6 +1868,16 @@ export default function PlanPage() {
           placeholder="브랜드의 핵심 컨셉과 방향성을 적어보세요."
         />
 
+        <CardListSection
+          label="솔루션/제품"
+          hint={HINTS.solutions}
+          items={plan.solutions}
+          onAdd={v => addPlanItem('solutions', v)}
+          onUpdate={(i, v) => updatePlanItem('solutions', i, v)}
+          onRemove={i => removePlanItem('solutions', i)}
+          onGenerate={chat && !chat.loading ? handleGenerateSolutions : undefined}
+        />
+
         <ValuePropSection
           hint={HINTS.valueProposition}
           value={plan.valueProposition}
@@ -2142,15 +1913,6 @@ export default function PlanPage() {
           onGenerate={chat && !chat.loading ? handleGenerateGrowthStages : undefined}
           currentIndex={growthIdx}
           onComplete={handleCompleteStage}
-        />
-
-        <ProjectsSection
-          projects={plan.projects ?? []}
-          deadlines={planDeadlines}
-          onAdd={addProjectItem}
-          onUpdate={updateProjectItem}
-          onRemove={removeProjectItem}
-          onAssign={assignDeadlineToProject}
         />
       </div>
     </div>
