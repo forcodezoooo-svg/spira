@@ -198,6 +198,8 @@ export default function LandingPage() {
         <img src="/diamond.svg" alt="" aria-hidden className="absolute top-8 right-8 w-4 opacity-90" />
       </section>
 
+      {/* 표지(히어로) 아래 설명 영역 전체를 10% 확대 (이미지·텍스트 함께) */}
+      <div style={{ zoom: 1.1 }}>
       {/* ══ 공감 카드 ══ */}
       <section className="max-w-2xl mx-auto px-6 pt-14 pb-20">
         <div className="rounded-[26px] px-7 py-9 sm:px-10 sm:py-11 bg-white" style={{ border: '1px solid #EFEFEA', boxShadow: '0 20px 50px rgba(0,0,0,0.06)' }}>
@@ -311,6 +313,7 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+      </div>
 
       {/* ══ 푸터 ══ */}
       <footer className="border-t" style={{ borderColor: 'rgba(0,41,41,0.08)' }}>
