@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useUI } from '../lib/UIContext';
 import { useTimer } from '../lib/TimerContext';
 import { useChatContext } from '../lib/ChatContext';
+import { useStore } from '../lib/useStore';
 
 // 두 종류의 티칭:
 //  1) 온보딩 직후 투어(TOUR) — Plan→Goals→Home. 대부분 '사용자가 실제 동작'을 하면 자동 진행.
@@ -28,7 +29,7 @@ const TOUR: Step[] = [
   { page: '/programs', target: '[data-teach="sparky"]', text: '아래 Sparky 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
   { page: '/programs', target: '[data-teach="sparky-panel"]', text: '기획안을 기반으로 업무 일정을 계획해뒀어요. 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', autoSend: '기획안을 기반으로 이번 분기 업무 일정을 계획해줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 만들어줘.', autoIntro: '기획안을 기반으로 업무 일정을 계획해봤어요! 아래 버튼을 누르면 Goals에 자동으로 반영돼요. 🌿', awaitTodos: true, closeChat: true },
   { page: '/programs', target: '[data-teach="goal-card"]', text: '생성된 할 일을 자유롭게 수정하거나 추가할 수 있어요.' },
-  { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '왼쪽에서 강조된 업무를 클릭한 채로, 이 캘린더의 오늘 날짜(연두색 칸)로 드래그해서 올려보세요.', awaitPlaced: true },
+  { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '이 업무를 클릭, 드래그 해서 캘린더의 오늘 날짜 위에 놓아보세요!', awaitPlaced: true },
   { page: '/programs', target: '[data-teach="nav-home"]', text: '위의 집 모양 아이콘을 눌러 Home 페이지로 이동해보세요!', go: '/home' },
   { page: '/home', target: '[data-teach="today-timer"]', text: '오늘의 업무 옆 플레이 버튼을 눌러보세요. 플레이 버튼은 업무 위에 마우스를 올리면 나타나요. 누르면 타이머가 시작되고 업무 시간이 기록돼요.', awaitTimer: true },
   { page: '/home', text: '여정 지도에 첫 목표 깃발을 꽂았어요. 업무를 완수할 때마다 깃발이 하나씩 쌓여요.', last: true, celebrate: true },
@@ -76,8 +77,10 @@ function readCounts(): { total: number; placedToday: number } {
 
 export default function Teaching() {
   const pathname = usePathname();
+  const router = useRouter();
   const ui = useUI();
   const chat = useChatContext();
+  const store = useStore();
   const { anyActive } = useTimer();
   const autoSentRef = useRef<Set<number>>(new Set());
   const [tourIdx, setTourIdx] = useState(-1);
@@ -197,7 +200,40 @@ export default function Teaching() {
   };
   const endPage = () => { localStorage.setItem(seenKey(pathname), '1'); setPageIdx(-1); };
 
+  // 지정 버튼(채팅 열기·페이지 이동·자동 채우기·캘린더 배치·타이머) 대신 '다음'을 눌러도
+  // 그 버튼을 누른 것과 동일한 동작을 대신 실행해 흐름이 끊기지 않게 한다.
+  const applyPendingChatAction = () => {
+    const msgs = chat?.messages ?? [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].action && !msgs[i].action?.done) { chat?.applyAction(i); return; }
+    }
+  };
+  const placeAnyTodoToday = () => {
+    const today = todayStr();
+    for (const e of store.allWorkspacesEntries) {
+      for (const p of e.programs) {
+        for (const dl of p.deadlines ?? []) {
+          for (const t of dl.todos ?? []) {
+            if (t.date !== today && t.deadline !== today) {
+              store.updateProgramTodo(e.workspace.id, p.id, dl.id, t.id, { date: today });
+              return;
+            }
+          }
+        }
+      }
+    }
+  };
+
   const next = () => {
+    // 투어의 '동작 대기' 단계: 다음을 눌러도 지정 버튼과 같은 동작을 대신 수행하고,
+    // 각 동작의 완료 감지 이펙트/폴링이 자동으로 다음 단계로 진행시킨다.
+    if (tourActive && !step.last) {
+      if (step.go) { if (step.closeChat) ui.closeChat(); router.push(step.go); return; }
+      if (step.awaitChatOpen) { ui.openChat(); return; }
+      if (step.awaitTodos) { applyPendingChatAction(); return; }
+      if (step.awaitPlaced) { placeAnyTodoToday(); return; }
+      // awaitTimer 등은 별도 동작 없이 다음 단계로 진행
+    }
     if (step.closeChat) ui.closeChat();
     if (tourActive) { if (step.last) { setTour(-1); return; } setTour(tourIdx + 1); return; }
     if (step.last || pageIdx >= pageTips!.length - 1) { endPage(); return; }

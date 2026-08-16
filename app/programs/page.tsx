@@ -625,6 +625,7 @@ export default function ProgramsPage() {
     let firstQuarter: number | null = null;
     let order = nextOrder();
     const touchedAreas = new Set<string>(); // 생성된 영역만 펼치기 위한 키(영역명 또는 미분류)
+    const touchedProjectKeys = new Set<string>(); // 생성된 프로젝트 박스(wsId::projectId)도 펼쳐서 바로 보이게
     // (사업 × 업무영역)별로 데드라인을 모은다 — 한 영역 안에서 사업당 컨테이너(데드라인 박스)는 하나만 유지
     type Bucket = { targetWs: string; py: number; pq: number; areaId?: string; areaName?: string; deadlines: ReturnType<typeof buildDeadlines> };
     // 과거/누락 날짜는 절대 저장하지 않는다 — 오늘 이후만 통과
@@ -687,6 +688,7 @@ export default function ProgramsPage() {
         const key = `${targetWs}::${area?.id ?? '__none__'}`;
         const pname = (prog.project ?? '').trim();
         const projectId = pname ? projectIdByName.get(`${targetWs}::${pname}`) : undefined;
+        if (projectId) touchedProjectKeys.add(`${targetWs}::${projectId}`);
         const dls = buildDeadlines(prog, py, pq, projectId);
         const b = buckets.get(key);
         if (b) b.deadlines.push(...dls);
@@ -715,7 +717,8 @@ export default function ProgramsPage() {
     }
     // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
-    if (touchedAreas.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas]));
+    // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
+    if (touchedAreas.size || touchedProjectKeys.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas, ...touchedProjectKeys]));
   };
 
   // AI가 기존 데드라인을 프로젝트로 정리 — 프로젝트를 만들고(있으면 재사용) 데드라인에 projectId 배정
