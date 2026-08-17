@@ -327,6 +327,27 @@ export default function Teaching() {
         <div className="fixed inset-0 z-[78] pointer-events-none" style={{ backgroundColor: 'rgba(0,41,41,0.45)' }} />
       )}
 
+      {/* 클릭 차단막: 하이라이트된 대상(지시한 버튼)과 툴팁만 조작 가능. 나머지 영역은 실수 클릭 방지.
+          대상 주변을 4개의 띠로 덮어 대상 영역만 '구멍'으로 열어둔다(대상 없으면 전체 차단). */}
+      {(() => {
+        const blockStyles: React.CSSProperties[] = [];
+        if (rects.length) {
+          const l = Math.max(0, Math.min(...rects.map(r => r.left)) - PAD);
+          const t = Math.max(0, Math.min(...rects.map(r => r.top)) - PAD);
+          const r = Math.max(...rects.map(x => x.right)) + PAD;
+          const b = Math.max(...rects.map(x => x.bottom)) + PAD;
+          blockStyles.push({ left: 0, right: 0, top: 0, height: t });               // 위
+          blockStyles.push({ left: 0, right: 0, top: b, bottom: 0 });               // 아래
+          blockStyles.push({ left: 0, top: t, width: l, height: Math.max(0, b - t) }); // 왼쪽
+          blockStyles.push({ left: r, top: t, right: 0, height: Math.max(0, b - t) }); // 오른쪽
+        } else {
+          blockStyles.push({ inset: 0 });
+        }
+        return blockStyles.map((s, i) => (
+          <div key={i} className="fixed z-[79]" style={s} onMouseDown={e => e.preventDefault()} />
+        ));
+      })()}
+
       {/* 툴팁 카드 */}
       <div className="fixed z-[80]" style={tipStyle}>
         <div className="bg-white rounded-2xl border p-4" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 16px 44px rgba(0,0,0,0.28)' }}>
