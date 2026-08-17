@@ -156,8 +156,8 @@ export default function Onboarding() {
             </div>
           ) : step === 0 ? (
             <>
-              <h2 className="text-[21px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>어떤 비즈니스/브랜드를<br />만들고 계신가요? 👋</h2>
-              <p className="text-[13px] leading-relaxed mb-4" style={{ color: '#5B6560' }}>지금 하고 있거나 하고 싶은 비즈니스/브랜드의 이름을 적어주세요.</p>
+              <h2 className="text-[21px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>지금 만들고 있는 비즈니스/브랜드의<br />이름이 뭔가요? 👋</h2>
+              <p className="text-[13px] leading-relaxed mb-4" style={{ color: '#5B6560' }}>아직 이름이 없다면 가명으로 적어두고 나중에 수정해도 괜찮아요!</p>
               <input autoFocus value={name} onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && setStep(1)}
                 placeholder="비즈니스/브랜드 이름" className={inputCls} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E' }} />
