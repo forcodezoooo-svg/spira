@@ -1730,6 +1730,8 @@ export default function PlanPage() {
         })}
         <button
           onClick={() => {
+            // 무료 플랜: 비즈니스 1개까지 — 추가는 Pro (유료 안내 팝업)
+            if (userPlan.tier !== 'pro' && store.allWorkspaces.length >= 1) { showUpgrade('workspace'); return; }
             const name = window.prompt('새 기획서 이름을 입력하세요');
             if (name?.trim()) store.addWorkspace(name.trim());
           }}

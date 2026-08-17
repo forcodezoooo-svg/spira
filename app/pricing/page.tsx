@@ -20,14 +20,14 @@ const PRICE = {
 const BETA_LOCKED = true;
 
 const FREE_FEATURES = [
-  '워크스페이스 1개',
+  '비즈니스 1개',
   '기본 AI 어시스턴트(Sparky)',
   'Plan · Goals · Resources',
   '나의 여정 지도',
 ];
 
 const PRO_FEATURES = [
-  '워크스페이스 무제한',
+  '비즈니스 무제한',
   'AI 어시스턴트 무제한 · 우선 응답',
   '여정 지도 고해상도 이미지 추출',
   '데이터 백업 · 우선 지원',
