@@ -14,6 +14,8 @@ type Step = {
   page?: string; target?: string; targets?: string[]; text: string;
   closeChat?: boolean; go?: string; last?: boolean; prefill?: string; celebrate?: boolean;
   awaitChatOpen?: boolean; awaitTodos?: boolean; awaitPlaced?: boolean; awaitTimer?: boolean;
+  // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
+  tipAbove?: boolean;
   // 온보딩 자동 생성: 사용자가 입력하지 않아도 '버튼 있는 답변'이 자동으로 나오게 함
   autoSend?: string;    // 조용히 전송할 요청(사용자 말풍선 없음)
   autoIntro?: string;   // 답변에 고정으로 표시할 문구
@@ -29,7 +31,7 @@ const TOUR: Step[] = [
   { page: '/programs', target: '[data-teach="sparky"]', text: '아래 Sparky 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
   { page: '/programs', target: '[data-teach="sparky-panel"]', text: '기획안을 기반으로 업무 일정을 계획해뒀어요. 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', autoSend: '기획안을 기반으로 이번 분기 업무 일정을 계획해줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 만들어줘.', autoIntro: '기획안을 기반으로 업무 일정을 계획해봤어요! 아래 버튼을 누르면 Goals에 자동으로 반영돼요. 🌿', awaitTodos: true, closeChat: true },
   { page: '/programs', target: '[data-teach="goal-card"]', text: '생성된 할 일을 자유롭게 수정하거나 추가할 수 있어요.' },
-  { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '이 업무를 클릭, 드래그 해서 캘린더의 오늘 날짜 위에 놓아보세요!', awaitPlaced: true },
+  { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '이 업무를 클릭, 드래그 해서 캘린더의 오늘 날짜 위에 놓아보세요!', awaitPlaced: true, tipAbove: true },
   { page: '/programs', target: '[data-teach="nav-home"]', text: '위의 집 모양 아이콘을 눌러 Home 페이지로 이동해보세요!', go: '/home' },
   { page: '/home', target: '[data-teach="today-timer"]', text: '오늘의 업무 옆 플레이 버튼을 눌러보세요. 플레이 버튼은 업무 위에 마우스를 올리면 나타나요. 누르면 타이머가 시작되고 업무 시간이 기록돼요.', awaitTimer: true },
   { page: '/home', text: '여정 지도에 첫 목표 깃발을 꽂았어요. 업무를 완수할 때마다 깃발이 하나씩 쌓여요.', last: true, celebrate: true },
@@ -188,8 +190,8 @@ export default function Teaching() {
 
   if (!step) return null;
 
-  // 툴팁 위치 기준 = 마지막 하이라이트(배치 단계에선 캘린더). 없으면 null.
-  const rect: DOMRect | null = rects.length ? rects[rects.length - 1] : null;
+  // 툴팁 위치 기준. 기본은 마지막 하이라이트, tipAbove면 '첫 번째' 하이라이트(드래그할 업무) 기준.
+  const rect: DOMRect | null = rects.length ? (step.tipAbove ? rects[0] : rects[rects.length - 1]) : null;
 
   const dotCount = tourActive ? TOUR.length : pageTips!.length;
   const dotIdx = tourActive ? tourIdx : pageIdx;
@@ -232,7 +234,11 @@ export default function Teaching() {
       if (step.awaitChatOpen) { ui.openChat(); return; }
       if (step.awaitTodos) { applyPendingChatAction(); return; }
       if (step.awaitPlaced) { placeAnyTodoToday(); return; }
-      // awaitTimer 등은 별도 동작 없이 다음 단계로 진행
+      if (step.awaitTimer) {
+        // 하이라이트된 플레이 버튼을 대신 눌러 업무 타이머를 시작 (타이머 감지로 다음 단계 진행)
+        const btn = document.querySelector<HTMLElement>('[data-teach="today-timer"]');
+        if (btn) { btn.click(); return; }
+      }
     }
     if (step.closeChat) ui.closeChat();
     if (tourActive) { if (step.last) { setTour(-1); return; } setTour(tourIdx + 1); return; }
@@ -275,7 +281,9 @@ export default function Teaching() {
   let tipStyle: React.CSSProperties;
   if (rect) {
     let left: number, top: number | undefined, bottom: number | undefined;
-    if (vh - rect.bottom >= TH + g) {              // 아래
+    if (step.tipAbove) {                            // 강제 '위' — 드래그할 업무 하이라이트 바로 위에 배치
+      bottom = vh - rect.top + g; left = rect.left + rect.width / 2 - TW / 2;
+    } else if (vh - rect.bottom >= TH + g) {        // 아래
       top = rect.bottom + g; left = rect.left + rect.width / 2 - TW / 2;
     } else if (rect.top >= TH + g) {               // 위 — 박스 '하단'을 대상 상단에서 정확히 g(30px) 위에 배치(박스 높이와 무관)
       bottom = vh - rect.top + g; left = rect.left + rect.width / 2 - TW / 2;
