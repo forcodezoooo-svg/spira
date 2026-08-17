@@ -1591,6 +1591,14 @@ export default function PlanPage() {
     store.deleteWorkspace(selectedWsId);
     setSelectedWsId(nextId);
   };
+  const handleRenameBusiness = () => {
+    if (!selectedWs) return;
+    const name = window.prompt('사업 이름을 입력하세요', selectedWs.name);
+    if (name == null) return; // 취소
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === selectedWs.name) return;
+    store.setWorkspace({ ...selectedWs, name: trimmed });
+  };
 
   const update = (patch: Partial<PlanData>) => {
     const next = { ...plan, ...patch };
@@ -1767,6 +1775,11 @@ export default function PlanPage() {
           </button>
           {moreOpen && (
             <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border rounded-2xl shadow-lg py-1.5 z-30" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+              <button onClick={() => { setMoreOpen(false); handleRenameBusiness(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-left hover:bg-neutral-50 transition-colors" style={{ color: '#16211E' }}>
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10a2 2 0 00-2.83-2.83L5.17 17.17 4 20z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                사업 이름 변경
+              </button>
+              <div className="my-1 h-px" style={{ backgroundColor: 'var(--spira-border-subtle)' }} />
               <button onClick={() => { setMoreOpen(false); handleFillAll(); }} disabled={!chat || chat.loading} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-semibold text-left hover:bg-neutral-50 transition-colors disabled:opacity-40" style={{ color: '#16211E' }}>
                 <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
                 AI로 전체 채우기

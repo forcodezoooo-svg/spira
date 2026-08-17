@@ -160,7 +160,7 @@ export default function Onboarding() {
               <p className="text-[13px] leading-relaxed mb-4" style={{ color: '#5B6560' }}>지금 하고 있거나 하고 싶은 비즈니스/브랜드의 이름을 적어주세요.</p>
               <input autoFocus value={name} onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && setStep(1)}
-                placeholder="예: 아이바이마이, 내 브랜드…" className={inputCls} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E' }} />
+                placeholder="비즈니스/브랜드 이름" className={inputCls} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E' }} />
               <button onClick={() => setStep(1)} disabled={!name.trim()} className={`w-full mt-4 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
             </>
           ) : step === 1 ? (
