@@ -1438,7 +1438,7 @@ const HINTS: Record<string, string> = {
 
 // ── 상단 박스: 사업계획서 업로드 또는 사업 개요 직접 작성 ──────────────────────────
 function BusinessDocBox({
-  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview, onGenerateField, aiEnabled, onAnalyze, analyzing,
+  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview, onGenerateField, aiEnabled, analyzing,
 }: {
   doc?: PlanDoc;
   overview?: BusinessOverview;
@@ -1447,7 +1447,6 @@ function BusinessDocBox({
   onChangeOverview: (o: BusinessOverview) => void;
   onGenerateField?: (field: keyof BusinessOverview) => void;
   aiEnabled?: boolean;
-  onAnalyze?: () => void;
   analyzing?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1483,11 +1482,17 @@ function BusinessDocBox({
         </div>
         {doc ? (
           <div className="flex items-center gap-2 flex-shrink-0">
-            <a href={doc.dataUrl} target="_blank" rel="noreferrer" title={`${doc.name} · 열기`}
-               className="group relative block w-12 h-12 rounded-xl overflow-hidden border border-neutral-200 bg-white flex-shrink-0">
-              {isImg
-                ? <img src={doc.dataUrl} alt={doc.name} className="w-full h-full object-cover" />
-                : <span className="w-full h-full flex items-center justify-center"><svg className="w-5 h-5 text-violet-500" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg></span>}
+            <a href={doc.dataUrl} target="_blank" rel="noreferrer" download={doc.name} title={`${doc.name} · 열기`}
+               className="relative block w-16 h-16 rounded-xl overflow-hidden border border-neutral-200 flex-shrink-0"
+               style={{ backgroundColor: isImg ? '#fff' : '#F3F0FF' }}>
+              {isImg ? (
+                <img src={doc.dataUrl} alt={doc.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="w-full h-full flex flex-col items-center justify-center gap-1 text-violet-500">
+                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+                  <span className="text-[9px] font-bold leading-none">{/\.pdf$/i.test(doc.name) ? 'PDF' : (doc.name.split('.').pop() || 'DOC').slice(0, 4).toUpperCase()}</span>
+                </span>
+              )}
             </a>
             <div className="flex flex-col gap-0.5">
               <button onClick={() => fileRef.current?.click()} className="text-[11px] text-neutral-500 hover:text-neutral-800 transition-colors text-left">교체</button>
@@ -1504,33 +1509,24 @@ function BusinessDocBox({
       </div>
       <input ref={fileRef} type="file" className="hidden" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
 
-      {/* 업로드된 사업계획서를 AI로 분석해 아래 개요 자동 채우기 */}
-      {doc && onAnalyze && (
-        <button
-          onClick={onAnalyze}
-          disabled={analyzing}
-          className="w-full mb-4 py-2.5 rounded-2xl text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60"
-          style={{ backgroundColor: '#EEF7E4', color: '#3E7A2E' }}
-        >
-          {analyzing ? (
-            <><span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />사업계획서 분석 중…</>
-          ) : (
-            <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>사업계획서 분석해 개요 자동 채우기</>
-          )}
-        </button>
+      {/* 업로드 직후 자동 분석 진행 표시 */}
+      {analyzing && (
+        <div className="w-full mb-4 py-2 rounded-xl text-[12px] font-semibold flex items-center justify-center gap-1.5" style={{ backgroundColor: '#EEF7E4', color: '#3E7A2E' }}>
+          <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />사업계획서 분석해 채우는 중…
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {OV_FIELDS.map(f => (
           <div key={f.key} className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
-            <div className="flex items-center gap-1 mb-1">
+            <div className="flex items-center gap-1.5 mb-1">
               <label className="text-[11px] font-semibold text-neutral-400">{f.label}</label>
-              <Hint text={f.hint} />
               {onGenerateField && aiEnabled && (
-                <button onClick={() => onGenerateField(f.key)} title="AI가 이 항목 채우기" className="ml-auto text-neutral-300 hover:text-violet-500 transition-colors">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                <button onClick={() => onGenerateField(f.key)} title="AI가 이 항목 채우기" className="text-violet-400 hover:text-violet-600 transition-colors">
+                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
                 </button>
               )}
+              <Hint text={f.hint} />
             </div>
             <AutoTextarea value={ov[f.key] ?? ''} onChange={v => set({ [f.key]: v } as Partial<BusinessOverview>)} placeholder={f.ph} />
           </div>
@@ -2028,6 +2024,7 @@ export default function PlanPage() {
         return;
       }
       const f = (data.fields ?? {}) as Partial<BusinessOverview>;
+      const docGoals = (data.goals ?? []) as { name: string; deliverables: string[] }[];
       setPlan(prev => {
         if (!prev) return prev;
         const base = prev.overview ?? deriveOverview(prev);
@@ -2040,12 +2037,24 @@ export default function PlanPage() {
           mission: f.mission?.trim() ? f.mission : base.mission,
           vision: f.vision?.trim() ? f.vision : base.vision,
         };
-        const next = { ...prev, overview: merged };
+        let next: PlanData = { ...prev, overview: merged };
+        // 사업 목표가 아직 비어 있으면 문서 분석 결과로 채움 (기존 목표는 덮지 않음)
+        const curGoals = prev.bizGoals ?? [];
+        if (curGoals.length === 0 && docGoals.length > 0) {
+          next = {
+            ...next,
+            bizGoals: docGoals.map(g => ({
+              id: uid(),
+              name: g.name,
+              deliverables: (g.deliverables ?? []).map(d => ({ id: uid(), name: d, areaDeliverables: [] })),
+            })),
+          };
+        }
         const wsId = selectedWsIdRef.current;
         if (wsId) store.updatePlanInWs(wsId, next);
         return next;
       });
-      toast('사업계획서를 분석해 개요를 채웠어요. 🌿', 'success');
+      toast('사업계획서를 분석해 개요와 사업 목표를 채웠어요. 🌿', 'success');
     } catch {
       toast('네트워크 오류가 발생했어요.', 'error');
     } finally {
@@ -2159,7 +2168,6 @@ export default function PlanPage() {
           onChangeOverview={o => update({ overview: o })}
           onGenerateField={chat && !chat.loading ? handleGenerateOverviewField : undefined}
           aiEnabled={!!chat && !chat.loading}
-          onAnalyze={plan.planDoc ? () => analyzeDocToOverview(plan.planDoc!) : undefined}
           analyzing={analyzingDoc}
         />
 
