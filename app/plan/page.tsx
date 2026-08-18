@@ -1451,7 +1451,7 @@ function BusinessDocBox({
   analyzing?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const ov: BusinessOverview = overview ?? { tagline: '', problem: '', solution: '', mission: '', vision: '' };
+  const ov: BusinessOverview = overview ?? { tagline: '', concept: '', problem: '', solution: '', mission: '', vision: '' };
   const set = (patch: Partial<BusinessOverview>) => onChangeOverview({ ...ov, ...patch });
 
   const MAX_BYTES = 4 * 1024 * 1024; // 4MB
@@ -1466,6 +1466,7 @@ function BusinessDocBox({
 
   const OV_FIELDS: { key: keyof BusinessOverview; label: string; ph: string; hint: string }[] = [
     { key: 'tagline', label: '한 줄 소개', ph: '사업을 한 문장으로 소개', hint: '이 사업이 무엇인지 한 문장으로 설명하는 슬로건이에요.' },
+    { key: 'concept', label: '컨셉', ph: '브랜드의 핵심 컨셉과 방향성', hint: '브랜드의 핵심 아이디어·방향성·감성을 설명하세요. 어떤 경험을 전달하고 싶은지 표현하세요.' },
     { key: 'problem', label: '문제 정의', ph: '해결하려는 핵심 문제', hint: '고객이 겪는 핵심 문제를 구체적으로 정의하세요. 문제가 명확할수록 솔루션도 명확해져요.' },
     { key: 'solution', label: '솔루션', ph: '그 문제를 어떻게 해결하는지', hint: '정의한 문제를 어떻게 해결하는지, 제공하는 제품/서비스를 설명하세요.' },
     { key: 'mission', label: '미션', ph: '우리가 존재하는 이유', hint: '우리 조직이 존재하는 이유와 매일 달성하려는 목적이에요.' },
@@ -1708,6 +1709,7 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
 function deriveOverview(plan: PlanData): BusinessOverview {
   return {
     tagline: plan.tagline ?? '',
+    concept: plan.concept ?? '',
     problem: (plan.problems ?? []).filter(Boolean).join('\n'),
     solution: (plan.solutions ?? []).map(s => (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n'),
     mission: plan.mission ?? '',
@@ -1858,6 +1860,7 @@ export default function PlanPage() {
         // AI가 채운 값을 새 '사업 개요'(overview)에도 반영 — 새 레이아웃이 overview를 표시하므로.
         const nextOverview: BusinessOverview = { ...(prev.overview ?? deriveOverview(prev)) };
         if (patch.tagline !== undefined) nextOverview.tagline = patch.tagline;
+        if (patch.concept !== undefined) nextOverview.concept = patch.concept;
         if (patch.mission !== undefined) nextOverview.mission = patch.mission;
         if (patch.vision !== undefined) nextOverview.vision = patch.vision;
         if (patch.problems?.length) nextOverview.problem = patch.problems.filter(Boolean).join('\n');
@@ -1991,6 +1994,7 @@ export default function PlanPage() {
   // 사업 개요(overview) 항목별 AI 채우기 — 각 항목을 대응하는 plan 필드로 출력하게 지시(핸들러가 overview로 동기화)
   const OVERVIEW_FIELD_PROMPT: Record<keyof BusinessOverview, string> = {
     tagline: "이 사업의 '한 줄 소개'를 매력적인 한 문장으로 작성해줘. JSON 키는 tagline(문자열).",
+    concept: "이 브랜드의 '컨셉'(핵심 아이디어·방향성·감성)을 한두 문장으로 작성해줘. JSON 키는 concept(문자열).",
     problem: "이 사업이 해결하려는 '핵심 문제'를 2~3개로 구체적으로 정의해줘. JSON 키는 problems(문자열 배열).",
     solution: "그 문제를 해결하는 '솔루션'을 구체적으로 정리해줘. JSON 키는 solutions([{title, memo}]).",
     mission: "이 사업의 '미션'(존재 이유와 목적)을 한두 문장으로 작성해줘. JSON 키는 mission(문자열).",
@@ -2005,7 +2009,8 @@ export default function PlanPage() {
     const type = d.type ?? '';
     const isPdf = type === 'application/pdf' || /\.pdf$/i.test(d.name);
     const isText = type.startsWith('text/') || /\.(txt|md)$/i.test(d.name);
-    if (!isPdf && !isText) { toast('지금은 PDF·텍스트 파일만 자동 분석돼요.', 'info'); return; }
+    const isImg = type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(d.name);
+    if (!isPdf && !isText && !isImg) { toast('PDF·이미지·텍스트 파일만 분석돼요.', 'info'); return; }
     // AI 자동 채우기는 Pro 전용 (온보딩 투어 중에는 허용)
     if (userPlan.tier !== 'pro' && !isOnboardingActive()) { showUpgrade('autofill'); return; }
     setAnalyzingDoc(true);
@@ -2029,6 +2034,7 @@ export default function PlanPage() {
         // 값이 있는 항목만 채우고, 빈 결과는 기존 값 유지
         const merged: BusinessOverview = {
           tagline: f.tagline?.trim() ? f.tagline : base.tagline,
+          concept: f.concept?.trim() ? f.concept : base.concept,
           problem: f.problem?.trim() ? f.problem : base.problem,
           solution: f.solution?.trim() ? f.solution : base.solution,
           mission: f.mission?.trim() ? f.mission : base.mission,

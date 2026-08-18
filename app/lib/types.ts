@@ -67,6 +67,7 @@ export interface PlanDoc {
 // 사업계획서가 없을 때 직접 작성하는 간략한 사업 개요
 export interface BusinessOverview {
   tagline: string;  // 한 줄 소개
+  concept: string;  // 컨셉
   problem: string;  // 문제 정의
   solution: string; // 솔루션
   mission: string;  // 미션
