@@ -1438,80 +1438,84 @@ const HINTS: Record<string, string> = {
 
 // ── 상단 박스: 사업계획서 업로드 또는 사업 개요 직접 작성 ──────────────────────────
 function BusinessDocBox({
-  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview,
+  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview, onGenerateField, aiEnabled,
 }: {
   doc?: PlanDoc;
   overview?: BusinessOverview;
   onSetDoc: (d: PlanDoc) => void;
   onRemoveDoc: () => void;
   onChangeOverview: (o: BusinessOverview) => void;
+  onGenerateField?: (field: keyof BusinessOverview) => void;
+  aiEnabled?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const ov: BusinessOverview = overview ?? { identity: '', tagline: '', problem: '', solution: '', mission: '', vision: '' };
-  const hasOverview = Object.values(ov).some(v => (v ?? '').trim());
-  const [writing, setWriting] = useState(false);
-  const showOverview = writing || hasOverview;
+  const ov: BusinessOverview = overview ?? { tagline: '', problem: '', solution: '', mission: '', vision: '' };
+  const set = (patch: Partial<BusinessOverview>) => onChangeOverview({ ...ov, ...patch });
 
   const MAX_BYTES = 4 * 1024 * 1024; // 4MB
   const handleFile = (file?: File) => {
     if (!file) return;
-    if (file.size > MAX_BYTES) { alert('파일이 너무 커요(최대 4MB). 더 작은 파일을 올리거나, 아래에서 사업 개요를 직접 작성해 주세요.'); return; }
+    if (file.size > MAX_BYTES) { alert('파일이 너무 커요(최대 4MB). 더 작은 파일을 올려주세요.'); return; }
     const reader = new FileReader();
     reader.onload = () => onSetDoc({ name: file.name, dataUrl: reader.result as string, type: file.type });
     reader.readAsDataURL(file);
   };
-  const set = (patch: Partial<BusinessOverview>) => onChangeOverview({ ...ov, ...patch });
+  const isImg = !!doc?.type?.startsWith('image/');
 
-  const OV_FIELDS: { key: keyof BusinessOverview; label: string; ph: string }[] = [
-    { key: 'identity', label: '아이덴티티', ph: '브랜드의 정체성을 한마디로' },
-    { key: 'tagline', label: '한 줄 소개', ph: '사업을 한 문장으로 소개' },
-    { key: 'problem', label: '문제 정의', ph: '해결하려는 핵심 문제' },
-    { key: 'solution', label: '솔루션', ph: '그 문제를 어떻게 해결하는지' },
-    { key: 'mission', label: '미션', ph: '우리가 존재하는 이유' },
-    { key: 'vision', label: '비전', ph: '궁극적으로 이루려는 모습' },
+  const OV_FIELDS: { key: keyof BusinessOverview; label: string; ph: string; hint: string }[] = [
+    { key: 'tagline', label: '한 줄 소개', ph: '사업을 한 문장으로 소개', hint: '이 사업이 무엇인지 한 문장으로 설명하는 슬로건이에요.' },
+    { key: 'problem', label: '문제 정의', ph: '해결하려는 핵심 문제', hint: '고객이 겪는 핵심 문제를 구체적으로 정의하세요. 문제가 명확할수록 솔루션도 명확해져요.' },
+    { key: 'solution', label: '솔루션', ph: '그 문제를 어떻게 해결하는지', hint: '정의한 문제를 어떻게 해결하는지, 제공하는 제품/서비스를 설명하세요.' },
+    { key: 'mission', label: '미션', ph: '우리가 존재하는 이유', hint: '우리 조직이 존재하는 이유와 매일 달성하려는 목적이에요.' },
+    { key: 'vision', label: '비전', ph: '궁극적으로 이루려는 모습', hint: '5~10년 후 이 사업으로 만들고 싶은 세상의 모습이에요.' },
   ];
 
   return (
     <div className="bg-neutral-50 border border-neutral-200 rounded-3xl p-5 sm:p-6">
-      {doc ? (
-        <div className="flex items-center gap-3 bg-white border border-neutral-200 rounded-2xl px-4 py-3">
-          <span className="w-11 h-11 rounded-2xl bg-violet-50 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-violet-500" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-neutral-900 truncate">{doc.name}</p>
-            <a href={doc.dataUrl} target="_blank" rel="noreferrer" download={doc.name} className="text-xs text-violet-600 hover:underline">열기 · 다운로드</a>
-          </div>
-          <button onClick={() => fileRef.current?.click()} className="text-xs text-neutral-500 hover:text-neutral-800 transition-colors flex-shrink-0">교체</button>
-          <button onClick={onRemoveDoc} className="text-xs text-neutral-400 hover:text-red-500 transition-colors flex-shrink-0">삭제</button>
+      {/* 헤더: 제목 + (우) 작은 사업계획서 업로드 버튼 / 썸네일 */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-[15px] font-bold text-neutral-900">사업 개요</h2>
+          <p className="text-[12px] text-neutral-400 mt-0.5">사업계획서를 올리거나, 아래 항목을 직접 채워보세요.</p>
         </div>
-      ) : (
-        <button onClick={() => fileRef.current?.click()} className="w-full border-2 border-dashed border-neutral-200 rounded-2xl py-10 flex flex-col items-center gap-2 hover:border-violet-300 hover:bg-violet-50/30 transition-colors">
-          <svg className="w-8 h-8 text-neutral-300" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          <p className="text-sm font-semibold text-neutral-800">사업계획서를 업로드 해 주세요</p>
-          <p className="text-xs text-neutral-400">PDF · 문서 · 이미지 (최대 4MB)</p>
-        </button>
-      )}
-      <input ref={fileRef} type="file" className="hidden" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
-
-      <div className="mt-4 pt-4 border-t border-neutral-200">
-        {showOverview ? (
-          <>
-            <p className="text-xs font-semibold text-neutral-500 mb-3">사업 개요 (직접 작성)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {OV_FIELDS.map(f => (
-                <div key={f.key} className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
-                  <label className="text-[11px] font-semibold text-neutral-400 block mb-1">{f.label}</label>
-                  <AutoTextarea value={ov[f.key] ?? ''} onChange={v => set({ [f.key]: v } as Partial<BusinessOverview>)} placeholder={f.ph} />
-                </div>
-              ))}
+        {doc ? (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <a href={doc.dataUrl} target="_blank" rel="noreferrer" title={`${doc.name} · 열기`}
+               className="group relative block w-12 h-12 rounded-xl overflow-hidden border border-neutral-200 bg-white flex-shrink-0">
+              {isImg
+                ? <img src={doc.dataUrl} alt={doc.name} className="w-full h-full object-cover" />
+                : <span className="w-full h-full flex items-center justify-center"><svg className="w-5 h-5 text-violet-500" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg></span>}
+            </a>
+            <div className="flex flex-col gap-0.5">
+              <button onClick={() => fileRef.current?.click()} className="text-[11px] text-neutral-500 hover:text-neutral-800 transition-colors text-left">교체</button>
+              <button onClick={onRemoveDoc} className="text-[11px] text-neutral-400 hover:text-red-500 transition-colors text-left">삭제</button>
             </div>
-          </>
+          </div>
         ) : (
-          <button onClick={() => setWriting(true)} className="text-[13px] font-medium text-neutral-500 hover:text-neutral-800 transition-colors">
-            사업계획서가 없으신가요? <span className="text-violet-600 font-semibold">간단한 사업 개요 직접 작성하기 →</span>
+          <button onClick={() => fileRef.current?.click()} title="사업계획서 업로드 (최대 4MB)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200 bg-white text-[12px] font-semibold text-neutral-600 hover:border-violet-300 hover:text-violet-600 transition-colors flex-shrink-0">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            사업계획서
           </button>
         )}
+      </div>
+      <input ref={fileRef} type="file" className="hidden" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {OV_FIELDS.map(f => (
+          <div key={f.key} className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-1 mb-1">
+              <label className="text-[11px] font-semibold text-neutral-400">{f.label}</label>
+              <Hint text={f.hint} />
+              {onGenerateField && aiEnabled && (
+                <button onClick={() => onGenerateField(f.key)} title="AI가 이 항목 채우기" className="ml-auto text-neutral-300 hover:text-violet-500 transition-colors">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                </button>
+              )}
+            </div>
+            <AutoTextarea value={ov[f.key] ?? ''} onChange={v => set({ [f.key]: v } as Partial<BusinessOverview>)} placeholder={f.ph} />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1685,7 +1689,6 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
 // 새 필드(overview/bizGoals)가 아직 없을 때만 옛 필드에서 끌어온다. 사용자가 새로 편집하면 새 필드로 '흡수'된다.
 function deriveOverview(plan: PlanData): BusinessOverview {
   return {
-    identity: plan.concept ?? '',
     tagline: plan.tagline ?? '',
     problem: (plan.problems ?? []).filter(Boolean).join('\n'),
     solution: (plan.solutions ?? []).map(s => (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n'),
@@ -1833,6 +1836,14 @@ export default function PlanPage() {
             }),
           }),
         };
+        // AI가 채운 값을 새 '사업 개요'(overview)에도 반영 — 새 레이아웃이 overview를 표시하므로.
+        const nextOverview: BusinessOverview = { ...(prev.overview ?? deriveOverview(prev)) };
+        if (patch.tagline !== undefined) nextOverview.tagline = patch.tagline;
+        if (patch.mission !== undefined) nextOverview.mission = patch.mission;
+        if (patch.vision !== undefined) nextOverview.vision = patch.vision;
+        if (patch.problems?.length) nextOverview.problem = patch.problems.filter(Boolean).join('\n');
+        if (patch.solutions?.length) nextOverview.solution = patch.solutions.map(s => typeof s === 'string' ? s : (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n');
+        next.overview = nextOverview;
         const wsId = selectedWsIdRef.current;
         if (wsId) storeRef.current.updatePlanInWs(wsId, next);
         else storeRef.current.updatePlan(next);
@@ -1958,6 +1969,17 @@ export default function PlanPage() {
   const handleGenerateProblems = () => genField(
     `아래 사업 정보를 바탕으로 이 사업이 해결하려는 고객의 핵심 문제를 2~3개로 구체적으로 정의해줘. 조언만 하지 말고, 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 problems 배열이 담긴 JSON을 출력해줘.\n\n${buildContext()}`,
     '문제 정의를 작성해줘');
+  // 사업 개요(overview) 항목별 AI 채우기 — 각 항목을 대응하는 plan 필드로 출력하게 지시(핸들러가 overview로 동기화)
+  const OVERVIEW_FIELD_PROMPT: Record<keyof BusinessOverview, string> = {
+    tagline: "이 사업의 '한 줄 소개'를 매력적인 한 문장으로 작성해줘. JSON 키는 tagline(문자열).",
+    problem: "이 사업이 해결하려는 '핵심 문제'를 2~3개로 구체적으로 정의해줘. JSON 키는 problems(문자열 배열).",
+    solution: "그 문제를 해결하는 '솔루션'을 구체적으로 정리해줘. JSON 키는 solutions([{title, memo}]).",
+    mission: "이 사업의 '미션'(존재 이유와 목적)을 한두 문장으로 작성해줘. JSON 키는 mission(문자열).",
+    vision: "이 사업의 '비전'(궁극적으로 이루려는 모습)을 한두 문장으로 작성해줘. JSON 키는 vision(문자열).",
+  };
+  const handleGenerateOverviewField = (field: keyof BusinessOverview) => genField(
+    `아래 사업 정보를 바탕으로 ${OVERVIEW_FIELD_PROMPT[field]} 조언만 하지 말고, 추가 질문 없이 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 해당 JSON을 출력해서 바로 반영되게 해줘.\n\n${buildContext()}`,
+    '사업 개요 항목을 채워줘');
 
   // 기획서 전체 일괄 채우기 (모든 필드)
   const handleFillAll = () => genField(
@@ -2063,6 +2085,8 @@ export default function PlanPage() {
           onSetDoc={d => update({ planDoc: d })}
           onRemoveDoc={() => update({ planDoc: undefined })}
           onChangeOverview={o => update({ overview: o })}
+          onGenerateField={chat && !chat.loading ? handleGenerateOverviewField : undefined}
+          aiEnabled={!!chat && !chat.loading}
         />
 
         {/* 하단: 중첩 사업 목표 (사업목표 > 산출물 > 업무영역별 산출물) */}
