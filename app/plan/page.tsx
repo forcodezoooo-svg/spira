@@ -1438,7 +1438,7 @@ const HINTS: Record<string, string> = {
 
 // ── 상단 박스: 사업계획서 업로드 또는 사업 개요 직접 작성 ──────────────────────────
 function BusinessDocBox({
-  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview, onGenerateField, aiEnabled,
+  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview, onGenerateField, aiEnabled, onAnalyze, analyzing,
 }: {
   doc?: PlanDoc;
   overview?: BusinessOverview;
@@ -1447,6 +1447,8 @@ function BusinessDocBox({
   onChangeOverview: (o: BusinessOverview) => void;
   onGenerateField?: (field: keyof BusinessOverview) => void;
   aiEnabled?: boolean;
+  onAnalyze?: () => void;
+  analyzing?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const ov: BusinessOverview = overview ?? { tagline: '', problem: '', solution: '', mission: '', vision: '' };
@@ -1500,6 +1502,22 @@ function BusinessDocBox({
         )}
       </div>
       <input ref={fileRef} type="file" className="hidden" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+
+      {/* 업로드된 사업계획서를 AI로 분석해 아래 개요 자동 채우기 */}
+      {doc && onAnalyze && (
+        <button
+          onClick={onAnalyze}
+          disabled={analyzing}
+          className="w-full mb-4 py-2.5 rounded-2xl text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60"
+          style={{ backgroundColor: '#EEF7E4', color: '#3E7A2E' }}
+        >
+          {analyzing ? (
+            <><span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />사업계획서 분석 중…</>
+          ) : (
+            <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>사업계획서 분석해 개요 자동 채우기</>
+          )}
+        </button>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {OV_FIELDS.map(f => (
@@ -1719,6 +1737,7 @@ export default function PlanPage() {
     return () => document.removeEventListener('mousedown', h);
   }, [moreOpen]);
   const [plan, setPlan] = useState<PlanData | null>(null);
+  const [analyzingDoc, setAnalyzingDoc] = useState(false);
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string } | null>(null); // 성장 단계 달성 깃발 오버레이
   const chat = useChatContext();
@@ -1981,6 +2000,53 @@ export default function PlanPage() {
     `아래 사업 정보를 바탕으로 ${OVERVIEW_FIELD_PROMPT[field]} 조언만 하지 말고, 추가 질문 없이 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 해당 JSON을 출력해서 바로 반영되게 해줘.\n\n${buildContext()}`,
     '사업 개요 항목을 채워줘');
 
+  // 업로드한 사업계획서(PDF·텍스트)를 서버에서 분석해 사업 개요 항목을 자동 채움
+  const analyzeDocToOverview = async (d: PlanDoc) => {
+    const type = d.type ?? '';
+    const isPdf = type === 'application/pdf' || /\.pdf$/i.test(d.name);
+    const isText = type.startsWith('text/') || /\.(txt|md)$/i.test(d.name);
+    if (!isPdf && !isText) { toast('지금은 PDF·텍스트 파일만 자동 분석돼요.', 'info'); return; }
+    // AI 자동 채우기는 Pro 전용 (온보딩 투어 중에는 허용)
+    if (userPlan.tier !== 'pro' && !isOnboardingActive()) { showUpgrade('autofill'); return; }
+    setAnalyzingDoc(true);
+    try {
+      const blob = await (await fetch(d.dataUrl)).blob();
+      const fd = new FormData();
+      fd.append('file', blob, d.name);
+      const res = await fetch('/api/analyze-doc', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        const msg = data.error === 'no-text' ? '문서에서 텍스트를 읽지 못했어요(스캔 이미지 PDF일 수 있어요).'
+          : data.error === 'unsupported' ? '지원하지 않는 형식이에요. PDF나 텍스트 파일을 올려주세요.'
+          : '문서 분석에 실패했어요. 잠시 후 다시 시도해 주세요.';
+        toast(msg, 'error');
+        return;
+      }
+      const f = (data.fields ?? {}) as Partial<BusinessOverview>;
+      setPlan(prev => {
+        if (!prev) return prev;
+        const base = prev.overview ?? deriveOverview(prev);
+        // 값이 있는 항목만 채우고, 빈 결과는 기존 값 유지
+        const merged: BusinessOverview = {
+          tagline: f.tagline?.trim() ? f.tagline : base.tagline,
+          problem: f.problem?.trim() ? f.problem : base.problem,
+          solution: f.solution?.trim() ? f.solution : base.solution,
+          mission: f.mission?.trim() ? f.mission : base.mission,
+          vision: f.vision?.trim() ? f.vision : base.vision,
+        };
+        const next = { ...prev, overview: merged };
+        const wsId = selectedWsIdRef.current;
+        if (wsId) store.updatePlanInWs(wsId, next);
+        return next;
+      });
+      toast('사업계획서를 분석해 개요를 채웠어요. 🌿', 'success');
+    } catch {
+      toast('네트워크 오류가 발생했어요.', 'error');
+    } finally {
+      setAnalyzingDoc(false);
+    }
+  };
+
   // 기획서 전체 일괄 채우기 (모든 필드)
   const handleFillAll = () => genField(
     `아래 사업 정보를 바탕으로 기획서의 '모든 항목'(tagline, mission, vision, concept, problems, solutions, revenueModel, products, brandingKeywords, valueProposition, targetCustomers, growthStages, workAreas)을 한 번에 채워줘. products는 이 사업에서 판매·출시하는 것(웹앱·앱·굿즈 등). 비어 있는 항목까지 전부 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 모든 필드를 출력해줘.\n\n${buildContext()}`,
@@ -2082,11 +2148,13 @@ export default function PlanPage() {
         <BusinessDocBox
           doc={plan.planDoc}
           overview={plan.overview ?? deriveOverview(plan)}
-          onSetDoc={d => update({ planDoc: d })}
+          onSetDoc={d => { update({ planDoc: d }); void analyzeDocToOverview(d); }}
           onRemoveDoc={() => update({ planDoc: undefined })}
           onChangeOverview={o => update({ overview: o })}
           onGenerateField={chat && !chat.loading ? handleGenerateOverviewField : undefined}
           aiEnabled={!!chat && !chat.loading}
+          onAnalyze={plan.planDoc ? () => analyzeDocToOverview(plan.planDoc!) : undefined}
+          analyzing={analyzingDoc}
         />
 
         {/* 하단: 중첩 사업 목표 (사업목표 > 산출물 > 업무영역별 산출물) */}
