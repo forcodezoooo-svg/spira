@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, forwardRef } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { ListSkeleton } from '../components/Skeleton';
-import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea } from '../lib/types';
+import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Deliverable, AreaDeliverable, BusinessOverview, PlanDoc } from '../lib/types';
 import TargetCustomerModal, { Avatar } from '../components/TargetCustomerModal';
 import { uid } from '../lib/store';
 import { useChatContext } from '../lib/ChatContext';
@@ -1436,6 +1436,251 @@ const HINTS: Record<string, string> = {
   products: '이 사업에서 판매·출시하는 것을 항목별로 정리하세요. 예: 웹앱, 아이패드 전용 앱, 휴대폰 앱, 굿즈 등',
 };
 
+// ── 상단 박스: 사업계획서 업로드 또는 사업 개요 직접 작성 ──────────────────────────
+function BusinessDocBox({
+  doc, overview, onSetDoc, onRemoveDoc, onChangeOverview,
+}: {
+  doc?: PlanDoc;
+  overview?: BusinessOverview;
+  onSetDoc: (d: PlanDoc) => void;
+  onRemoveDoc: () => void;
+  onChangeOverview: (o: BusinessOverview) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const ov: BusinessOverview = overview ?? { identity: '', tagline: '', problem: '', solution: '', mission: '', vision: '' };
+  const hasOverview = Object.values(ov).some(v => (v ?? '').trim());
+  const [writing, setWriting] = useState(false);
+  const showOverview = writing || hasOverview;
+
+  const MAX_BYTES = 4 * 1024 * 1024; // 4MB
+  const handleFile = (file?: File) => {
+    if (!file) return;
+    if (file.size > MAX_BYTES) { alert('파일이 너무 커요(최대 4MB). 더 작은 파일을 올리거나, 아래에서 사업 개요를 직접 작성해 주세요.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => onSetDoc({ name: file.name, dataUrl: reader.result as string, type: file.type });
+    reader.readAsDataURL(file);
+  };
+  const set = (patch: Partial<BusinessOverview>) => onChangeOverview({ ...ov, ...patch });
+
+  const OV_FIELDS: { key: keyof BusinessOverview; label: string; ph: string }[] = [
+    { key: 'identity', label: '아이덴티티', ph: '브랜드의 정체성을 한마디로' },
+    { key: 'tagline', label: '한 줄 소개', ph: '사업을 한 문장으로 소개' },
+    { key: 'problem', label: '문제 정의', ph: '해결하려는 핵심 문제' },
+    { key: 'solution', label: '솔루션', ph: '그 문제를 어떻게 해결하는지' },
+    { key: 'mission', label: '미션', ph: '우리가 존재하는 이유' },
+    { key: 'vision', label: '비전', ph: '궁극적으로 이루려는 모습' },
+  ];
+
+  return (
+    <div className="bg-neutral-50 border border-neutral-200 rounded-3xl p-5 sm:p-6">
+      {doc ? (
+        <div className="flex items-center gap-3 bg-white border border-neutral-200 rounded-2xl px-4 py-3">
+          <span className="w-11 h-11 rounded-2xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-violet-500" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-neutral-900 truncate">{doc.name}</p>
+            <a href={doc.dataUrl} target="_blank" rel="noreferrer" download={doc.name} className="text-xs text-violet-600 hover:underline">열기 · 다운로드</a>
+          </div>
+          <button onClick={() => fileRef.current?.click()} className="text-xs text-neutral-500 hover:text-neutral-800 transition-colors flex-shrink-0">교체</button>
+          <button onClick={onRemoveDoc} className="text-xs text-neutral-400 hover:text-red-500 transition-colors flex-shrink-0">삭제</button>
+        </div>
+      ) : (
+        <button onClick={() => fileRef.current?.click()} className="w-full border-2 border-dashed border-neutral-200 rounded-2xl py-10 flex flex-col items-center gap-2 hover:border-violet-300 hover:bg-violet-50/30 transition-colors">
+          <svg className="w-8 h-8 text-neutral-300" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <p className="text-sm font-semibold text-neutral-800">사업계획서를 업로드 해 주세요</p>
+          <p className="text-xs text-neutral-400">PDF · 문서 · 이미지 (최대 4MB)</p>
+        </button>
+      )}
+      <input ref={fileRef} type="file" className="hidden" onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
+
+      <div className="mt-4 pt-4 border-t border-neutral-200">
+        {showOverview ? (
+          <>
+            <p className="text-xs font-semibold text-neutral-500 mb-3">사업 개요 (직접 작성)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {OV_FIELDS.map(f => (
+                <div key={f.key} className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
+                  <label className="text-[11px] font-semibold text-neutral-400 block mb-1">{f.label}</label>
+                  <AutoTextarea value={ov[f.key] ?? ''} onChange={v => set({ [f.key]: v } as Partial<BusinessOverview>)} placeholder={f.ph} />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <button onClick={() => setWriting(true)} className="text-[13px] font-medium text-neutral-500 hover:text-neutral-800 transition-colors">
+            사업계획서가 없으신가요? <span className="text-violet-600 font-semibold">간단한 사업 개요 직접 작성하기 →</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 이름 리스트(사업목표/산출물 공통): 드릴다운 열기 + 인라인 이름 편집 + 추가/삭제
+function NameList({
+  items, subOf, onOpen, onAdd, onRename, onRemove, addPlaceholder,
+}: {
+  items: { id: string; name: string }[];
+  subOf: (id: string) => string;
+  onOpen: (id: string) => void;
+  onAdd: (name: string) => void;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
+  addPlaceholder: string;
+}) {
+  const [addVal, setAddVal] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState('');
+  const submitAdd = () => { const n = addVal.trim(); if (!n) return; onAdd(n); setAddVal(''); };
+  const submitEdit = () => { if (!editId) return; const n = editVal.trim(); if (n) onRename(editId, n); setEditId(null); };
+  return (
+    <div className="space-y-2">
+      {items.length === 0 && (
+        <p className="text-[13px] text-neutral-400 py-3">아직 없어요. 아래에서 추가해 보세요.</p>
+      )}
+      {items.map(it => (
+        <div key={it.id} className="group bg-white border border-neutral-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+          {editId === it.id ? (
+            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submitEdit(); if (e.key === 'Escape') setEditId(null); }}
+              onBlur={submitEdit}
+              className="flex-1 bg-neutral-50 border border-violet-300 rounded-lg px-2 py-1 text-sm outline-none" />
+          ) : (
+            <button onClick={() => onOpen(it.id)} className="flex-1 min-w-0 text-left flex items-center gap-2">
+              <span className="text-sm font-semibold text-neutral-900 truncate">{it.name}</span>
+              <span className="text-[11px] text-neutral-400 flex-shrink-0">{subOf(it.id)}</span>
+            </button>
+          )}
+          {editId !== it.id && (
+            <>
+              <button onClick={() => { setEditId(it.id); setEditVal(it.name); }} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-neutral-700 text-xs transition-all flex-shrink-0">이름 수정</button>
+              <button onClick={() => onOpen(it.id)} className="text-neutral-300 group-hover:text-neutral-600 transition-colors flex-shrink-0" title="열기">
+                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              <button onClick={() => onRemove(it.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
+            </>
+          )}
+        </div>
+      ))}
+      <div className="flex items-center gap-2 pt-1">
+        <input value={addVal} onChange={e => setAddVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submitAdd(); }}
+          placeholder={addPlaceholder}
+          className="flex-1 bg-white border border-neutral-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-violet-400" />
+        <button onClick={submitAdd} disabled={!addVal.trim()} className="px-4 py-2.5 rounded-2xl text-sm font-semibold bg-neutral-900 text-white disabled:opacity-30 transition-opacity">추가</button>
+      </div>
+    </div>
+  );
+}
+
+// ── 중첩 사업 목표: 사업목표(1) > 산출물(2) > 업무영역별 산출물(3) — 드릴다운 ──────
+function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: BizGoal[]) => void }) {
+  const [goalId, setGoalId] = useState<string | null>(null);
+  const [delivId, setDelivId] = useState<string | null>(null);
+  const curGoal = goals.find(g => g.id === goalId) ?? null;
+  const curDeliv = curGoal?.deliverables.find(d => d.id === delivId) ?? null;
+
+  // 사업목표(1단계)
+  const addGoal = (name: string) => onChange([...goals, { id: uid(), name, deliverables: [] }]);
+  const renameGoal = (id: string, name: string) => onChange(goals.map(g => g.id === id ? { ...g, name } : g));
+  const removeGoal = (id: string) => onChange(goals.filter(g => g.id !== id));
+  // 산출물(2단계)
+  const mapGoal = (gid: string, fn: (g: BizGoal) => BizGoal) => onChange(goals.map(g => g.id === gid ? fn(g) : g));
+  const addDeliv = (gid: string, name: string) => mapGoal(gid, g => ({ ...g, deliverables: [...g.deliverables, { id: uid(), name, areaDeliverables: [] }] }));
+  const renameDeliv = (gid: string, did: string, name: string) => mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.map(d => d.id === did ? { ...d, name } : d) }));
+  const removeDeliv = (gid: string, did: string) => mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.filter(d => d.id !== did) }));
+  // 업무영역별 산출물(3단계)
+  const mapDeliv = (gid: string, did: string, fn: (d: Deliverable) => Deliverable) =>
+    mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.map(d => d.id === did ? fn(d) : d) }));
+  const setAreas = (gid: string, did: string, arr: AreaDeliverable[]) => mapDeliv(gid, did, d => ({ ...d, areaDeliverables: arr }));
+
+  const Crumb = ({ children }: { children: React.ReactNode }) => (
+    <div className="flex items-center gap-1.5 text-[13px] mb-4 flex-wrap">{children}</div>
+  );
+  const crumbBtn = (label: string, onClick?: () => void) =>
+    onClick
+      ? <button onClick={onClick} className="text-neutral-400 hover:text-neutral-700 transition-colors font-medium">{label}</button>
+      : <span className="text-neutral-900 font-bold truncate max-w-[180px]">{label}</span>;
+  const sep = <svg className="w-3 h-3 text-neutral-300 flex-shrink-0" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+
+  // ── 3단계: 업무 영역별 산출물 ──
+  if (curGoal && curDeliv) {
+    const areas = curDeliv.areaDeliverables;
+    const addArea = () => setAreas(curGoal.id, curDeliv.id, [...areas, { id: uid(), area: '', content: '' }]);
+    const patchArea = (id: string, patch: Partial<AreaDeliverable>) =>
+      setAreas(curGoal.id, curDeliv.id, areas.map(a => a.id === id ? { ...a, ...patch } : a));
+    const removeArea = (id: string) => setAreas(curGoal.id, curDeliv.id, areas.filter(a => a.id !== id));
+    return (
+      <section>
+        <Crumb>
+          {crumbBtn('사업 목표', () => { setGoalId(null); setDelivId(null); })}{sep}
+          {crumbBtn(curGoal.name, () => setDelivId(null))}{sep}
+          {crumbBtn(curDeliv.name)}
+        </Crumb>
+        <h3 className="text-[15px] font-bold text-neutral-900 mb-1">업무 영역별 산출물</h3>
+        <p className="text-[12px] text-neutral-400 mb-4">‘{curDeliv.name}’을(를) 만들기 위해 각 업무 영역이 내놓을 산출물을 적어보세요.</p>
+        <div className="space-y-2">
+          {areas.length === 0 && <p className="text-[13px] text-neutral-400 py-3">아직 없어요. 아래에서 추가해 보세요.</p>}
+          {areas.map(a => (
+            <div key={a.id} className="group bg-white border border-neutral-200 rounded-2xl px-4 py-3 flex items-start gap-3">
+              <input value={a.area} onChange={e => patchArea(a.id, { area: e.target.value })} placeholder="업무 영역 (예: 개발)"
+                className="w-32 flex-shrink-0 bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm font-semibold outline-none focus:border-violet-400" />
+              <div className="flex-1 min-w-0 pt-0.5">
+                <AutoTextarea value={a.content} onChange={v => patchArea(a.id, { content: v })} placeholder="이 영역의 산출물" />
+              </div>
+              <button onClick={() => removeArea(a.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1">×</button>
+            </div>
+          ))}
+          <button onClick={addArea} className="w-full py-2.5 rounded-2xl border-2 border-dashed border-neutral-200 text-sm text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물 추가</button>
+        </div>
+      </section>
+    );
+  }
+
+  // ── 2단계: 산출물 ──
+  if (curGoal) {
+    return (
+      <section>
+        <Crumb>
+          {crumbBtn('사업 목표', () => setGoalId(null))}{sep}
+          {crumbBtn(curGoal.name)}
+        </Crumb>
+        <h3 className="text-[15px] font-bold text-neutral-900 mb-1">산출물</h3>
+        <p className="text-[12px] text-neutral-400 mb-4">‘{curGoal.name}’을(를) 이루기 위해 만들어야 할 구체적인 산출물이에요. 각 산출물을 열면 업무 영역별로 나눌 수 있어요.</p>
+        <NameList
+          items={curGoal.deliverables}
+          subOf={id => `영역별 산출물 ${curGoal.deliverables.find(d => d.id === id)?.areaDeliverables.length ?? 0}개`}
+          onOpen={id => setDelivId(id)}
+          onAdd={name => addDeliv(curGoal.id, name)}
+          onRename={(id, name) => renameDeliv(curGoal.id, id, name)}
+          onRemove={id => removeDeliv(curGoal.id, id)}
+          addPlaceholder="새 산출물 이름"
+        />
+      </section>
+    );
+  }
+
+  // ── 1단계: 사업 목표 ──
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className="text-[17px] font-black text-neutral-900">사업 목표</h2>
+      </div>
+      <p className="text-[12px] text-neutral-400 mb-4">큰 사업 목표를 단계별로 적어두고, 각 목표를 열면 필요한 산출물을 정리할 수 있어요.</p>
+      <NameList
+        items={goals}
+        subOf={id => `산출물 ${goals.find(g => g.id === id)?.deliverables.length ?? 0}개`}
+        onOpen={id => setGoalId(id)}
+        onAdd={addGoal}
+        onRename={renameGoal}
+        onRemove={removeGoal}
+        addPlaceholder="새 사업 목표 (예: 1단계 · MVP 출시)"
+      />
+    </section>
+  );
+}
+
 export default function PlanPage() {
   const store = useStore();
   const { toast } = useToast();
@@ -1780,15 +2025,6 @@ export default function PlanPage() {
                 사업 이름 변경
               </button>
               <div className="my-1 h-px" style={{ backgroundColor: 'var(--spira-border-subtle)' }} />
-              <button onClick={() => { setMoreOpen(false); handleFillAll(); }} disabled={!chat || chat.loading} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-semibold text-left hover:bg-neutral-50 transition-colors disabled:opacity-40" style={{ color: '#16211E' }}>
-                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
-                AI로 전체 채우기
-              </button>
-              <div className="my-1 h-px" style={{ backgroundColor: 'var(--spira-border-subtle)' }} />
-              <button onClick={() => { setMoreOpen(false); handlePrint(); }} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-left hover:bg-neutral-50 transition-colors" style={{ color: '#16211E' }}>
-                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                문서 저장
-              </button>
               <button onClick={() => { setMoreOpen(false); handleDeleteBusiness(); }} disabled={isLastBusiness} className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-left hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ color: '#C24B4B' }} title={isLastBusiness ? '마지막 사업은 삭제할 수 없어요' : undefined}>
                 <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4.5V3.5a1 1 0 011-1h1a1 1 0 011 1v1M5.5 4.5l.4 8a1 1 0 001 .95h2.2a1 1 0 001-.95l.4-8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 사업 삭제
@@ -1798,137 +2034,23 @@ export default function PlanPage() {
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* ── 상단 브랜드 요약 박스 (좌: 아이덴티티·한 줄 소개·키워드 / 우: 업무 영역·연계 비즈니스) ── */}
-        <div className="bg-neutral-50 border border-neutral-200 rounded-3xl p-5 sm:p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-6 gap-y-6 items-start">
-            {/* 왼쪽 (1칼럼): 브랜드 아이덴티티 · 한 줄 소개 · 브랜딩 키워드 */}
-            <div className="lg:col-span-1 space-y-6">
-              <BrandImageSection
-                images={plan.brandImages ?? []}
-                onAdd={v => update({ brandImages: [...(plan.brandImages ?? []), v] })}
-                onRemove={i => update({ brandImages: (plan.brandImages ?? []).filter((_, idx) => idx !== i) })}
-              />
-
-              <TextSection
-                label="브랜드 한 줄 소개"
-                hint={HINTS.tagline}
-                value={plan.tagline}
-                onChange={v => update({ tagline: v })}
-                placeholder="브랜드를 한 문장으로 소개하세요."
-              />
-
-              <BrandingKeywordsSection
-                keywords={plan.brandingKeywords ?? []}
-                onAdd={addKeyword}
-                onRemove={removeKeyword}
-                onGenerate={chat && !chat.loading ? handleGenerateBrandingKeywords : undefined}
-              />
-            </div>
-
-            {/* 오른쪽 (2칼럼): 업무 영역 · 연계 비즈니스 */}
-            <div className="lg:col-span-2 space-y-6">
-              <WorkAreasSection
-                areas={plan.workAreas ?? []}
-                onAdd={addWorkArea}
-                onUpdate={updateWorkArea}
-                onRemove={removeWorkArea}
-                onGenerate={chat && !chat.loading ? handleGenerateWorkAreas : undefined}
-              />
-
-              <ProductsSection
-                items={plan.products ?? []}
-                businesses={store.allWorkspaces.filter(w => w.id !== selectedWsId).map(w => ({ id: w.id, name: w.name }))}
-                onAdd={v => addPlanItem('products', v)}
-                onUpdate={(i, v) => updatePlanItem('products', i, v)}
-                onRemove={i => removePlanItem('products', i)}
-                onGenerate={chat && !chat.loading ? handleGenerateProducts : undefined}
-                onOpenBusiness={wsId => { store.switchWorkspace(wsId); setSelectedWsId(wsId); }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <ListSection
-          label="문제 정의"
-          hint={HINTS.problems}
-          items={plan.problems}
-          onReplace={items => replaceItems('problems', items)}
-          placeholder="해결하려는 문제를 입력하세요."
-          onGenerate={chat && !chat.loading ? handleGenerateProblems : undefined}
+      <div className="space-y-8">
+        {/* 상단: 사업계획서 업로드 또는 사업 개요 직접 작성 */}
+        <BusinessDocBox
+          doc={plan.planDoc}
+          overview={plan.overview}
+          onSetDoc={d => update({ planDoc: d })}
+          onRemoveDoc={() => update({ planDoc: undefined })}
+          onChangeOverview={o => update({ overview: o })}
         />
 
-        <TextSection
-          label="미션"
-          hint={HINTS.mission}
-          value={plan.mission}
-          onChange={v => update({ mission: v })}
-          placeholder="우리가 존재하는 이유와 목적을 적어보세요."
-        />
-
-        <TextSection
-          label="비전"
-          hint={HINTS.vision}
-          value={plan.vision}
-          onChange={v => update({ vision: v })}
-          placeholder="이 사업으로 궁극적으로 이루고 싶은 것을 적어보세요."
-        />
-
-        <TextSection
-          label="컨셉"
-          hint={HINTS.concept}
-          value={plan.concept}
-          onChange={v => update({ concept: v })}
-          placeholder="브랜드의 핵심 컨셉과 방향성을 적어보세요."
-        />
-
-        <CardListSection
-          label="솔루션/제품"
-          hint={HINTS.solutions}
-          items={plan.solutions}
-          onAdd={v => addPlanItem('solutions', v)}
-          onUpdate={(i, v) => updatePlanItem('solutions', i, v)}
-          onRemove={i => removePlanItem('solutions', i)}
-          onGenerate={chat && !chat.loading ? handleGenerateSolutions : undefined}
-        />
-
-        <ValuePropSection
-          hint={HINTS.valueProposition}
-          value={plan.valueProposition}
-          onChange={v => update({ valueProposition: v })}
-          onAskAI={chat && !chat.loading ? handleGenerateValueProp : undefined}
-        />
-
-        <TargetCustomerSection
-          hint={HINTS.targetCustomers}
-          customers={plan.targetCustomers}
-          onAdd={addCustomer}
-          onUpdate={updateCustomer}
-          onDelete={deleteCustomer}
-          onGenerate={chat && !chat.loading ? handleGeneratePersonas : undefined}
-        />
-
-        <CardListSection
-          label="수익 구조"
-          hint={HINTS.revenueModel}
-          items={plan.revenueModel}
-          onAdd={v => addPlanItem('revenueModel', v)}
-          onUpdate={(i, v) => updatePlanItem('revenueModel', i, v)}
-          onRemove={i => removePlanItem('revenueModel', i)}
-          onGenerate={chat && !chat.loading ? handleGenerateRevenueModel : undefined}
-        />
-
-        <GrowthStagesSection
-          stages={plan.growthStages ?? []}
-          onAdd={addGrowthStage}
-          onUpdate={updateGrowthStage}
-          onRemove={removeGrowthStage}
-          onMove={moveGrowthStage}
-          onGenerate={chat && !chat.loading ? handleGenerateGrowthStages : undefined}
-          currentIndex={growthIdx}
-          onComplete={handleCompleteStage}
+        {/* 하단: 중첩 사업 목표 (사업목표 > 산출물 > 업무영역별 산출물) */}
+        <BizGoalsSection
+          goals={plan.bizGoals ?? []}
+          onChange={g => update({ bizGoals: g })}
         />
       </div>
+
     </div>
 
     {/* ── 오른쪽: 플레이바 + 공용 메모 ── */}

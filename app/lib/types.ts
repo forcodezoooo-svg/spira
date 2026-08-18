@@ -56,7 +56,45 @@ export interface Project {
   // (프로젝트 = 여러 업무 영역의 데드라인을 묶는 '일의 순서/루틴')
 }
 
+// ── 새 Plan 구조 (Plan 독립) ──────────────────────────────────────────────────
+// 업로드한 사업계획서 파일 (사용자가 이미 계획서가 있는 경우)
+export interface PlanDoc {
+  name: string;
+  dataUrl: string; // base64 data URL
+  type?: string;   // MIME 타입
+}
+
+// 사업계획서가 없을 때 직접 작성하는 간략한 사업 개요
+export interface BusinessOverview {
+  identity: string; // 아이덴티티
+  tagline: string;  // 한 줄 소개
+  problem: string;  // 문제 정의
+  solution: string; // 솔루션
+  mission: string;  // 미션
+  vision: string;   // 비전
+}
+
+// 중첩 사업 목표: 사업목표(1단계) > 산출물(2단계) > 업무영역별 산출물(3단계)
+export interface AreaDeliverable {   // 3단계: 업무 영역별 산출물
+  id: string;
+  area: string;    // 업무 영역 이름
+  content: string; // 그 영역의 산출물
+}
+export interface Deliverable {        // 2단계: 산출물
+  id: string;
+  name: string;
+  areaDeliverables: AreaDeliverable[];
+}
+export interface BizGoal {            // 1단계: 큰 사업 목표
+  id: string;
+  name: string;
+  deliverables: Deliverable[];
+}
+
 export interface PlanData {
+  planDoc?: PlanDoc;                // 업로드한 사업계획서
+  overview?: BusinessOverview;      // 직접 작성한 사업 개요
+  bizGoals?: BizGoal[];             // 중첩 사업 목표 (사업목표>산출물>업무영역별 산출물)
   brandImages: string[];
   brandingKeywords: string[];
   tagline: string;
