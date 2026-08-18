@@ -62,6 +62,7 @@ export interface PlanDoc {
   name: string;
   dataUrl: string; // base64 data URL
   type?: string;   // MIME 타입
+  thumbDataUrl?: string; // 미리보기 썸네일(이미지 dataURL) — PDF는 첫 페이지를 렌더해 저장
 }
 
 // 사업계획서가 없을 때 직접 작성하는 간략한 사업 개요

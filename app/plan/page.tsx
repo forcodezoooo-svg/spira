@@ -1242,6 +1242,37 @@ function WorkAreasSection({
 // 업로드한 브랜드 이미지가 원본(수 MB base64)으로 저장되면 저장/동기화가 무거워지고,
 // 특히 '문서 저장' 시 이 거대한 base64들을 한 HTML에 전부 인라인해 새 탭에서 디코딩하느라
 // 브라우저 전체가 렉이 걸린다. 캔버스로 축소·재인코딩해 용량을 크게 줄인다.
+// PDF 첫 페이지를 렌더해 작은 JPEG 썸네일 dataURL로 반환 (실패 시 null)
+async function renderPdfThumb(dataUrl: string, maxW = 260): Promise<string | null> {
+  if (typeof document === 'undefined') return null;
+  try {
+    const pdfjs = await import('pdfjs-dist');
+    // ESM 워커 번들 경로 지정
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+    const b64 = dataUrl.split(',')[1] ?? '';
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const loadingTask = pdfjs.getDocument({ data: bytes });
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const scale = Math.min(2, maxW / base.width);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { await loadingTask.destroy(); return null; }
+    await page.render({ canvasContext: ctx, canvas, viewport }).promise;
+    const url = canvas.toDataURL('image/jpeg', 0.72);
+    await loadingTask.destroy();
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 async function downscaleDataUrl(dataUrl: string, maxDim = 1400, forceJpeg = false): Promise<string> {
   if (typeof document === 'undefined' || !dataUrl.startsWith('data:image')) return dataUrl;
   const isPng = dataUrl.startsWith('data:image/png');
@@ -1458,10 +1489,16 @@ function BusinessDocBox({
     if (!file) return;
     if (file.size > MAX_BYTES) { alert('파일이 너무 커요(최대 4MB). 더 작은 파일을 올려주세요.'); return; }
     const reader = new FileReader();
-    reader.onload = () => onSetDoc({ name: file.name, dataUrl: reader.result as string, type: file.type });
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      const thumbDataUrl = isPdf ? (await renderPdfThumb(dataUrl)) ?? undefined : undefined;
+      onSetDoc({ name: file.name, dataUrl, type: file.type, thumbDataUrl });
+    };
     reader.readAsDataURL(file);
   };
   const isImg = !!doc?.type?.startsWith('image/');
+  const thumb = doc?.thumbDataUrl || (isImg ? doc?.dataUrl : undefined); // 실제 미리보기 이미지
 
   const OV_FIELDS: { key: keyof BusinessOverview; label: string; ph: string; hint: string }[] = [
     { key: 'tagline', label: '한 줄 소개', ph: '사업을 한 문장으로 소개', hint: '이 사업이 무엇인지 한 문장으로 설명하는 슬로건이에요.' },
@@ -1483,12 +1520,11 @@ function BusinessDocBox({
         {doc ? (
           <div className="flex items-center gap-2 flex-shrink-0">
             <a href={doc.dataUrl} target="_blank" rel="noreferrer" download={doc.name} title={`${doc.name} · 열기`}
-               className="relative block w-16 h-16 rounded-xl overflow-hidden border border-neutral-200 flex-shrink-0"
-               style={{ backgroundColor: isImg ? '#fff' : '#F3F0FF' }}>
-              {isImg ? (
-                <img src={doc.dataUrl} alt={doc.name} className="w-full h-full object-cover" />
+               className="relative block w-16 h-16 rounded-xl overflow-hidden border border-neutral-200 flex-shrink-0 bg-white">
+              {thumb ? (
+                <img src={thumb} alt={doc.name} className="w-full h-full object-cover" />
               ) : (
-                <span className="w-full h-full flex flex-col items-center justify-center gap-1 text-violet-500">
+                <span className="w-full h-full flex flex-col items-center justify-center gap-1 text-violet-500" style={{ backgroundColor: '#F3F0FF' }}>
                   <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /></svg>
                   <span className="text-[9px] font-bold leading-none">{/\.pdf$/i.test(doc.name) ? 'PDF' : (doc.name.split('.').pop() || 'DOC').slice(0, 4).toUpperCase()}</span>
                 </span>
@@ -1536,166 +1572,132 @@ function BusinessDocBox({
   );
 }
 
-// 이름 리스트(사업목표/산출물 공통): 드릴다운 열기 + 인라인 이름 편집 + 추가/삭제
-function NameList({
-  items, subOf, onOpen, onAdd, onRename, onRemove, addPlaceholder,
-}: {
-  items: { id: string; name: string }[];
-  subOf: (id: string) => string;
-  onOpen: (id: string) => void;
-  onAdd: (name: string) => void;
-  onRename: (id: string, name: string) => void;
-  onRemove: (id: string) => void;
-  addPlaceholder: string;
-}) {
-  const [addVal, setAddVal] = useState('');
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editVal, setEditVal] = useState('');
-  const submitAdd = () => { const n = addVal.trim(); if (!n) return; onAdd(n); setAddVal(''); };
-  const submitEdit = () => { if (!editId) return; const n = editVal.trim(); if (n) onRename(editId, n); setEditId(null); };
+// 인라인 추가 입력(사업목표/산출물 공통)
+function AddInline({ placeholder, onAdd }: { placeholder: string; onAdd: (name: string) => void }) {
+  const [v, setV] = useState('');
+  const submit = () => { const n = v.trim(); if (!n) return; onAdd(n); setV(''); };
   return (
-    <div className="space-y-2">
-      {items.length === 0 && (
-        <p className="text-[13px] text-neutral-400 py-3">아직 없어요. 아래에서 추가해 보세요.</p>
-      )}
-      {items.map(it => (
-        <div key={it.id} className="group bg-white border border-neutral-200 rounded-2xl px-4 py-3 flex items-center gap-3">
-          {editId === it.id ? (
-            <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') submitEdit(); if (e.key === 'Escape') setEditId(null); }}
-              onBlur={submitEdit}
-              className="flex-1 bg-neutral-50 border border-violet-300 rounded-lg px-2 py-1 text-sm outline-none" />
-          ) : (
-            <button onClick={() => onOpen(it.id)} className="flex-1 min-w-0 text-left flex items-center gap-2">
-              <span className="text-sm font-semibold text-neutral-900 truncate">{it.name}</span>
-              <span className="text-[11px] text-neutral-400 flex-shrink-0">{subOf(it.id)}</span>
-            </button>
-          )}
-          {editId !== it.id && (
-            <>
-              <button onClick={() => { setEditId(it.id); setEditVal(it.name); }} className="opacity-0 group-hover:opacity-100 text-neutral-300 hover:text-neutral-700 text-xs transition-all flex-shrink-0">이름 수정</button>
-              <button onClick={() => onOpen(it.id)} className="text-neutral-300 group-hover:text-neutral-600 transition-colors flex-shrink-0" title="열기">
-                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </button>
-              <button onClick={() => onRemove(it.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
-            </>
-          )}
-        </div>
-      ))}
-      <div className="flex items-center gap-2 pt-1">
-        <input value={addVal} onChange={e => setAddVal(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submitAdd(); }}
-          placeholder={addPlaceholder}
-          className="flex-1 bg-white border border-neutral-200 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-violet-400" />
-        <button onClick={submitAdd} disabled={!addVal.trim()} className="px-4 py-2.5 rounded-2xl text-sm font-semibold bg-neutral-900 text-white disabled:opacity-30 transition-opacity">추가</button>
-      </div>
+    <div className="flex items-center gap-2">
+      <input value={v} onChange={e => setV(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+        placeholder={placeholder} className="flex-1 bg-white border border-neutral-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-400" />
+      <button onClick={submit} disabled={!v.trim()} className="px-3.5 py-2 rounded-xl text-sm font-semibold bg-neutral-900 text-white disabled:opacity-30 transition-opacity flex-shrink-0">추가</button>
     </div>
   );
 }
 
-// ── 중첩 사업 목표: 사업목표(1) > 산출물(2) > 업무영역별 산출물(3) — 드릴다운 ──────
+// ── 중첩 사업 목표: 사업목표(1) > 산출물(2) > 업무영역별 산출물(3) — 접이식(아코디언) ──────
 function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: BizGoal[]) => void }) {
-  const [goalId, setGoalId] = useState<string | null>(null);
-  const [delivId, setDelivId] = useState<string | null>(null);
-  const curGoal = goals.find(g => g.id === goalId) ?? null;
-  const curDeliv = curGoal?.deliverables.find(d => d.id === delivId) ?? null;
+  const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
+  const [openDelivs, setOpenDelivs] = useState<Set<string>>(new Set());
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editVal, setEditVal] = useState('');
+  const toggle = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
+    setFn(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  // 사업목표(1단계)
+  // 1단계
   const addGoal = (name: string) => onChange([...goals, { id: uid(), name, deliverables: [] }]);
   const renameGoal = (id: string, name: string) => onChange(goals.map(g => g.id === id ? { ...g, name } : g));
   const removeGoal = (id: string) => onChange(goals.filter(g => g.id !== id));
-  // 산출물(2단계)
+  // 2단계
   const mapGoal = (gid: string, fn: (g: BizGoal) => BizGoal) => onChange(goals.map(g => g.id === gid ? fn(g) : g));
   const addDeliv = (gid: string, name: string) => mapGoal(gid, g => ({ ...g, deliverables: [...g.deliverables, { id: uid(), name, areaDeliverables: [] }] }));
   const renameDeliv = (gid: string, did: string, name: string) => mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.map(d => d.id === did ? { ...d, name } : d) }));
   const removeDeliv = (gid: string, did: string) => mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.filter(d => d.id !== did) }));
-  // 업무영역별 산출물(3단계)
-  const mapDeliv = (gid: string, did: string, fn: (d: Deliverable) => Deliverable) =>
-    mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.map(d => d.id === did ? fn(d) : d) }));
-  const setAreas = (gid: string, did: string, arr: AreaDeliverable[]) => mapDeliv(gid, did, d => ({ ...d, areaDeliverables: arr }));
+  // 3단계
+  const setAreas = (gid: string, did: string, arr: AreaDeliverable[]) =>
+    mapGoal(gid, g => ({ ...g, deliverables: g.deliverables.map(d => d.id === did ? { ...d, areaDeliverables: arr } : d) }));
 
-  const Crumb = ({ children }: { children: React.ReactNode }) => (
-    <div className="flex items-center gap-1.5 text-[13px] mb-4 flex-wrap">{children}</div>
+  const startEdit = (id: string, cur: string) => { setEditId(id); setEditVal(cur); };
+  const saveEdit = (fn: (n: string) => void) => { const n = editVal.trim(); if (n) fn(n); setEditId(null); };
+  const Chevron = ({ open }: { open: boolean }) => (
+    <svg className={`w-4 h-4 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} style={{ color: '#9AA39D' }} viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
   );
-  const crumbBtn = (label: string, onClick?: () => void) =>
-    onClick
-      ? <button onClick={onClick} className="text-neutral-400 hover:text-neutral-700 transition-colors font-medium">{label}</button>
-      : <span className="text-neutral-900 font-bold truncate max-w-[180px]">{label}</span>;
-  const sep = <svg className="w-3 h-3 text-neutral-300 flex-shrink-0" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  const nameInput = (onSave: (n: string) => void) => (
+    <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') saveEdit(onSave); if (e.key === 'Escape') setEditId(null); }}
+      onBlur={() => saveEdit(onSave)} onClick={e => e.stopPropagation()}
+      className="flex-1 bg-neutral-50 border border-violet-300 rounded-lg px-2 py-1 text-sm outline-none" />
+  );
 
-  // ── 3단계: 업무 영역별 산출물 ──
-  if (curGoal && curDeliv) {
-    const areas = curDeliv.areaDeliverables;
-    const addArea = () => setAreas(curGoal.id, curDeliv.id, [...areas, { id: uid(), area: '', content: '' }]);
-    const patchArea = (id: string, patch: Partial<AreaDeliverable>) =>
-      setAreas(curGoal.id, curDeliv.id, areas.map(a => a.id === id ? { ...a, ...patch } : a));
-    const removeArea = (id: string) => setAreas(curGoal.id, curDeliv.id, areas.filter(a => a.id !== id));
-    return (
-      <section>
-        <Crumb>
-          {crumbBtn('사업 목표', () => { setGoalId(null); setDelivId(null); })}{sep}
-          {crumbBtn(curGoal.name, () => setDelivId(null))}{sep}
-          {crumbBtn(curDeliv.name)}
-        </Crumb>
-        <h3 className="text-[15px] font-bold text-neutral-900 mb-1">업무 영역별 산출물</h3>
-        <p className="text-[12px] text-neutral-400 mb-4">‘{curDeliv.name}’을(를) 만들기 위해 각 업무 영역이 내놓을 산출물을 적어보세요.</p>
-        <div className="space-y-2">
-          {areas.length === 0 && <p className="text-[13px] text-neutral-400 py-3">아직 없어요. 아래에서 추가해 보세요.</p>}
-          {areas.map(a => (
-            <div key={a.id} className="group bg-white border border-neutral-200 rounded-2xl px-4 py-3 flex items-start gap-3">
-              <input value={a.area} onChange={e => patchArea(a.id, { area: e.target.value })} placeholder="업무 영역 (예: 개발)"
-                className="w-32 flex-shrink-0 bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm font-semibold outline-none focus:border-violet-400" />
-              <div className="flex-1 min-w-0 pt-0.5">
-                <AutoTextarea value={a.content} onChange={v => patchArea(a.id, { content: v })} placeholder="이 영역의 산출물" />
-              </div>
-              <button onClick={() => removeArea(a.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1">×</button>
-            </div>
-          ))}
-          <button onClick={addArea} className="w-full py-2.5 rounded-2xl border-2 border-dashed border-neutral-200 text-sm text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물 추가</button>
-        </div>
-      </section>
-    );
-  }
-
-  // ── 2단계: 산출물 ──
-  if (curGoal) {
-    return (
-      <section>
-        <Crumb>
-          {crumbBtn('사업 목표', () => setGoalId(null))}{sep}
-          {crumbBtn(curGoal.name)}
-        </Crumb>
-        <h3 className="text-[15px] font-bold text-neutral-900 mb-1">산출물</h3>
-        <p className="text-[12px] text-neutral-400 mb-4">‘{curGoal.name}’을(를) 이루기 위해 만들어야 할 구체적인 산출물이에요. 각 산출물을 열면 업무 영역별로 나눌 수 있어요.</p>
-        <NameList
-          items={curGoal.deliverables}
-          subOf={id => `영역별 산출물 ${curGoal.deliverables.find(d => d.id === id)?.areaDeliverables.length ?? 0}개`}
-          onOpen={id => setDelivId(id)}
-          onAdd={name => addDeliv(curGoal.id, name)}
-          onRename={(id, name) => renameDeliv(curGoal.id, id, name)}
-          onRemove={id => removeDeliv(curGoal.id, id)}
-          addPlaceholder="새 산출물 이름"
-        />
-      </section>
-    );
-  }
-
-  // ── 1단계: 사업 목표 ──
   return (
     <section>
-      <div className="flex items-center gap-2 mb-1">
-        <h2 className="text-[17px] font-black text-neutral-900">사업 목표</h2>
+      <h2 className="text-[17px] font-black text-neutral-900 mb-1">사업 목표</h2>
+      <p className="text-[12px] text-neutral-400 mb-4">큰 사업 목표를 단계별로 적어두고, 화살표를 눌러 필요한 산출물과 업무 영역별 산출물을 펼쳐서 정리하세요.</p>
+      <div className="space-y-2">
+        {goals.map(g => {
+          const gOpen = openGoals.has(g.id);
+          return (
+            <div key={g.id} className="border border-neutral-200 rounded-2xl bg-white">
+              {/* 사업 목표 헤더 */}
+              <div className="flex items-center gap-2 px-4 py-3">
+                <button onClick={() => toggle(setOpenGoals, g.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                  <Chevron open={gOpen} />
+                  {editId === g.id ? nameInput(n => renameGoal(g.id, n)) : (
+                    <>
+                      <span className="text-sm font-bold text-neutral-900 truncate">{g.name}</span>
+                      <span className="text-[11px] text-neutral-400 flex-shrink-0">산출물 {g.deliverables.length}개</span>
+                    </>
+                  )}
+                </button>
+                {editId !== g.id && (
+                  <>
+                    <button onClick={() => startEdit(g.id, g.name)} className="text-neutral-300 hover:text-neutral-700 text-xs transition-colors flex-shrink-0">이름 수정</button>
+                    <button onClick={() => removeGoal(g.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
+                  </>
+                )}
+              </div>
+              {/* 산출물 목록 */}
+              {gOpen && (
+                <div className="px-4 pb-3 pl-9 space-y-2 border-t border-neutral-100 pt-3">
+                  {g.deliverables.map(d => {
+                    const dOpen = openDelivs.has(d.id);
+                    return (
+                      <div key={d.id} className="border border-neutral-200 rounded-xl bg-neutral-50">
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          <button onClick={() => toggle(setOpenDelivs, d.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                            <Chevron open={dOpen} />
+                            {editId === d.id ? nameInput(n => renameDeliv(g.id, d.id, n)) : (
+                              <>
+                                <span className="text-[13px] font-semibold text-neutral-900 truncate">{d.name}</span>
+                                <span className="text-[10px] text-neutral-400 flex-shrink-0">영역별 {d.areaDeliverables.length}개</span>
+                              </>
+                            )}
+                          </button>
+                          {editId !== d.id && (
+                            <>
+                              <button onClick={() => startEdit(d.id, d.name)} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
+                              <button onClick={() => removeDeliv(g.id, d.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
+                            </>
+                          )}
+                        </div>
+                        {/* 업무 영역별 산출물 */}
+                        {dOpen && (
+                          <div className="px-3 pb-3 pl-8 space-y-2 border-t border-neutral-200 pt-2">
+                            {d.areaDeliverables.map(a => (
+                              <div key={a.id} className="flex items-start gap-2">
+                                <input value={a.area} onChange={e => setAreas(g.id, d.id, d.areaDeliverables.map(x => x.id === a.id ? { ...x, area: e.target.value } : x))}
+                                  placeholder="업무 영역" className="w-28 flex-shrink-0 bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] font-semibold outline-none focus:border-violet-400" />
+                                <div className="flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5">
+                                  <AutoTextarea value={a.content} onChange={v => setAreas(g.id, d.id, d.areaDeliverables.map(x => x.id === a.id ? { ...x, content: v } : x))} placeholder="이 영역의 산출물" />
+                                </div>
+                                <button onClick={() => setAreas(g.id, d.id, d.areaDeliverables.filter(x => x.id !== a.id))} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1.5">×</button>
+                              </div>
+                            ))}
+                            <button onClick={() => setAreas(g.id, d.id, [...d.areaDeliverables, { id: uid(), area: '', content: '' }])}
+                              className="w-full py-2 rounded-xl border-2 border-dashed border-neutral-200 text-[13px] text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <AddInline placeholder="새 산출물 이름" onAdd={name => { addDeliv(g.id, name); setOpenGoals(prev => new Set(prev).add(g.id)); }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <AddInline placeholder="새 사업 목표 (예: 1단계 · MVP 출시)" onAdd={addGoal} />
       </div>
-      <p className="text-[12px] text-neutral-400 mb-4">큰 사업 목표를 단계별로 적어두고, 각 목표를 열면 필요한 산출물을 정리할 수 있어요.</p>
-      <NameList
-        items={goals}
-        subOf={id => `산출물 ${goals.find(g => g.id === id)?.deliverables.length ?? 0}개`}
-        onOpen={id => setGoalId(id)}
-        onAdd={addGoal}
-        onRename={renameGoal}
-        onRemove={removeGoal}
-        addPlaceholder="새 사업 목표 (예: 1단계 · MVP 출시)"
-      />
     </section>
   );
 }
