@@ -1681,6 +1681,27 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
   );
 }
 
+// 기존(옛 구조) 데이터를 새 레이아웃으로 매핑 — 데이터 유실 없이 그대로 보여주기 위한 폴백.
+// 새 필드(overview/bizGoals)가 아직 없을 때만 옛 필드에서 끌어온다. 사용자가 새로 편집하면 새 필드로 '흡수'된다.
+function deriveOverview(plan: PlanData): BusinessOverview {
+  return {
+    identity: plan.concept ?? '',
+    tagline: plan.tagline ?? '',
+    problem: (plan.problems ?? []).filter(Boolean).join('\n'),
+    solution: (plan.solutions ?? []).map(s => (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n'),
+    mission: plan.mission ?? '',
+    vision: plan.vision ?? '',
+  };
+}
+function deriveBizGoals(plan: PlanData): BizGoal[] {
+  // 옛 '사업 성장 단계'(growthStages)를 사업 목표로, 그 상세 프로젝트를 산출물로 매핑 (id는 결정적으로 생성해 재렌더 안정)
+  return (plan.growthStages ?? []).map(s => ({
+    id: s.id,
+    name: s.title || s.metric || '사업 목표',
+    deliverables: (s.projects ?? []).filter(Boolean).map((p, i) => ({ id: `${s.id}-d${i}`, name: p, areaDeliverables: [] })),
+  }));
+}
+
 export default function PlanPage() {
   const store = useStore();
   const { toast } = useToast();
@@ -2038,7 +2059,7 @@ export default function PlanPage() {
         {/* 상단: 사업계획서 업로드 또는 사업 개요 직접 작성 */}
         <BusinessDocBox
           doc={plan.planDoc}
-          overview={plan.overview}
+          overview={plan.overview ?? deriveOverview(plan)}
           onSetDoc={d => update({ planDoc: d })}
           onRemoveDoc={() => update({ planDoc: undefined })}
           onChangeOverview={o => update({ overview: o })}
@@ -2046,7 +2067,7 @@ export default function PlanPage() {
 
         {/* 하단: 중첩 사업 목표 (사업목표 > 산출물 > 업무영역별 산출물) */}
         <BizGoalsSection
-          goals={plan.bizGoals ?? []}
+          goals={plan.bizGoals ?? deriveBizGoals(plan)}
           onChange={g => update({ bizGoals: g })}
         />
       </div>
