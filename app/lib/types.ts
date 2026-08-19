@@ -110,15 +110,32 @@ export interface Strategy {
   content: string; // 그 영역의 핵심 전략 방향
 }
 
-// Goal: 특정 기간 안에 도달하려는 '측정 가능한 사업 상태'
+// 성과 기준(Success Criteria) — "어떤 상태가 되면 이 목표를 달성했다고 볼 수 있는가?"
+// 업종 불문: 수치(metric) 또는 완료 조건(completion) 어느 쪽도 가능. 숫자 없는 목표도 정상.
+export type SuccessCriterionType = 'metric' | 'completion';
+export interface SuccessCriterion {
+  id: string;
+  type: SuccessCriterionType;
+  name: string;               // 지표명(월 매출) 또는 완료 조건(매장 공사 완료)
+  currentValue?: number;      // metric: 현재값
+  targetValue?: number;       // metric: 목표값
+  unit?: string;              // metric: 단위 (원, 명, % 등)
+  measurementPeriod?: string; // metric: 측정 주기 (월/주/분기 등)
+  completed?: boolean;        // completion: 완료 여부
+}
+
+// Goal: 특정 기간 안에 도달하려는 '사업 상태'. 성과형/달성형/복합형 모두 가능.
 export interface Goal {
   id: string;
   name: string;              // 목표 이름 (예: "초기 시장 진입")
-  statement?: string;        // 측정가능 목표 문장 (예: "12/31까지 유료 구독자 1,000명 확보")
-  kpi?: string;              // 연결 KPI 이름 (예: "Paid Subscribers")
-  currentValue?: number;     // 현재값
-  targetValue?: number;      // 목표값
-  unit?: string;             // 단위 (명, 원, % 등)
+  statement?: string;        // 목표 문장 (예: "12/31까지 유료 구독자 1,000명 확보")
+  description?: string;      // 상세 설명(선택)
+  successCriteria?: SuccessCriterion[]; // 성과 기준 (metric/completion 혼합, 0개도 허용)
+  // (레거시, 삭제하지 않음) 옛 단일 KPI 필드 — successCriteria로 읽을 때 파생·흡수
+  kpi?: string;
+  currentValue?: number;
+  targetValue?: number;
+  unit?: string;
   startDate?: string;        // 시작일 YYYY-MM-DD
   targetDate?: string;       // 목표일 YYYY-MM-DD
   status?: ProjectStatus;    // 상태 (planned/active/done/onhold)

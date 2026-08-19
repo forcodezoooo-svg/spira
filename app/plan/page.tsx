@@ -3,13 +3,36 @@ import { useState, useEffect, useRef, forwardRef, Fragment } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { ListSkeleton } from '../components/Skeleton';
-import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Deliverable, AreaDeliverable, BusinessOverview, PlanDoc, Goal, Strategy, Project, ProjectStatus } from '../lib/types';
+import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Deliverable, AreaDeliverable, BusinessOverview, PlanDoc, Goal, Strategy, Project, ProjectStatus, SuccessCriterion } from '../lib/types';
 
+// AI가 돌려주는 성과 기준(id 없음)
+type AiCriterion = { type: string; name: string; current?: number; target?: number; unit?: string; measurementPeriod?: string };
 // AI 제안 미리보기(승인 전) — 목표 점검 / Goal 쪼개기 / Project 쪼개기
 type AiPreview =
-  | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; measurableGoal: string; kpi: string; current?: number; target?: number; unit: string; targetDate: string; note: string } }
+  | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; title: string; successCriteria: AiCriterion[]; targetDate: string; note: string } }
   | { kind: 'goal-breakdown'; goalId: string; goalName: string; data: { strategies: { area: string; content: string }[]; projects: { name: string; finalDeliverable: string }[] } }
   | { kind: 'project-breakdown'; goalId: string; projectId: string; projectName: string; data: { finalDeliverable: string; areaDeliverables: { area: string; content: string }[] } };
+
+// 목표의 성과 기준(레거시 kpi 폴백 포함)과 진행률
+function effectiveCriteria(g: Goal): SuccessCriterion[] {
+  if (g.successCriteria && g.successCriteria.length) return g.successCriteria;
+  // 레거시 단일 KPI → metric 성과 기준 1개로 파생 (편집 시 successCriteria로 흡수)
+  if (g.kpi || g.targetValue != null) {
+    return [{ id: `${g.id}-legacy`, type: 'metric', name: g.kpi || g.name, currentValue: g.currentValue, targetValue: g.targetValue, unit: g.unit }];
+  }
+  return [];
+}
+function goalProgressOf(g: Goal): number | null {
+  const cs = effectiveCriteria(g);
+  if (!cs.length) return null;
+  let sum = 0;
+  for (const c of cs) {
+    if (c.type === 'completion') sum += c.completed ? 1 : 0;
+    else if (c.targetValue && c.targetValue > 0) sum += Math.min(1, Math.max(0, (c.currentValue ?? 0) / c.targetValue));
+    // 목표값 없는 metric은 진행률 계산에서 0 취급
+  }
+  return sum / cs.length;
+}
 import TargetCustomerModal, { Avatar } from '../components/TargetCustomerModal';
 import { uid } from '../lib/store';
 import { useChatContext } from '../lib/ChatContext';
@@ -1633,7 +1656,7 @@ function GoalsSection({
     setFn(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const startEdit = (id: string, cur: string) => { setEditId(id); setEditVal(cur); };
   const saveEdit = (fn: (n: string) => void) => { const n = editVal.trim(); if (n) fn(n); setEditId(null); };
-  const goalProgress = (g: Goal): number | null => (g.targetValue && g.targetValue > 0 ? Math.min(1, Math.max(0, (g.currentValue ?? 0) / g.targetValue)) : null);
+  const goalProgress = goalProgressOf; // 성과 기준(metric+completion) 종합 진행률
 
   const Chevron = ({ open }: { open: boolean }) => (
     <svg className={`w-4 h-4 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} style={{ color: '#9AA39D' }} viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -1710,7 +1733,7 @@ function GoalsSection({
                         <div className="w-28 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#EEF1EC' }}>
                           <div className="h-full rounded-full" style={{ width: `${Math.round(prog * 100)}%`, backgroundColor: '#5EA63A' }} />
                         </div>
-                        <span className="text-[11px] font-semibold text-neutral-500 tabular-nums">{fmtNum(g.currentValue ?? 0)}/{fmtNum(g.targetValue)}{g.unit ? ` ${g.unit}` : ''} · {Math.round(prog * 100)}%</span>
+                        <span className="text-[11px] font-semibold text-neutral-500 tabular-nums">{Math.round(prog * 100)}%</span>
                       </div>
                     )}
                     {(g.startDate || g.targetDate) && <span className="text-[11px] text-neutral-400">📅 {dateShort(g.startDate)}{g.startDate || g.targetDate ? '–' : ''}{dateShort(g.targetDate)}</span>}
@@ -1721,18 +1744,46 @@ function GoalsSection({
               {/* 펼침: Goal 상세 + Strategy + Projects */}
               {gOpen && (
                 <div className="px-4 pb-4 pl-9 space-y-4 border-t border-neutral-100 pt-3">
-                  {/* Goal 상세 편집 (KPI·기간·상태) */}
-                  <div className="bg-neutral-50 rounded-xl p-3 space-y-2">
-                    <p className="text-[11px] font-semibold text-neutral-400">목표 상세</p>
-                    <input value={g.statement ?? ''} onChange={e => onUpdateGoal(g.id, { statement: e.target.value })} placeholder="측정 가능한 목표 문장 (예: 12/31까지 유료 구독자 1,000명)" className={`w-full ${inputCls}`} />
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <input value={g.kpi ?? ''} onChange={e => onUpdateGoal(g.id, { kpi: e.target.value })} placeholder="KPI (예: 유료 구독자)" className={`w-40 ${inputCls}`} />
-                      <input type="number" value={g.currentValue ?? ''} onChange={e => onUpdateGoal(g.id, { currentValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="현재값" className={`w-20 ${inputCls}`} />
-                      <span className="text-neutral-300 text-xs">/</span>
-                      <input type="number" value={g.targetValue ?? ''} onChange={e => onUpdateGoal(g.id, { targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표값" className={`w-20 ${inputCls}`} />
-                      <input value={g.unit ?? ''} onChange={e => onUpdateGoal(g.id, { unit: e.target.value })} placeholder="단위" className={`w-16 ${inputCls}`} />
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
+                  {/* Goal 상세 편집 (성과 기준·기간·상태) */}
+                  <div className="bg-neutral-50 rounded-xl p-3 space-y-2.5">
+                    <input value={g.statement ?? ''} onChange={e => onUpdateGoal(g.id, { statement: e.target.value })} placeholder="목표 문장 (예: 12월까지 첫 매장을 오픈한다)" className={`w-full ${inputCls}`} />
+                    {/* 성과 기준 (Success Criteria) */}
+                    {(() => {
+                      const cur = g.successCriteria ?? effectiveCriteria(g);
+                      const setC = (arr: SuccessCriterion[]) => onUpdateGoal(g.id, { successCriteria: arr });
+                      const patch = (id: string, p: Partial<SuccessCriterion>) => setC(cur.map(c => c.id === id ? { ...c, ...p } : c));
+                      const del = (id: string) => setC(cur.filter(c => c.id !== id));
+                      const add = (type: 'metric' | 'completion') => setC([...cur, { id: uid(), type, name: '', ...(type === 'completion' ? { completed: false } : {}) }]);
+                      return (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1"><p className="text-[11px] font-semibold text-neutral-400">성과 기준</p><Hint text="이 목표를 달성했다고 볼 수 있는 조건이에요. 숫자로 재도 되고(측정 지표), 완료 여부로 판단해도 돼요(완료 조건)." /></div>
+                          <div className="space-y-1.5">
+                            {cur.map(c => (
+                              <div key={c.id} className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[9px] font-bold px-1.5 py-1 rounded-full flex-shrink-0" style={{ backgroundColor: c.type === 'metric' ? '#EAF0FB' : '#EAF7DE', color: c.type === 'metric' ? '#4E7CF5' : '#3E7A2E' }}>{c.type === 'metric' ? '측정' : '완료'}</span>
+                                <input value={c.name} onChange={e => patch(c.id, { name: e.target.value })} placeholder={c.type === 'metric' ? '측정 지표 (예: 월 매출)' : '완료 조건 (예: 정식 오픈)'} className={`flex-1 min-w-[120px] ${inputCls}`} />
+                                {c.type === 'metric' ? (
+                                  <>
+                                    <input type="number" value={c.currentValue ?? ''} onChange={e => patch(c.id, { currentValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="현재" className={`w-16 ${inputCls}`} />
+                                    <span className="text-neutral-300 text-xs">/</span>
+                                    <input type="number" value={c.targetValue ?? ''} onChange={e => patch(c.id, { targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`w-16 ${inputCls}`} />
+                                    <input value={c.unit ?? ''} onChange={e => patch(c.id, { unit: e.target.value })} placeholder="단위" className={`w-14 ${inputCls}`} />
+                                  </>
+                                ) : (
+                                  <label className="flex items-center gap-1 text-[12px] text-neutral-500"><input type="checkbox" checked={!!c.completed} onChange={e => patch(c.id, { completed: e.target.checked })} /> 완료</label>
+                                )}
+                                <button onClick={() => del(c.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
+                              </div>
+                            ))}
+                            <div className="flex gap-2">
+                              <button onClick={() => add('metric')} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 측정 지표</button>
+                              <button onClick={() => add('completion')} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 완료 조건</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
                       <label className="text-[11px] text-neutral-400">기간</label>
                       <input type="date" value={g.startDate ?? ''} onChange={e => onUpdateGoal(g.id, { startDate: e.target.value })} className={inputCls} />
                       <span className="text-neutral-300 text-xs">–</span>
@@ -1864,13 +1915,20 @@ function AiPreviewModal({ preview, onApply, onClose }: { preview: AiPreview; onA
                 <ul className="list-disc pl-4 space-y-0.5 text-amber-800">{preview.data.issues.map((it, i) => <li key={i}>{it}</li>)}</ul>
               </div>
             )}
-            <div className="bg-neutral-50 rounded-xl p-3 space-y-1.5">
-              <p><span className="text-neutral-400 text-[11px]">제안 목표</span><br /><b className="text-neutral-900">{preview.data.measurableGoal || '(없음)'}</b></p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-600">
-                {preview.data.kpi && <span>KPI: <b>{preview.data.kpi}</b></span>}
-                {(preview.data.current !== undefined || preview.data.target !== undefined) && <span>{fmtNum(preview.data.current ?? 0)} → {fmtNum(preview.data.target)} {preview.data.unit}</span>}
-                {preview.data.targetDate && <span>기한: {preview.data.targetDate}</span>}
-              </div>
+            <div className="bg-neutral-50 rounded-xl p-3 space-y-2">
+              {preview.data.title && <p><span className="text-neutral-400 text-[11px]">제안 목표</span><br /><b className="text-neutral-900">{preview.data.title}</b></p>}
+              {preview.data.successCriteria.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-bold text-neutral-500 mb-1">성과 기준 (달성 판단 방법)</p>
+                  <div className="space-y-1">{preview.data.successCriteria.map((c, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.type === 'metric' ? '#EAF0FB' : '#EAF7DE', color: c.type === 'metric' ? '#4E7CF5' : '#3E7A2E' }}>{c.type === 'metric' ? '측정' : '완료'}</span>
+                      <span className="text-neutral-800">{c.name}{c.type === 'metric' && c.target !== undefined ? ` — 목표 ${fmtNum(c.target)}${c.unit ? ` ${c.unit}` : ''}${c.measurementPeriod ? ` / ${c.measurementPeriod}` : ''}` : ''}</span>
+                    </div>
+                  ))}</div>
+                </div>
+              )}
+              {preview.data.targetDate && <p className="text-neutral-600 text-[12px]">기한: {preview.data.targetDate}</p>}
               {preview.data.note && <p className="text-[12px] text-neutral-400">{preview.data.note}</p>}
             </div>
           </div>
@@ -2277,7 +2335,7 @@ export default function PlanPage() {
         return;
       }
       const f = (data.fields ?? {}) as Partial<BusinessOverview>;
-      type DocGoal = { name: string; statement?: string; kpi?: string; current?: number; target?: number; unit?: string; targetDate?: string; strategies?: { area: string; content: string }[]; projects?: { name: string; finalDeliverable?: string; areaDeliverables?: { area: string; content: string }[] }[] };
+      type DocGoal = { name: string; statement?: string; targetDate?: string; successCriteria?: AiCriterion[]; strategies?: { area: string; content: string }[]; projects?: { name: string; finalDeliverable?: string; areaDeliverables?: { area: string; content: string }[] }[] };
       const docGoals = (data.goals ?? []) as DocGoal[];
       setPlan(prev => {
         if (!prev) return prev;
@@ -2299,8 +2357,10 @@ export default function PlanPage() {
           docGoals.forEach((g, gi) => {
             const goalId = uid();
             newGoals.push({
-              id: goalId, name: g.name, statement: g.statement ?? '', kpi: g.kpi, currentValue: g.current,
-              targetValue: g.target, unit: g.unit, targetDate: g.targetDate, status: 'active', order: gi,
+              id: goalId, name: g.name, statement: g.statement ?? '', targetDate: g.targetDate, status: 'active', order: gi,
+              successCriteria: (g.successCriteria ?? []).map(c => c.type === 'metric'
+                ? { id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod }
+                : { id: uid(), type: 'completion' as const, name: c.name, completed: false }),
               strategies: (g.strategies ?? []).map(s => ({ id: uid(), area: s.area, content: s.content })),
             });
             (g.projects ?? []).forEach((p, pi) => {
@@ -2391,14 +2451,14 @@ export default function PlanPage() {
     if (!preview) return;
     if (preview.kind === 'goal-review') {
       const d = preview.data;
+      const criteria: SuccessCriterion[] = d.successCriteria.map(c => c.type === 'metric'
+        ? { id: uid(), type: 'metric', name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod }
+        : { id: uid(), type: 'completion', name: c.name, completed: false });
       update({ goals: (plan.goals ?? []).map(g => g.id === preview.goalId ? {
         ...g,
-        statement: d.measurableGoal || g.statement,
-        kpi: d.kpi || g.kpi,
-        currentValue: d.current ?? g.currentValue,
-        targetValue: d.target ?? g.targetValue,
-        unit: d.unit || g.unit,
+        statement: d.title || g.statement,
         targetDate: d.targetDate || g.targetDate,
+        ...(criteria.length ? { successCriteria: criteria } : {}),
       } : g) });
     } else if (preview.kind === 'goal-breakdown') {
       const d = preview.data; const goalId = preview.goalId;

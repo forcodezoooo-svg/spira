@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { NextResponse } from 'next/server';
 import { checkAiAccess } from '../../lib/aiUsage';
+import { SPIRA_PLANNING_CORE } from '../../lib/ai/prompts';
 
 // 사업계획서(PDF·이미지·텍스트) 업로드 → gpt-4o가 직접 읽어 '사업 개요' 6개 항목 요약.
 // PDF/이미지는 파일 입력으로 넘겨 스캔(이미지) PDF도 분석 가능. 지연 초기화로 빌드 안전.
@@ -34,15 +35,16 @@ export async function POST(request: Request) {
   const isImage = type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(name);
   const isText = type.startsWith('text/') || /\.(txt|md)$/.test(name);
 
-  const sys = `너는 사업계획서를 읽고 핵심을 요약하는 어시스턴트야. 주어진 사업계획서(문서/이미지/텍스트)를 바탕으로 아래 JSON을 한국어로 채워서 '오직 JSON만' 출력해. 개요 6개 항목은 각 1~3문장으로 간결하게.
-goals는 이 사업의 '측정 가능한 사업 목표'를 단계 순서대로 2~4개. 각 목표는 다음을 갖는다:
-- name(단계 이름, 예: "초기 시장 진입")
-- statement(측정 가능한 목표 문장 — 기한+수치 포함, 예: "2026-12-31까지 유료 구독자 1,000명 확보")
-- kpi(핵심 지표 이름, 예: "Paid Subscribers"), current(현재값 숫자, 모르면 0), target(목표값 숫자), unit(단위), targetDate("YYYY-MM-DD")
-- strategies: 이 목표와 관련 있는 업무 영역에 대해서만 '방향성' 한 문장씩 (2~4개, 모든 영역 강제 X). [{area, content}]
-- projects: 이 목표를 실현하는 '프로젝트' 2~4개(진행 순서대로). 각 프로젝트는 name, finalDeliverable(끝났을 때 최종 결과물), areaDeliverables([{area, content}], 업무 영역별 결과물 2~4개)를 갖는다.
-산출물/결과물은 '활동'이 아니라 '명사형 결과물'로(예: "시장 분석"(X)→"시장 분석 보고서"(O)). 근거 없으면 빈 값/빈 배열.
-{"tagline":"","concept":"","problem":"","solution":"","mission":"","vision":"","goals":[{"name":"초기 시장 진입","statement":"2026-12-31까지 유료 구독자 1,000명 확보","kpi":"Paid Subscribers","current":0,"target":1000,"unit":"명","targetDate":"2026-12-31","strategies":[{"area":"Product","content":"핵심 가치를 빠르게 경험하도록 Activation 개선"}],"projects":[{"name":"Spira MVP Launch","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 MVP 출시","areaDeliverables":[{"area":"개발","content":"배포 가능한 MVP 소프트웨어"}]}]}]}`;
+  const sys = `${SPIRA_PLANNING_CORE}
+
+# TASK: 사업계획서 분석 → 아래 JSON을 한국어로 채워 '오직 JSON만' 출력. 개요 6개 항목은 각 1~3문장.
+goals는 이 사업의 '사업 목표'를 순서대로 2~4개. 각 목표는:
+- name(목표 이름), statement(목표 문장), targetDate("YYYY-MM-DD", 있으면)
+- successCriteria: 이 목표의 '달성 판단 기준' 2~5개. 숫자로 재는 게 자연스러우면 {"type":"metric","name","target","current","unit","measurementPeriod"}, 완료로 판단하는 게 자연스러우면 {"type":"completion","name"}. 숫자를 억지로 만들지 말 것. (이 사업 업종에 맞게!)
+- strategies: 관련 있는 업무 영역만 [{area, content}] (2~4개, 강제 X)
+- projects: 실행 프로젝트 2~4개. 각 {name, finalDeliverable, areaDeliverables:[{area, content}]}. 결과물은 '활동'이 아니라 '명사형 결과물'.
+근거 없으면 빈 값/빈 배열.
+{"tagline":"","concept":"","problem":"","solution":"","mission":"","vision":"","goals":[{"name":"","statement":"","targetDate":"","successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"},{"type":"completion","name":"정식 오픈"}],"strategies":[{"area":"","content":""}],"projects":[{"name":"","finalDeliverable":"","areaDeliverables":[{"area":"","content":""}]}]}]}`;
 
   // gpt-4o에 넘길 user content 구성
   const userParts: ChatCompletionContentPart[] = [
@@ -86,6 +88,14 @@ goals는 이 사업의 '측정 가능한 사업 목표'를 단계 순서대로 2
     const parseAreas = (v: unknown) => Array.isArray(v)
       ? v.map(a => { const aa = a as Record<string, unknown>; return { area: String(aa.area ?? '').trim(), content: String(aa.content ?? '').trim() }; }).filter(a => a.area || a.content).slice(0, 6)
       : [];
+    const parseCriteria = (v: unknown) => Array.isArray(v)
+      ? v.map(c => {
+          const cc = c as Record<string, unknown>;
+          const type = cc.type === 'metric' ? 'metric' : 'completion';
+          const b = { type, name: String(cc.name ?? '').trim() };
+          return type === 'metric' ? { ...b, current: num(cc.current), target: num(cc.target), unit: String(cc.unit ?? '').trim(), measurementPeriod: String(cc.measurementPeriod ?? '').trim() } : b;
+        }).filter(c => c.name).slice(0, 6)
+      : [];
     const goalsRaw = Array.isArray(parsed.goals) ? parsed.goals : [];
     const goals = goalsRaw.slice(0, 6).map(g => {
       const gg = g as Record<string, unknown>;
@@ -95,11 +105,8 @@ goals는 이 사업의 '측정 가능한 사업 목표'를 단계 순서대로 2
       return {
         name: String(gg.name ?? '').trim(),
         statement: String(gg.statement ?? gg.desc ?? '').trim(),
-        kpi: String(gg.kpi ?? '').trim(),
-        current: num(gg.current),
-        target: num(gg.target),
-        unit: String(gg.unit ?? '').trim(),
         targetDate: String(gg.targetDate ?? '').trim(),
+        successCriteria: parseCriteria(gg.successCriteria),
         strategies: parseAreas(gg.strategies),
         projects,
       };

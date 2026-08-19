@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { checkAiAccess } from '../../lib/aiUsage';
+import { SPIRA_PLANNING_CORE } from '../../lib/ai/prompts';
 
 // 사업 목표 → 산출물, 산출물 → 업무 영역별 산출물로 AI가 쪼개준다.
 // 핵심: '산출물(deliverable)'은 눈에 보이는 결과물/납품물이다. (예: "플레이스토어에 앱 업로드", "랜딩페이지 제작 완료")
@@ -32,21 +33,27 @@ export async function POST(request: Request) {
   let user = '';
   if (mode === 'goal-breakdown') {
     // Goal → 관련 업무 영역 → Strategy(영역별) → 필요한 Projects(+finalDeliverable)
-    sys = `너는 1인 창업가의 사업 전략을 돕는 어시스턴트야. 주어진 'Goal(측정 가능한 사업 목표)'을 달성하기 위한 실행 구조를 제안해라.
-1) strategies: 이 목표와 '관련 있는 업무 영역'에 대해서만, 각 영역이 '어떤 방향으로 움직일지' 한 문장 전략을 제안한다. (모든 영역을 억지로 만들지 말 것) 2~4개.
-2) projects: 이 목표를 실현하기 위해 '일정 기간 수행하고 명확한 완료 결과를 갖는 프로젝트' 2~4개. 각 프로젝트는 name과 finalDeliverable(끝났을 때의 최종 결과물)을 가진다. 진행 순서대로.
+    sys = `${SPIRA_PLANNING_CORE}
+
+# TASK: Goal을 실행 구조로 분해 (제안만)
+주어진 'Goal'을 달성하기 위한 실행 구조를 제안해라. 반드시 이 사업의 실제 업무 영역과 업종에 맞게.
+1) strategies: 이 목표와 '실제로 관련 있는 업무 영역'에 대해서만 방향/접근을 한 문장씩. (모든 영역 강제 X, 관련 낮은 영역 만들지 말 것) 2~4개. area는 제공된 업무 영역 이름을 우선 사용.
+2) projects: 이 목표를 실현하는 '일시적이고 명확한 완료 결과를 갖는 프로젝트' 2~4개(진행 순서대로). 각 project는 name, finalDeliverable(끝났을 때의 최종 결과물). 반복 운영(루틴)은 프로젝트로 만들지 마라.
 ${DELIVERABLE_RULE}
-반드시 '오직 JSON만' 출력: {"strategies":[{"area":"Product","content":"신규 사용자가 핵심 가치를 빠르게 경험하도록 Activation을 개선한다"}],"projects":[{"name":"Spira MVP Launch","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 Spira MVP 출시"}]}`;
-    user = `사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n측정 목표: ${goalDesc}` : ''}\n\n이 Goal 달성을 위한 영역별 전략과 필요한 프로젝트들을 제안해줘.`;
+반드시 '오직 JSON만' 출력(예시는 형식일 뿐 — 실제 업종에 맞게): {"strategies":[{"area":"업무영역","content":"이 영역의 방향"}],"projects":[{"name":"프로젝트 이름","finalDeliverable":"최종 결과물"}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n이 사업의 업종과 업무 영역에 맞게, 관련 영역 전략과 필요한 프로젝트를 제안해줘.`;
   } else if (mode === 'project-breakdown') {
     // Project → Final Deliverable → Area Deliverables
-    sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 'Project'를 완성하기 위한 구조를 제안해라.
+    sys = `${SPIRA_PLANNING_CORE}
+
+# TASK: Project를 결과물로 분해 (제안만)
+주어진 'Project'를 완성하기 위한 구조를 제안해라. 반드시 이 사업의 업종·업무 영역에 맞게.
 1) finalDeliverable: 이 프로젝트가 끝났을 때의 '최종 결과물' 한 문장.
-2) areaDeliverables: 그 최종 결과물을 만들기 위해 각 업무 영역이 내놓을 '결과물' 2~4개.
+2) areaDeliverables: 그 결과물을 만들기 위해 '관련 있는 업무 영역'이 내놓을 결과물 2~4개(관련 없는 영역 강제 X).
 ${DELIVERABLE_RULE}
-범위는 미세 작업이 아니라 넓게(사업 방향성 수준). '활동'이 아닌 '결과물(명사형)'로. Task(세부 할일)는 만들지 마라 — 그건 다른 화면 담당이다.
-반드시 '오직 JSON만' 출력: {"finalDeliverable":"실제 사용자가 가입·사용할 수 있는 Spira MVP","areaDeliverables":[{"area":"기획","content":"사용자 스토리 및 기능 요구사항 문서"},{"area":"개발","content":"배포 가능한 MVP 소프트웨어"}]}`;
-    user = `사업 정보:\n${context}${areaHint}\n\nProject: ${projectName || deliverableName}${goalName ? `\n상위 Goal: ${goalName}` : ''}\n\n이 프로젝트의 최종 결과물과 업무 영역별 산출물을 제안해줘.`;
+범위는 미세 작업이 아니라 넓게(사업 방향성 수준). '활동'이 아닌 '결과물(명사형)'로. Task(세부 할일)는 만들지 마라.
+반드시 '오직 JSON만' 출력(예시는 형식일 뿐): {"finalDeliverable":"최종 결과물","areaDeliverables":[{"area":"업무영역","content":"이 영역의 결과물"}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\nProject: ${projectName || deliverableName}${goalName ? `\n상위 Goal: ${goalName}` : ''}\n\n이 프로젝트의 최종 결과물과 업무 영역별 산출물을 이 업종에 맞게 제안해줘.`;
   } else if (mode === 'deliverables') {
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '사업 목표(단계)'를 이루기 위한 '큰 단위의 산출물(마일스톤/프로젝트)'로 쪼개서 나열해.
 ${DELIVERABLE_RULE}
