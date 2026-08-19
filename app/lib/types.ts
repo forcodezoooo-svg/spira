@@ -42,6 +42,7 @@ export interface WorkArea {
 // (Goals 구조: 프로젝트 > 업무 영역 > 데드라인 > 업무)
 export type ProjectType = 'routine' | 'build'; // 루틴형(반복 운영) / 기획·신규개발형
 export type RoutineCycle = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+export type ProjectStatus = 'planned' | 'active' | 'done' | 'onhold';
 export interface Project {
   id: string;
   name: string;
@@ -54,6 +55,14 @@ export interface Project {
   deadline?: string;   // 프로젝트 전체 데드라인 (YYYY-MM-DD)
   // 멤버십은 데드라인 단위: 각 데드라인(ProgramDeadline)이 projectId로 이 프로젝트에 속함.
   // (프로젝트 = 여러 업무 영역의 데드라인을 묶는 '일의 순서/루틴')
+  // ── Plan(전략) 계층에서 추가되는 필드 (Goals와 공유하는 동일 엔티티) ──
+  goalId?: string;          // 소속 Goal(plan.goals[].id)
+  strategyId?: string;      // 연결된 Strategy(Goal.strategies[].id)
+  startDate?: string;       // 프로젝트 시작일 YYYY-MM-DD
+  endDate?: string;         // 프로젝트 종료일 YYYY-MM-DD (= deadline과 병행; 신규 UI는 endDate 사용)
+  finalDeliverable?: string;// 이 프로젝트가 끝났을 때의 최종 결과물
+  status?: ProjectStatus;   // 진행 상태
+  areaDeliverables?: AreaDeliverable[]; // 업무 영역별 산출물 (Project 하위)
 }
 
 // ── 새 Plan 구조 (Plan 독립) ──────────────────────────────────────────────────
@@ -86,17 +95,44 @@ export interface Deliverable {        // 2단계: 산출물
   name: string;
   areaDeliverables: AreaDeliverable[];
 }
-export interface BizGoal {            // 1단계: 큰 사업 목표
+export interface BizGoal {            // (구) 1단계: 큰 사업 목표 — 마이그레이션 원본으로 보존
   id: string;
   name: string;
   desc?: string;   // 이 단계에 대한 한 줄 설명
   deliverables: Deliverable[];
 }
 
+// ── PM/전략 구조 (Goal > Strategy > Project > Area Deliverable) ──────────────────
+// Strategy: Goal을 달성하기 위해 '어떤 방향으로 움직일지' 업무 영역별로 정의 (선택적)
+export interface Strategy {
+  id: string;
+  area: string;    // 업무 영역 (예: Product, Marketing, Customer, Revenue …)
+  content: string; // 그 영역의 핵심 전략 방향
+}
+
+// Goal: 특정 기간 안에 도달하려는 '측정 가능한 사업 상태'
+export interface Goal {
+  id: string;
+  name: string;              // 목표 이름 (예: "초기 시장 진입")
+  statement?: string;        // 측정가능 목표 문장 (예: "12/31까지 유료 구독자 1,000명 확보")
+  kpi?: string;              // 연결 KPI 이름 (예: "Paid Subscribers")
+  currentValue?: number;     // 현재값
+  targetValue?: number;      // 목표값
+  unit?: string;             // 단위 (명, 원, % 등)
+  startDate?: string;        // 시작일 YYYY-MM-DD
+  targetDate?: string;       // 목표일 YYYY-MM-DD
+  status?: ProjectStatus;    // 상태 (planned/active/done/onhold)
+  order?: number;
+  strategies?: Strategy[];   // 업무 영역별 전략
+  // Project는 Project.goalId로 이 Goal에 연결됨 (plan.projects, Goals와 공유)
+}
+
 export interface PlanData {
   planDoc?: PlanDoc;                // 업로드한 사업계획서
   overview?: BusinessOverview;      // 직접 작성한 사업 개요
-  bizGoals?: BizGoal[];             // 중첩 사업 목표 (사업목표>산출물>업무영역별 산출물)
+  bizGoals?: BizGoal[];             // (구) 중첩 사업 목표 — 마이그레이션 원본으로 보존
+  goals?: Goal[];                   // PM/전략 구조의 Goal 목록 (Project는 plan.projects로 연결)
+  goalsMigrated?: boolean;          // bizGoals→goals 마이그레이션 완료 표시 (재실행/부활 방지)
   brandImages: string[];
   brandingKeywords: string[];
   tagline: string;

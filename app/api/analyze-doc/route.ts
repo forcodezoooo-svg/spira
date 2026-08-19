@@ -35,11 +35,14 @@ export async function POST(request: Request) {
   const isText = type.startsWith('text/') || /\.(txt|md)$/.test(name);
 
   const sys = `너는 사업계획서를 읽고 핵심을 요약하는 어시스턴트야. 주어진 사업계획서(문서/이미지/텍스트)를 바탕으로 아래 JSON을 한국어로 채워서 '오직 JSON만' 출력해. 개요 6개 항목은 각 1~3문장으로 간결하게.
-goals는 이 사업의 '큰 사업 목표'를 단계 순서대로 3~5개. 각 목표는 name(단계 이름, 예: "초기 시장 진입")과 desc를 갖는다.
-desc에는 그 단계에서 달성할 '구체적 수치 목표'를 반드시 포함해라. 초보 창업자도 목표치를 알 수 있게 숫자로. (예: "출시 후 3개월 내 가입 유저 1,000명·월 매출 300만원")
-각 목표의 deliverables는 그 목표를 이루기 위한 '큰 단위의 산출물(마일스톤/프로젝트)' 2~4개다. 잘게 쪼개지 말 것 — 각 산출물은 여러 업무를 포함하는 굵직한 결과물이어야 한다. (예: "초기 제품 프로토타입 완료" 하나 안에 시장분석·브랜딩·웹사이트 구성이 포함됨) 실제 진행 순서대로 나열.
-근거가 없는 항목은 빈 문자열("") 또는 빈 배열([]).
-{"tagline":"사업을 한 문장으로 소개","concept":"브랜드의 핵심 컨셉·방향성·감성","problem":"해결하려는 핵심 문제","solution":"그 문제를 해결하는 솔루션","mission":"우리가 존재하는 이유/목적","vision":"궁극적으로 이루려는 모습","goals":[{"name":"사업 목표(단계) 이름","desc":"이 단계 한 줄 설명","deliverables":["산출물1","산출물2"]}]}`;
+goals는 이 사업의 '측정 가능한 사업 목표'를 단계 순서대로 2~4개. 각 목표는 다음을 갖는다:
+- name(단계 이름, 예: "초기 시장 진입")
+- statement(측정 가능한 목표 문장 — 기한+수치 포함, 예: "2026-12-31까지 유료 구독자 1,000명 확보")
+- kpi(핵심 지표 이름, 예: "Paid Subscribers"), current(현재값 숫자, 모르면 0), target(목표값 숫자), unit(단위), targetDate("YYYY-MM-DD")
+- strategies: 이 목표와 관련 있는 업무 영역에 대해서만 '방향성' 한 문장씩 (2~4개, 모든 영역 강제 X). [{area, content}]
+- projects: 이 목표를 실현하는 '프로젝트' 2~4개(진행 순서대로). 각 프로젝트는 name, finalDeliverable(끝났을 때 최종 결과물), areaDeliverables([{area, content}], 업무 영역별 결과물 2~4개)를 갖는다.
+산출물/결과물은 '활동'이 아니라 '명사형 결과물'로(예: "시장 분석"(X)→"시장 분석 보고서"(O)). 근거 없으면 빈 값/빈 배열.
+{"tagline":"","concept":"","problem":"","solution":"","mission":"","vision":"","goals":[{"name":"초기 시장 진입","statement":"2026-12-31까지 유료 구독자 1,000명 확보","kpi":"Paid Subscribers","current":0,"target":1000,"unit":"명","targetDate":"2026-12-31","strategies":[{"area":"Product","content":"핵심 가치를 빠르게 경험하도록 Activation 개선"}],"projects":[{"name":"Spira MVP Launch","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 MVP 출시","areaDeliverables":[{"area":"개발","content":"배포 가능한 MVP 소프트웨어"}]}]}]}`;
 
   // gpt-4o에 넘길 user content 구성
   const userParts: ChatCompletionContentPart[] = [
@@ -78,14 +81,28 @@ desc에는 그 단계에서 달성할 '구체적 수치 목표'를 반드시 포
       mission: String(parsed.mission ?? ''),
       vision: String(parsed.vision ?? ''),
     };
-    // 사업 목표(goals) 파싱 — 사업목표 > 산출물(이름) 2단계
+    // 사업 목표(goals) 파싱 — Goal(측정가능) > Strategy > Project(+Area Deliverables)
+    const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+    const parseAreas = (v: unknown) => Array.isArray(v)
+      ? v.map(a => { const aa = a as Record<string, unknown>; return { area: String(aa.area ?? '').trim(), content: String(aa.content ?? '').trim() }; }).filter(a => a.area || a.content).slice(0, 6)
+      : [];
     const goalsRaw = Array.isArray(parsed.goals) ? parsed.goals : [];
-    const goals = goalsRaw.slice(0, 8).map(g => {
+    const goals = goalsRaw.slice(0, 6).map(g => {
       const gg = g as Record<string, unknown>;
-      const deliverables = Array.isArray(gg.deliverables)
-        ? gg.deliverables.map(d => String(d).trim()).filter(Boolean).slice(0, 12)
+      const projects = Array.isArray(gg.projects)
+        ? gg.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim(), areaDeliverables: parseAreas(pp.areaDeliverables) }; }).filter(p => p.name).slice(0, 6)
         : [];
-      return { name: String(gg.name ?? '').trim(), desc: String(gg.desc ?? '').trim(), deliverables };
+      return {
+        name: String(gg.name ?? '').trim(),
+        statement: String(gg.statement ?? gg.desc ?? '').trim(),
+        kpi: String(gg.kpi ?? '').trim(),
+        current: num(gg.current),
+        target: num(gg.target),
+        unit: String(gg.unit ?? '').trim(),
+        targetDate: String(gg.targetDate ?? '').trim(),
+        strategies: parseAreas(gg.strategies),
+        projects,
+      };
     }).filter(g => g.name);
     // 전부 비어 있으면 문서에서 아무것도 못 읽은 것 (스캔 품질 등)
     if (!Object.values(fields).some(v => v.trim()) && goals.length === 0) {

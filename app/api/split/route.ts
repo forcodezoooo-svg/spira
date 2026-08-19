@@ -23,13 +23,31 @@ export async function POST(request: Request) {
   const access = await checkAiAccess();
   if ('error' in access) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  let body: { mode?: string; context?: string; goalName?: string; goalDesc?: string; deliverableName?: string } = {};
+  let body: { mode?: string; context?: string; goalName?: string; goalDesc?: string; deliverableName?: string; projectName?: string; areas?: string[] } = {};
   try { body = await request.json(); } catch { /* ignore */ }
-  const { mode, context = '', goalName = '', goalDesc = '', deliverableName = '' } = body;
+  const { mode, context = '', goalName = '', goalDesc = '', deliverableName = '', projectName = '', areas = [] } = body;
+  const areaHint = Array.isArray(areas) && areas.length ? `\n참고: 이 사업의 업무 영역 목록: ${areas.join(', ')} (가능하면 이 중에서 고르되 필요하면 추가 가능)` : '';
 
   let sys = '';
   let user = '';
-  if (mode === 'deliverables') {
+  if (mode === 'goal-breakdown') {
+    // Goal → 관련 업무 영역 → Strategy(영역별) → 필요한 Projects(+finalDeliverable)
+    sys = `너는 1인 창업가의 사업 전략을 돕는 어시스턴트야. 주어진 'Goal(측정 가능한 사업 목표)'을 달성하기 위한 실행 구조를 제안해라.
+1) strategies: 이 목표와 '관련 있는 업무 영역'에 대해서만, 각 영역이 '어떤 방향으로 움직일지' 한 문장 전략을 제안한다. (모든 영역을 억지로 만들지 말 것) 2~4개.
+2) projects: 이 목표를 실현하기 위해 '일정 기간 수행하고 명확한 완료 결과를 갖는 프로젝트' 2~4개. 각 프로젝트는 name과 finalDeliverable(끝났을 때의 최종 결과물)을 가진다. 진행 순서대로.
+${DELIVERABLE_RULE}
+반드시 '오직 JSON만' 출력: {"strategies":[{"area":"Product","content":"신규 사용자가 핵심 가치를 빠르게 경험하도록 Activation을 개선한다"}],"projects":[{"name":"Spira MVP Launch","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 Spira MVP 출시"}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n측정 목표: ${goalDesc}` : ''}\n\n이 Goal 달성을 위한 영역별 전략과 필요한 프로젝트들을 제안해줘.`;
+  } else if (mode === 'project-breakdown') {
+    // Project → Final Deliverable → Area Deliverables
+    sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 'Project'를 완성하기 위한 구조를 제안해라.
+1) finalDeliverable: 이 프로젝트가 끝났을 때의 '최종 결과물' 한 문장.
+2) areaDeliverables: 그 최종 결과물을 만들기 위해 각 업무 영역이 내놓을 '결과물' 2~4개.
+${DELIVERABLE_RULE}
+범위는 미세 작업이 아니라 넓게(사업 방향성 수준). '활동'이 아닌 '결과물(명사형)'로. Task(세부 할일)는 만들지 마라 — 그건 다른 화면 담당이다.
+반드시 '오직 JSON만' 출력: {"finalDeliverable":"실제 사용자가 가입·사용할 수 있는 Spira MVP","areaDeliverables":[{"area":"기획","content":"사용자 스토리 및 기능 요구사항 문서"},{"area":"개발","content":"배포 가능한 MVP 소프트웨어"}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\nProject: ${projectName || deliverableName}${goalName ? `\n상위 Goal: ${goalName}` : ''}\n\n이 프로젝트의 최종 결과물과 업무 영역별 산출물을 제안해줘.`;
+  } else if (mode === 'deliverables') {
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '사업 목표(단계)'를 이루기 위한 '큰 단위의 산출물(마일스톤/프로젝트)'로 쪼개서 나열해.
 ${DELIVERABLE_RULE}
 중요: 잘게 쪼개지 말 것. 각 산출물은 여러 업무를 포함하는 '굵직한 결과물'이어야 한다. (예: "초기 제품 프로토타입 완료" 하나 안에 시장분석·브랜딩·기본 웹사이트 구성 등이 모두 포함된다) 3~5개 정도가 적당하다.
@@ -58,7 +76,18 @@ ${DELIVERABLE_RULE}
       ],
     });
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as Record<string, unknown>;
-    if (mode === 'deliverables') {
+    const parseAreas = (v: unknown) => Array.isArray(v)
+      ? v.map(a => { const aa = a as Record<string, unknown>; return { area: String(aa.area ?? '').trim(), content: String(aa.content ?? '').trim() }; }).filter(a => a.area || a.content).slice(0, 8)
+      : [];
+    if (mode === 'goal-breakdown') {
+      const strategies = parseAreas(parsed.strategies);
+      const projects = Array.isArray(parsed.projects)
+        ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim() }; }).filter(p => p.name).slice(0, 6)
+        : [];
+      return NextResponse.json({ strategies, projects });
+    } else if (mode === 'project-breakdown') {
+      return NextResponse.json({ finalDeliverable: String(parsed.finalDeliverable ?? '').trim(), areaDeliverables: parseAreas(parsed.areaDeliverables) });
+    } else if (mode === 'deliverables') {
       const deliverables = Array.isArray(parsed.deliverables)
         ? parsed.deliverables.map(d => String(d).trim()).filter(Boolean).slice(0, 8)
         : [];
