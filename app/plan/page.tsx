@@ -1767,6 +1767,7 @@ export default function PlanPage() {
   }, [moreOpen]);
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [analyzingDoc, setAnalyzingDoc] = useState(false);
+  const [splittingIds, setSplittingIds] = useState<Set<string>>(new Set());
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string } | null>(null); // 성장 단계 달성 깃발 오버레이
   const chat = useChatContext();
@@ -2095,7 +2096,6 @@ export default function PlanPage() {
   };
 
   // 사업 목표/산출물을 AI로 쪼개기 (산출물=결과물, 성과와 구분)
-  const [splittingIds, setSplittingIds] = useState<Set<string>>(new Set());
   const markSplit = (id: string, on: boolean) => setSplittingIds(prev => { const n = new Set(prev); on ? n.add(id) : n.delete(id); return n; });
   const aiGate = () => {
     if (userPlan.tier !== 'pro' && !isOnboardingActive()) { showUpgrade('autofill'); return false; }
