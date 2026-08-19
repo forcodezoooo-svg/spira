@@ -31,7 +31,18 @@ export async function POST(request: Request) {
 
   let sys = '';
   let user = '';
-  if (mode === 'goal-breakdown') {
+  if (mode === 'goal-suggest') {
+    // Business 맥락 → 구체적·수치 기반 성장 목표(성과 기준 포함) 추천
+    sys = `${SPIRA_PLANNING_CORE}
+
+# TASK: 사업 목표 추천 (제안만)
+이 사업에 맞는 '구체적이고 현실적인 수치 기반 성장 목표' 2~4개를 성장 순서대로 제안해라.
+⚠️ "런칭/성장/성장과 확장/성숙" 같은 막연한 단계 라벨 금지. 각 목표는 한눈에 들어오는 수치+기한을 담아라. 단계마다 숫자가 커지게(예: 3개월 500만원 → 6개월 1,000만원). 이 업종·규모에 현실적인 숫자로.
+숫자로 재기 부적절한 목표(예: 매장 오픈)는 completion 성과 기준으로.
+각 목표: name(수치 포함 권장), statement(목표 문장), successCriteria([{type:'metric',name,target,current,unit,measurementPeriod} 또는 {type:'completion',name}]).
+반드시 '오직 JSON만': {"goals":[{"name":"6개월 내 월 매출 1,000만원","statement":"오픈 6개월 시점 월 매출 1,000만원 달성","successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"}]}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\n이 사업에 맞는 현실적인 수치 기반 성장 목표를 추천해줘.`;
+  } else if (mode === 'goal-breakdown') {
     // Goal → 관련 업무 영역 → Strategy(영역별) → 필요한 Projects(+finalDeliverable)
     sys = `${SPIRA_PLANNING_CORE}
 
@@ -86,7 +97,15 @@ ${DELIVERABLE_RULE}
     const parseAreas = (v: unknown) => Array.isArray(v)
       ? v.map(a => { const aa = a as Record<string, unknown>; return { area: String(aa.area ?? '').trim(), content: String(aa.content ?? '').trim() }; }).filter(a => a.area || a.content).slice(0, 8)
       : [];
-    if (mode === 'goal-breakdown') {
+    const parseCriteria = (v: unknown) => Array.isArray(v)
+      ? v.map(c => { const cc = c as Record<string, unknown>; const type = cc.type === 'metric' ? 'metric' : 'completion'; const b = { type, name: String(cc.name ?? '').trim() }; const nn = (x: unknown) => { const n = Number(x); return Number.isFinite(n) ? n : undefined; }; return type === 'metric' ? { ...b, current: nn(cc.current), target: nn(cc.target), unit: String(cc.unit ?? '').trim(), measurementPeriod: String(cc.measurementPeriod ?? '').trim() } : b; }).filter(c => c.name).slice(0, 6)
+      : [];
+    if (mode === 'goal-suggest') {
+      const goals = Array.isArray(parsed.goals)
+        ? parsed.goals.map(g => { const gg = g as Record<string, unknown>; return { name: String(gg.name ?? '').trim(), statement: String(gg.statement ?? '').trim(), successCriteria: parseCriteria(gg.successCriteria) }; }).filter(g => g.name).slice(0, 5)
+        : [];
+      return NextResponse.json({ goals });
+    } else if (mode === 'goal-breakdown') {
       const strategies = parseAreas(parsed.strategies);
       const projects = Array.isArray(parsed.projects)
         ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim() }; }).filter(p => p.name).slice(0, 6)

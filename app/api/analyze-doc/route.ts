@@ -38,8 +38,8 @@ export async function POST(request: Request) {
   const sys = `${SPIRA_PLANNING_CORE}
 
 # TASK: 사업계획서 분석 → 아래 JSON을 한국어로 채워 '오직 JSON만' 출력. 개요 6개 항목은 각 1~3문장.
-goals는 이 사업의 '사업 목표'를 순서대로 2~4개. 각 목표는:
-- name(목표 이름), statement(목표 문장), targetDate("YYYY-MM-DD", 있으면)
+goals는 이 사업의 '사업 목표'를 성장 순서대로 2~4개. ⚠️ 목표는 반드시 '구체적·현실적 수치 기반 성장 지표'여야 한다. "런칭/성장/성장과 확장/성숙" 같은 막연한 단계 라벨은 금지. 단계마다 수치가 커지도록(예: 3개월 내 월 매출 500만원 → 6개월 내 월 매출 1,000만원 → 1년 내 2호점). 사업 맥락에 맞는 현실적 숫자로.
+- name(목표 이름 — 수치 포함 권장, 예: "6개월 내 월 매출 1,000만원"), statement(목표 문장), targetDate("YYYY-MM-DD", 있으면)
 - successCriteria: 이 목표의 '달성 판단 기준' 2~5개. 숫자로 재는 게 자연스러우면 {"type":"metric","name","target","current","unit","measurementPeriod"}, 완료로 판단하는 게 자연스러우면 {"type":"completion","name"}. 숫자를 억지로 만들지 말 것. (이 사업 업종에 맞게!)
 - strategies: 관련 있는 업무 영역만 [{area, content}] (2~4개, 강제 X)
 - projects: 실행 프로젝트 2~4개. 각 {name, finalDeliverable, areaDeliverables:[{area, content}]}. 결과물은 '활동'이 아니라 '명사형 결과물'.

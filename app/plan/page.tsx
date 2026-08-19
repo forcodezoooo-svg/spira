@@ -8,7 +8,9 @@ import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Del
 // AI가 돌려주는 성과 기준(id 없음)
 type AiCriterion = { type: string; name: string; current?: number; target?: number; unit?: string; measurementPeriod?: string };
 // AI 제안 미리보기(승인 전) — 목표 점검 / Goal 쪼개기 / Project 쪼개기
+type AiSuggestedGoal = { name: string; statement: string; successCriteria: AiCriterion[] };
 type AiPreview =
+  | { kind: 'goals-suggest'; data: { goals: AiSuggestedGoal[] } }
   | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; title: string; successCriteria: AiCriterion[]; targetDate: string; note: string } }
   | { kind: 'goal-breakdown'; goalId: string; goalName: string; data: { strategies: { area: string; content: string }[]; projects: { name: string; finalDeliverable: string }[] } }
   | { kind: 'project-breakdown'; goalId: string; projectId: string; projectName: string; data: { finalDeliverable: string; areaDeliverables: { area: string; content: string }[] } };
@@ -1630,7 +1632,7 @@ function GoalsSection({
   goals, projectsOfGoal, workAreas,
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
-  onReviewGoal, onBreakdownGoal, onBreakdownProject,
+  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals,
   aiBusyId, aiEnabled,
 }: {
   goals: Goal[];
@@ -1645,6 +1647,7 @@ function GoalsSection({
   onReviewGoal: (goalId: string) => void;
   onBreakdownGoal: (goalId: string) => void;
   onBreakdownProject: (goalId: string, projectId: string) => void;
+  onSuggestGoals?: () => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -1696,8 +1699,20 @@ function GoalsSection({
   return (
     <section>
       <datalist id="spira-areas">{workAreas.map(a => <option key={a} value={a} />)}</datalist>
-      <h2 className="text-[17px] font-black text-neutral-900 mb-1">사업 목표</h2>
-      <p className="text-[12px] text-neutral-400 mb-4">측정 가능한 목표(Goal)를 세우고, 방향(전략)과 실행(프로젝트)으로 펼쳐보세요. AI 목표 점검·쪼개기는 제안만 하고, 승인해야 반영돼요.</p>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h2 className="text-[17px] font-black text-neutral-900">사업 목표</h2>
+        {aiEnabled && onSuggestGoals && (
+          <button onClick={onSuggestGoals} disabled={!!aiBusyId}
+            className="flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50"
+            style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+            {aiBusyId === '__goals__'
+              ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+            AI로 목표 추천
+          </button>
+        )}
+      </div>
+      <p className="text-[12px] text-neutral-400 mb-4">현실적인 수치 기반 목표를 세우고, 방향(전략)과 실행(프로젝트)으로 펼쳐보세요. AI 추천·점검·쪼개기는 제안만 하고, 승인해야 반영돼요.</p>
       <div className="space-y-2.5">
         {goals.map(g => {
           const gOpen = openGoals.has(g.id);
@@ -1897,7 +1912,7 @@ function GoalsSection({
 
 // AI 제안 미리보기(승인 전) 모달 — 적용 눌러야 반영
 function AiPreviewModal({ preview, onApply, onClose }: { preview: AiPreview; onApply: () => void; onClose: () => void }) {
-  const title = preview.kind === 'goal-review' ? 'AI 목표 점검' : preview.kind === 'goal-breakdown' ? 'AI 제안 · 전략과 프로젝트' : 'AI 제안 · 최종 결과물과 산출물';
+  const title = preview.kind === 'goals-suggest' ? 'AI 목표 추천' : preview.kind === 'goal-review' ? 'AI 목표 점검' : preview.kind === 'goal-breakdown' ? 'AI 제안 · 전략과 프로젝트' : 'AI 제안 · 최종 결과물과 산출물';
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,41,41,0.45)' }} onClick={onClose}>
       <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
@@ -1906,6 +1921,27 @@ function AiPreviewModal({ preview, onApply, onClose }: { preview: AiPreview; onA
           <h3 className="text-[15px] font-black text-neutral-900">{title}</h3>
         </div>
         <p className="text-[12px] text-neutral-400 mb-4">AI 제안이에요. 확인하고 <b className="text-neutral-600">적용</b>을 눌러야 반영돼요.</p>
+
+        {preview.kind === 'goals-suggest' && (
+          <div className="space-y-2 text-[13px]">
+            {preview.data.goals.map((g, i) => (
+              <div key={i} className="bg-neutral-50 rounded-xl px-3 py-2.5">
+                <b className="text-neutral-900">{g.name}</b>
+                {g.statement && g.statement !== g.name && <p className="text-neutral-500 text-[12px] mt-0.5">{g.statement}</p>}
+                {g.successCriteria.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {g.successCriteria.map((c, j) => (
+                      <span key={j} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: c.type === 'metric' ? '#EAF0FB' : '#EAF7DE', color: c.type === 'metric' ? '#4E7CF5' : '#3E7A2E' }}>
+                        {c.name}{c.type === 'metric' && c.target !== undefined ? ` ${fmtNum(c.target)}${c.unit ?? ''}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            <p className="text-[11px] text-neutral-400">적용하면 기존 목표는 그대로 두고 위 목표들이 <b>추가</b>돼요.</p>
+          </div>
+        )}
 
         {preview.kind === 'goal-review' && (
           <div className="space-y-3 text-[13px]">
@@ -2400,7 +2436,20 @@ export default function PlanPage() {
   const updateProject = (id: string, patch: Partial<Project>) => update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
   const removeProject = (id: string) => update({ projects: (plan.projects ?? []).filter(p => p.id !== id) });
 
-  // ── AI: 목표 점검 / 쪼개기 → 모두 Preview(setPreview) 후 사용자 승인(applyPreview) ──
+  // ── AI: 목표 추천 / 점검 / 쪼개기 → 모두 Preview(setPreview) 후 사용자 승인(applyPreview) ──
+  const suggestGoals = async () => {
+    if (!aiGate()) return;
+    setAiBusyId('__goals__');
+    try {
+      const areas = (plan.workAreas ?? []).map(a => a.name);
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context: buildContext(), areas }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { toast('목표 추천에 실패했어요. 잠시 후 다시 시도해 주세요.', 'error'); return; }
+      if (!(data.goals?.length)) { toast('추천할 목표를 찾지 못했어요.', 'info'); return; }
+      setPreview({ kind: 'goals-suggest', data });
+    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
+    finally { setAiBusyId(null); }
+  };
   const reviewGoal = async (goalId: string) => {
     if (!aiGate()) return;
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
@@ -2449,7 +2498,16 @@ export default function PlanPage() {
   // 미리보기 승인 → 실제 반영 (AI는 승인 전까지 아무것도 바꾸지 않음)
   const applyPreview = () => {
     if (!preview) return;
-    if (preview.kind === 'goal-review') {
+    if (preview.kind === 'goals-suggest') {
+      const base = plan.goals ?? [];
+      const newGoals: Goal[] = preview.data.goals.map((g, i) => ({
+        id: uid(), name: g.name, statement: g.statement, status: 'active', order: base.length + i, strategies: [],
+        successCriteria: g.successCriteria.map(c => c.type === 'metric'
+          ? { id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod }
+          : { id: uid(), type: 'completion' as const, name: c.name, completed: false }),
+      }));
+      update({ goals: [...base, ...newGoals] });
+    } else if (preview.kind === 'goal-review') {
       const d = preview.data;
       const criteria: SuccessCriterion[] = d.successCriteria.map(c => c.type === 'metric'
         ? { id: uid(), type: 'metric', name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod }
@@ -2469,7 +2527,7 @@ export default function PlanPage() {
         goals: (plan.goals ?? []).map(g => g.id === goalId ? { ...g, strategies: [...(g.strategies ?? []), ...newStrategies] } : g),
         projects: [...(plan.projects ?? []), ...newProjects],
       });
-    } else {
+    } else if (preview.kind === 'project-breakdown') {
       const d = preview.data;
       update({ projects: (plan.projects ?? []).map(p => p.id === preview.projectId ? {
         ...p,
@@ -2604,6 +2662,7 @@ export default function PlanPage() {
           onReviewGoal={reviewGoal}
           onBreakdownGoal={breakdownGoal}
           onBreakdownProject={breakdownProject}
+          onSuggestGoals={suggestGoals}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
         />
