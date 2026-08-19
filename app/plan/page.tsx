@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, forwardRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, Fragment } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { ListSkeleton } from '../components/Skeleton';
@@ -1670,16 +1670,17 @@ function BizGoalsSection({ goals, onChange, onSplitGoal, onSplitDeliverable, spl
                     </>
                   )}
                 </div>
-                <input value={g.desc ?? ''} onChange={e => setGoalDesc(g.id, e.target.value)} placeholder="한 줄 설명 (이 단계가 무엇인지)"
+                <input value={g.desc ?? ''} onChange={e => setGoalDesc(g.id, e.target.value)} placeholder="한 줄 설명 · 수치 목표 (예: 3개월 내 가입 유저 1,000명)"
                   className="mt-1.5 ml-6 w-[calc(100%-1.5rem)] text-[12px] text-neutral-500 bg-transparent outline-none placeholder-neutral-300" />
               </div>
-              {/* 산출물 목록 */}
+              {/* 산출물 목록 (진행 순서 → 박스 사이 화살표로 연결) */}
               {gOpen && (
                 <div className="px-4 pb-3 pl-9 space-y-2 border-t border-neutral-100 pt-3">
-                  {g.deliverables.map(d => {
+                  {g.deliverables.map((d, di) => {
                     const dOpen = openDelivs.has(d.id);
                     return (
-                      <div key={d.id} className="border border-neutral-200 rounded-xl bg-neutral-50">
+                    <Fragment key={d.id}>
+                      <div className="border border-neutral-200 rounded-xl bg-neutral-50">
                         <div className="flex items-center gap-2 px-3 py-2">
                           <button onClick={() => toggle(setOpenDelivs, d.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                             <Chevron open={dOpen} />
@@ -1716,6 +1717,12 @@ function BizGoalsSection({ goals, onChange, onSplitGoal, onSplitDeliverable, spl
                           </div>
                         )}
                       </div>
+                      {di < g.deliverables.length - 1 && (
+                        <div className="flex justify-center py-0.5">
+                          <svg className="w-4 h-4" style={{ color: '#C4CCC4' }} viewBox="0 0 16 16" fill="none"><path d="M8 3v9M4.5 8.5L8 12l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </div>
+                      )}
+                    </Fragment>
                     );
                   })}
                   <AddInline placeholder="새 산출물 이름 (예: 플레이스토어에 앱 업로드)" onAdd={name => { addDeliv(g.id, name); setOpenGoals(prev => new Set(prev).add(g.id)); }} />
