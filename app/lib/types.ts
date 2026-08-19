@@ -89,6 +89,7 @@ export interface Deliverable {        // 2단계: 산출물
 export interface BizGoal {            // 1단계: 큰 사업 목표
   id: string;
   name: string;
+  desc?: string;   // 이 단계에 대한 한 줄 설명
   deliverables: Deliverable[];
 }
 

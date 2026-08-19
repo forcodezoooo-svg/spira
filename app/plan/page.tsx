@@ -1247,8 +1247,8 @@ async function renderPdfThumb(dataUrl: string, maxW = 260): Promise<string | nul
   if (typeof document === 'undefined') return null;
   try {
     const pdfjs = await import('pdfjs-dist');
-    // ESM 워커 번들 경로 지정
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+    // public/ 에 복사해 둔 ESM 워커를 절대경로로 로드 (번들러 의존 없이 확실히 로드)
+    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
     const b64 = dataUrl.split(',')[1] ?? '';
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
@@ -1586,7 +1586,14 @@ function AddInline({ placeholder, onAdd }: { placeholder: string; onAdd: (name: 
 }
 
 // ── 중첩 사업 목표: 사업목표(1) > 산출물(2) > 업무영역별 산출물(3) — 접이식(아코디언) ──────
-function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: BizGoal[]) => void }) {
+function BizGoalsSection({ goals, onChange, onSplitGoal, onSplitDeliverable, splittingIds, aiEnabled }: {
+  goals: BizGoal[];
+  onChange: (g: BizGoal[]) => void;
+  onSplitGoal?: (goalId: string) => void;
+  onSplitDeliverable?: (goalId: string, delivId: string) => void;
+  splittingIds?: Set<string>;
+  aiEnabled?: boolean;
+}) {
   const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
   const [openDelivs, setOpenDelivs] = useState<Set<string>>(new Set());
   const [editId, setEditId] = useState<string | null>(null);
@@ -1597,6 +1604,7 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
   // 1단계
   const addGoal = (name: string) => onChange([...goals, { id: uid(), name, deliverables: [] }]);
   const renameGoal = (id: string, name: string) => onChange(goals.map(g => g.id === id ? { ...g, name } : g));
+  const setGoalDesc = (id: string, desc: string) => onChange(goals.map(g => g.id === id ? { ...g, desc } : g));
   const removeGoal = (id: string) => onChange(goals.filter(g => g.id !== id));
   // 2단계
   const mapGoal = (gid: string, fn: (g: BizGoal) => BizGoal) => onChange(goals.map(g => g.id === gid ? fn(g) : g));
@@ -1618,33 +1626,52 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
       onBlur={() => saveEdit(onSave)} onClick={e => e.stopPropagation()}
       className="flex-1 bg-neutral-50 border border-violet-300 rounded-lg px-2 py-1 text-sm outline-none" />
   );
+  // AI 쪼개기 버튼 (busy면 스피너)
+  const SplitBtn = ({ id, onClick, label }: { id: string; onClick: () => void; label: string }) => {
+    const busy = !!splittingIds?.has(id);
+    return (
+      <button onClick={onClick} disabled={busy} title={label}
+        className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0 disabled:opacity-60"
+        style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+        {busy
+          ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+          : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+        AI 쪼개기
+      </button>
+    );
+  };
 
   return (
     <section>
       <h2 className="text-[17px] font-black text-neutral-900 mb-1">사업 목표</h2>
-      <p className="text-[12px] text-neutral-400 mb-4">큰 사업 목표를 단계별로 적어두고, 화살표를 눌러 필요한 산출물과 업무 영역별 산출물을 펼쳐서 정리하세요.</p>
+      <p className="text-[12px] text-neutral-400 mb-4">큰 사업 목표를 단계별로 적고, 'AI 쪼개기'로 필요한 산출물(결과물)과 업무 영역별 산출물까지 자동으로 나눠보세요.</p>
       <div className="space-y-2">
         {goals.map(g => {
           const gOpen = openGoals.has(g.id);
           return (
             <div key={g.id} className="border border-neutral-200 rounded-2xl bg-white">
-              {/* 사업 목표 헤더 */}
-              <div className="flex items-center gap-2 px-4 py-3">
-                <button onClick={() => toggle(setOpenGoals, g.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                  <Chevron open={gOpen} />
-                  {editId === g.id ? nameInput(n => renameGoal(g.id, n)) : (
+              {/* 사업 목표 헤더 + 한 줄 설명 */}
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => toggle(setOpenGoals, g.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                    <Chevron open={gOpen} />
+                    {editId === g.id ? nameInput(n => renameGoal(g.id, n)) : (
+                      <>
+                        <span className="text-sm font-bold text-neutral-900 truncate">{g.name}</span>
+                        <span className="text-[11px] text-neutral-400 flex-shrink-0">산출물 {g.deliverables.length}개</span>
+                      </>
+                    )}
+                  </button>
+                  {editId !== g.id && (
                     <>
-                      <span className="text-sm font-bold text-neutral-900 truncate">{g.name}</span>
-                      <span className="text-[11px] text-neutral-400 flex-shrink-0">산출물 {g.deliverables.length}개</span>
+                      {aiEnabled && onSplitGoal && <SplitBtn id={g.id} label="AI가 산출물로 쪼개기" onClick={() => { onSplitGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
+                      <button onClick={() => startEdit(g.id, g.name)} className="text-neutral-300 hover:text-neutral-700 text-xs transition-colors flex-shrink-0">이름 수정</button>
+                      <button onClick={() => removeGoal(g.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
                     </>
                   )}
-                </button>
-                {editId !== g.id && (
-                  <>
-                    <button onClick={() => startEdit(g.id, g.name)} className="text-neutral-300 hover:text-neutral-700 text-xs transition-colors flex-shrink-0">이름 수정</button>
-                    <button onClick={() => removeGoal(g.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
-                  </>
-                )}
+                </div>
+                <input value={g.desc ?? ''} onChange={e => setGoalDesc(g.id, e.target.value)} placeholder="한 줄 설명 (이 단계가 무엇인지)"
+                  className="mt-1.5 ml-6 w-[calc(100%-1.5rem)] text-[12px] text-neutral-500 bg-transparent outline-none placeholder-neutral-300" />
               </div>
               {/* 산출물 목록 */}
               {gOpen && (
@@ -1665,6 +1692,7 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
                           </button>
                           {editId !== d.id && (
                             <>
+                              {aiEnabled && onSplitDeliverable && <SplitBtn id={d.id} label="AI가 업무 영역별 산출물로 쪼개기" onClick={() => { onSplitDeliverable(g.id, d.id); setOpenDelivs(prev => new Set(prev).add(d.id)); }} />}
                               <button onClick={() => startEdit(d.id, d.name)} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
                               <button onClick={() => removeDeliv(g.id, d.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
                             </>
@@ -1690,7 +1718,7 @@ function BizGoalsSection({ goals, onChange }: { goals: BizGoal[]; onChange: (g: 
                       </div>
                     );
                   })}
-                  <AddInline placeholder="새 산출물 이름" onAdd={name => { addDeliv(g.id, name); setOpenGoals(prev => new Set(prev).add(g.id)); }} />
+                  <AddInline placeholder="새 산출물 이름 (예: 플레이스토어에 앱 업로드)" onAdd={name => { addDeliv(g.id, name); setOpenGoals(prev => new Set(prev).add(g.id)); }} />
                 </div>
               )}
             </div>
@@ -1719,6 +1747,7 @@ function deriveBizGoals(plan: PlanData): BizGoal[] {
   return (plan.growthStages ?? []).map(s => ({
     id: s.id,
     name: s.title || s.metric || '사업 목표',
+    desc: s.metric || s.direction || '',
     deliverables: (s.projects ?? []).filter(Boolean).map((p, i) => ({ id: `${s.id}-d${i}`, name: p, areaDeliverables: [] })),
   }));
 }
@@ -2026,7 +2055,7 @@ export default function PlanPage() {
         return;
       }
       const f = (data.fields ?? {}) as Partial<BusinessOverview>;
-      const docGoals = (data.goals ?? []) as { name: string; deliverables: string[] }[];
+      const docGoals = (data.goals ?? []) as { name: string; desc?: string; deliverables: string[] }[];
       setPlan(prev => {
         if (!prev) return prev;
         const base = prev.overview ?? deriveOverview(prev);
@@ -2048,6 +2077,7 @@ export default function PlanPage() {
             bizGoals: docGoals.map(g => ({
               id: uid(),
               name: g.name,
+              desc: g.desc ?? '',
               deliverables: (g.deliverables ?? []).map(d => ({ id: uid(), name: d, areaDeliverables: [] })),
             })),
           };
@@ -2062,6 +2092,63 @@ export default function PlanPage() {
     } finally {
       setAnalyzingDoc(false);
     }
+  };
+
+  // 사업 목표/산출물을 AI로 쪼개기 (산출물=결과물, 성과와 구분)
+  const [splittingIds, setSplittingIds] = useState<Set<string>>(new Set());
+  const markSplit = (id: string, on: boolean) => setSplittingIds(prev => { const n = new Set(prev); on ? n.add(id) : n.delete(id); return n; });
+  const aiGate = () => {
+    if (userPlan.tier !== 'pro' && !isOnboardingActive()) { showUpgrade('autofill'); return false; }
+    return true;
+  };
+  const persistBizGoals = (mapper: (goals: BizGoal[]) => BizGoal[]) => setPlan(prev => {
+    if (!prev) return prev;
+    const base = prev.bizGoals ?? deriveBizGoals(prev);
+    const next = { ...prev, bizGoals: mapper(base) };
+    const wsId = selectedWsIdRef.current;
+    if (wsId) store.updatePlanInWs(wsId, next);
+    return next;
+  });
+  const splitGoal = async (goalId: string) => {
+    if (!aiGate()) return;
+    const goals = plan.bizGoals ?? deriveBizGoals(plan);
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    markSplit(goalId, true);
+    try {
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'deliverables', context: buildContext(), goalName: goal.name, goalDesc: goal.desc ?? '' }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { toast('AI가 산출물을 나누지 못했어요. 잠시 후 다시 시도해 주세요.', 'error'); return; }
+      const names = (data.deliverables ?? []) as string[];
+      if (!names.length) { toast('나눌 산출물을 찾지 못했어요.', 'info'); return; }
+      persistBizGoals(gs => gs.map(g => g.id === goalId
+        ? { ...g, deliverables: [...g.deliverables, ...names.map(n => ({ id: uid(), name: n, areaDeliverables: [] }))] }
+        : g));
+      toast(`산출물 ${names.length}개로 나눴어요. 🌿`, 'success');
+    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
+    finally { markSplit(goalId, false); }
+  };
+  const splitDeliverable = async (goalId: string, delivId: string) => {
+    if (!aiGate()) return;
+    const goals = plan.bizGoals ?? deriveBizGoals(plan);
+    const goal = goals.find(g => g.id === goalId);
+    const deliv = goal?.deliverables.find(d => d.id === delivId);
+    if (!goal || !deliv) return;
+    markSplit(delivId, true);
+    try {
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'areas', context: buildContext(), goalName: goal.name, deliverableName: deliv.name }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { toast('AI가 업무 영역별 산출물을 나누지 못했어요.', 'error'); return; }
+      const areas = (data.areaDeliverables ?? []) as { area: string; content: string }[];
+      if (!areas.length) { toast('나눌 업무 영역별 산출물을 찾지 못했어요.', 'info'); return; }
+      persistBizGoals(gs => gs.map(g => g.id === goalId
+        ? { ...g, deliverables: g.deliverables.map(d => d.id === delivId
+            ? { ...d, areaDeliverables: [...d.areaDeliverables, ...areas.map(a => ({ id: uid(), area: a.area, content: a.content }))] }
+            : d) }
+        : g));
+      toast(`업무 영역별 산출물 ${areas.length}개로 나눴어요. 🌿`, 'success');
+    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
+    finally { markSplit(delivId, false); }
   };
 
   // 기획서 전체 일괄 채우기 (모든 필드)
@@ -2177,6 +2264,10 @@ export default function PlanPage() {
         <BizGoalsSection
           goals={plan.bizGoals ?? deriveBizGoals(plan)}
           onChange={g => update({ bizGoals: g })}
+          onSplitGoal={splitGoal}
+          onSplitDeliverable={splitDeliverable}
+          splittingIds={splittingIds}
+          aiEnabled={!!chat && !chat.loading}
         />
       </div>
 

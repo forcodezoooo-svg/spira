@@ -34,8 +34,11 @@ export async function POST(request: Request) {
   const isImage = type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(name);
   const isText = type.startsWith('text/') || /\.(txt|md)$/.test(name);
 
-  const sys = `너는 사업계획서를 읽고 핵심을 요약하는 어시스턴트야. 주어진 사업계획서(문서/이미지/텍스트)를 바탕으로 아래 JSON을 한국어로 채워서 '오직 JSON만' 출력해. 개요 6개 항목은 각 1~3문장으로 간결하게. goals는 이 사업의 '큰 사업 목표'를 단계 순서대로 3~5개, 각 목표마다 그 목표를 이루기 위한 구체적 산출물(deliverable) 이름을 2~5개 나열해. 근거가 없는 항목은 빈 문자열("") 또는 빈 배열([]).
-{"tagline":"사업을 한 문장으로 소개","concept":"브랜드의 핵심 컨셉·방향성·감성","problem":"해결하려는 핵심 문제","solution":"그 문제를 해결하는 솔루션","mission":"우리가 존재하는 이유/목적","vision":"궁극적으로 이루려는 모습","goals":[{"name":"사업 목표(단계) 이름","deliverables":["산출물1","산출물2"]}]}`;
+  const sys = `너는 사업계획서를 읽고 핵심을 요약하는 어시스턴트야. 주어진 사업계획서(문서/이미지/텍스트)를 바탕으로 아래 JSON을 한국어로 채워서 '오직 JSON만' 출력해. 개요 6개 항목은 각 1~3문장으로 간결하게.
+goals는 이 사업의 '큰 사업 목표'를 단계 순서대로 3~5개. 각 목표는 name(단계 이름)과 desc(그 단계가 무엇인지·무엇을 이루는지 한 줄 설명)를 갖는다.
+각 목표의 deliverables는 그 목표를 이루기 위해 '실제로 만들어져 눈에 보이는 결과물(산출물)' 이름 2~5개다. (예: "플레이스토어에 앱 업로드", "랜딩페이지 제작 완료") '사용자 1만 달성' 같은 성과·지표는 산출물이 아니라 desc에 넣어라.
+근거가 없는 항목은 빈 문자열("") 또는 빈 배열([]).
+{"tagline":"사업을 한 문장으로 소개","concept":"브랜드의 핵심 컨셉·방향성·감성","problem":"해결하려는 핵심 문제","solution":"그 문제를 해결하는 솔루션","mission":"우리가 존재하는 이유/목적","vision":"궁극적으로 이루려는 모습","goals":[{"name":"사업 목표(단계) 이름","desc":"이 단계 한 줄 설명","deliverables":["산출물1","산출물2"]}]}`;
 
   // gpt-4o에 넘길 user content 구성
   const userParts: ChatCompletionContentPart[] = [
@@ -81,7 +84,7 @@ export async function POST(request: Request) {
       const deliverables = Array.isArray(gg.deliverables)
         ? gg.deliverables.map(d => String(d).trim()).filter(Boolean).slice(0, 12)
         : [];
-      return { name: String(gg.name ?? '').trim(), deliverables };
+      return { name: String(gg.name ?? '').trim(), desc: String(gg.desc ?? '').trim(), deliverables };
     }).filter(g => g.name);
     // 전부 비어 있으면 문서에서 아무것도 못 읽은 것 (스캔 품질 등)
     if (!Object.values(fields).some(v => v.trim()) && goals.length === 0) {
