@@ -1783,7 +1783,7 @@ function GoalsSection({
   goals, projectsOfGoal, workAreas,
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
-  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals,
+  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal,
   aiBusyId, aiEnabled,
 }: {
   goals: Goal[];
@@ -1799,6 +1799,7 @@ function GoalsSection({
   onBreakdownGoal: (goalId: string) => void;
   onBreakdownProject: (goalId: string, projectId: string) => void;
   onSuggestGoals?: () => void;
+  onImportGoal?: (goalId: string) => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -1899,6 +1900,13 @@ function GoalsSection({
                         <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
                       </select>
                       {aiEnabled && <AiBtn id={g.id} icon="split" label="프로젝트 생성" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
+                      {onImportGoal && projects.length > 0 && (
+                        <button onClick={() => onImportGoal(g.id)} title="이 목표·프로젝트·산출물을 Goals 로드맵으로 가져가 날짜대로 배치"
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 13h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          Goals로 가져가기
+                        </button>
+                      )}
                       <button onClick={() => startEdit(g.id, g.name)} className="text-neutral-300 hover:text-neutral-700 text-xs transition-colors flex-shrink-0">이름 수정</button>
                       <button onClick={() => onRemoveGoal(g.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
                     </>
@@ -2635,6 +2643,48 @@ export default function PlanPage() {
   });
   const projectsOfGoal = (goalId: string) => (plan.projects ?? []).filter(p => p.goalId === goalId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const addProjectToGoal = (goalId: string, name: string) => update({ projects: [...(plan.projects ?? []), { id: uid(), name, goalId, order: (plan.projects ?? []).filter(p => p.goalId === goalId).length, status: 'planned', areaDeliverables: [] }] });
+
+  // Plan 목표 → Goals 로드맵: 목표의 프로젝트를 데드라인으로, 영역별 산출물을 할일로 만들어 날짜대로 배치
+  const importGoalToGoals = (goalId: string) => {
+    if (!selectedWsId) return;
+    const goal = (plan.goals ?? []).find(g => g.id === goalId);
+    const projects = projectsOfGoal(goalId);
+    if (!goal || !projects.length) { toast('가져올 프로젝트가 없어요. 먼저 프로젝트를 만들어 주세요.', 'info'); return; }
+
+    const projIds = new Set(projects.map(p => p.id));
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    const dupPrograms = (ws?.programs ?? []).filter(pg => (pg.deadlines ?? []).some(dl => dl.projectId && projIds.has(dl.projectId)));
+    if (dupPrograms.length) {
+      if (!window.confirm('이미 Goals로 가져온 목표예요. 기존 것을 지우고 다시 가져올까요?')) return;
+      dupPrograms.forEach(pg => store.deleteProgramInWs(selectedWsId, pg.id));
+    }
+
+    const deadlines = projects.map(p => {
+      const start = p.startDate || '';
+      const end = p.endDate || p.deadline || goal.targetDate || start || '';
+      const todos = (p.areaDeliverables ?? []).map(a => ({
+        id: uid(),
+        name: a.area ? `${a.area}: ${a.content}` : a.content,
+        done: !!a.done,
+        ...(start ? { date: start } : end ? { date: end } : {}),
+        ...(end ? { deadline: end } : {}),
+      }));
+      return { id: uid(), name: p.name, date: end, startDate: start || undefined, todos, enabled: true, projectId: p.id };
+    });
+
+    const allDates = deadlines.flatMap(d => [d.startDate, d.date]).filter(Boolean) as string[];
+    const anchorDate = allDates.length ? new Date(allDates.sort()[0]) : new Date();
+    store.addProgramToWs(selectedWsId, {
+      name: goal.name,
+      goal: goal.statement || goal.name,
+      color: BUSINESS_COLORS[0],
+      deadlines,
+      year: anchorDate.getFullYear(),
+      quarter: Math.floor(anchorDate.getMonth() / 3) + 1,
+      order: (ws?.programs ?? []).length,
+    });
+    toast(`‘${goal.name}’을(를) Goals 로드맵으로 가져왔어요. 🌿`, 'success');
+  };
   const updateProject = (id: string, patch: Partial<Project>) => update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
   const removeProject = (id: string) => update({ projects: (plan.projects ?? []).filter(p => p.id !== id) });
 
@@ -2873,6 +2923,7 @@ export default function PlanPage() {
           onBreakdownGoal={breakdownGoal}
           onBreakdownProject={breakdownProject}
           onSuggestGoals={suggestGoals}
+          onImportGoal={importGoalToGoals}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
         />
