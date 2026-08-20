@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
 반드시 '오직 JSON만' 출력:
 {"ok":true|false, "issues":["보완하면 좋은 점 1~3개, 쉬운 말"], "title":"다듬은 목표(수치 포함, 기간 문구 없이)", "successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"}], "targetDate":"YYYY-MM-DD(필요시)", "note":"현실성 등 한 줄"}
-- successCriteria는 metric 1~2개만(완료조건 만들지 말 것).
+- successCriteria는 이 목표를 판단할 '관련 지표를 모두'(1~4개, 사업 성격에 맞게) metric으로. (완료조건 만들지 말 것)
 - ok: 원래 입력이 이미 충분히 명확하면 true, 다듬을 필요 있으면 false.`;
 
   const user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context || '(정보 없음)'}\n\n사용자가 입력한 목표:\n이름: ${goalName || '(없음)'}\n설명/목표문장: ${goalStatement || '(없음)'}\n\n이 목표의 성과 기준(달성 판단 방법)을 제안해줘.`;

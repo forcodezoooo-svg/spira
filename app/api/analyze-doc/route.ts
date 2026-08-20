@@ -40,8 +40,8 @@ export async function POST(request: Request) {
 # TASK: 사업계획서 분석 → 아래 JSON을 한국어로 채워 '오직 JSON만' 출력. 개요 6개 항목은 각 1~3문장.
 goals는 이 사업의 '사업 목표'를 성장 순서대로 2~4개. ⚠️ 목표 name은 '구체적·현실적 수치'를 담되 "3개월 내/6개월 내" 같은 기간 표현은 name에 넣지 말고 targetDate로 분리. "런칭/성장/성숙" 같은 막연한 단계 라벨 금지. 단계마다 수치가 커지도록(예: 월 매출 500만원 → 1,000만원 → 2호점).
 - name(예: "월 매출 1,000만원", 기간 문구 없이), targetDate("YYYY-MM-DD", 있으면)
-- successCriteria: 목표의 핵심 수치를 metric 1~2개로만 [{"type":"metric","name","target","current","unit","measurementPeriod"}]. (완료조건 만들지 말 것)
-- projects: 실행 프로젝트 2~4개(진행 순서, 실제 제작·출시 단계 포함). 각 {name, finalDeliverable, areaDeliverables:[{area, content}]}. 결과물은 문서·보고서 말고 고객·관객 앞에 내놓는 '실제 결과물'.
+- successCriteria: 이 목표를 판단할 '관련 지표를 모두'(2~5개), 사업 성격에 맞게. metric만 [{"type":"metric","name","target","current","unit","measurementPeriod"}]. (완료조건 만들지 말 것)
+- projects: 실행 프로젝트 1~3개(큰 마일스톤 단위, 진행 순서, 실제 제작·출시 단계 포함). 작은 기능들을 각각 프로젝트로 쪼개지 말고 하나의 큰 프로젝트(예: "MVP 개발 및 런칭") 안 산출물로 묶어라. 각 {name, finalDeliverable, areaDeliverables:[{area, content}]}. 결과물은 문서·보고서 말고 고객·관객 앞에 내놓는 '실제 결과물'.
 근거 없으면 빈 값/빈 배열.
 {"tagline":"","concept":"","problem":"","solution":"","mission":"","vision":"","goals":[{"name":"월 매출 1,000만원","targetDate":"","successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"}],"projects":[{"name":"","finalDeliverable":"","areaDeliverables":[{"area":"","content":""}]}]}]}`;
 

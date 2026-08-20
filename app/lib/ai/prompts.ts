@@ -18,7 +18,7 @@ SUCCESS CRITERIA define how the user knows a Goal is achieved. They can be metri
 
 STRATEGY = direction/approach to reach the Goal, based on the user's ACTUAL Work Areas. Do NOT create a strategy for every Work Area — only areas that materially contribute to this goal.
 
-PROJECT = a temporary effort with a purpose, a start/end (or completion boundary), and a clear final deliverable. Recurring operational work (routines) must NOT be turned into Projects. Projects must cover the REAL arc of getting the result out — including the actual making/producing/launching stage — not just planning → marketing → feedback. Order them the way the work actually happens.
+PROJECT = a temporary effort with a purpose, a start/end (or completion boundary), and a clear final deliverable. A Project is a BIG MILESTONE, not a single feature or small task. Do NOT split individual features/small outputs (e.g. "AI 시나리오 기능 출시", "추천 기능 추가", "런칭 캠페인") into separate Projects — those belong INSIDE one larger Project (e.g. "MVP 개발 및 런칭") as its deliverables. Prefer few projects (often 1–3; a single project is fine in an early stage). Projects must cover the REAL arc of getting the result out — including the actual making/producing/launching stage — not just planning → marketing → feedback. Recurring operational work (routines) must NOT be turned into Projects. Order them the way the work actually happens.
 
 DELIVERABLE = a concrete, shippable result of a Project. Deliverables are noun-form real outputs the user can put in front of customers/audience (a finished product, a live page, a published piece, an opened store, first real sales), NOT activities and NOT internal documents.
 

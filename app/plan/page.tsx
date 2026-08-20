@@ -9,9 +9,7 @@ import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Del
 type AiCriterion = { type: string; name: string; current?: number; target?: number; unit?: string; measurementPeriod?: string };
 // AI 제안 미리보기(승인 전) — 목표 점검 / Goal 쪼개기 / Project 쪼개기
 type AiPreview =
-  | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; title: string; successCriteria: AiCriterion[]; targetDate: string; note: string } }
-  | { kind: 'goal-breakdown'; goalId: string; goalName: string; data: { projects: { name: string; finalDeliverable: string }[] } }
-  | { kind: 'project-breakdown'; goalId: string; projectId: string; projectName: string; data: { finalDeliverable: string; areaDeliverables: { area: string; content: string }[] } };
+  | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; title: string; successCriteria: AiCriterion[]; targetDate: string; note: string } };
 
 // 목표의 성과 기준(레거시 kpi 폴백 포함)과 진행률
 function effectiveCriteria(g: Goal): SuccessCriterion[] {
@@ -1882,7 +1880,7 @@ function GoalsSection({
 
 // AI 제안 미리보기(승인 전) 모달 — 적용 눌러야 반영
 function AiPreviewModal({ preview, onApply, onClose }: { preview: AiPreview; onApply: () => void; onClose: () => void }) {
-  const title = preview.kind === 'goal-review' ? 'AI 목표 점검' : preview.kind === 'goal-breakdown' ? 'AI 제안 · 프로젝트' : 'AI 제안 · 최종 결과물과 산출물';
+  const title = 'AI 목표 점검';
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,41,41,0.45)' }} onClick={onClose}>
       <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
@@ -1916,35 +1914,6 @@ function AiPreviewModal({ preview, onApply, onClose }: { preview: AiPreview; onA
               {preview.data.targetDate && <p className="text-neutral-600 text-[12px]">기한: {preview.data.targetDate}</p>}
               {preview.data.note && <p className="text-[12px] text-neutral-400">{preview.data.note}</p>}
             </div>
-          </div>
-        )}
-
-        {preview.kind === 'goal-breakdown' && (
-          <div className="space-y-3 text-[13px]">
-            {preview.data.projects.length > 0 && (
-              <div>
-                <p className="text-[11px] font-bold text-neutral-500 mb-1">프로젝트 (진행 순서)</p>
-                <div className="space-y-1">{preview.data.projects.map((p, i) => (
-                  <div key={i} className="bg-neutral-50 rounded-lg px-3 py-2"><b className="text-neutral-800">{p.name}</b>{p.finalDeliverable && <span className="text-neutral-500"> — {p.finalDeliverable}</span>}</div>
-                ))}</div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {preview.kind === 'project-breakdown' && (
-          <div className="space-y-3 text-[13px]">
-            {preview.data.finalDeliverable && (
-              <div className="bg-neutral-50 rounded-lg px-3 py-2"><span className="text-[11px] text-neutral-400">최종 결과물</span><br /><b className="text-neutral-800">{preview.data.finalDeliverable}</b></div>
-            )}
-            {preview.data.areaDeliverables.length > 0 && (
-              <div>
-                <p className="text-[11px] font-bold text-neutral-500 mb-1">업무 영역별 산출물</p>
-                <div className="space-y-1">{preview.data.areaDeliverables.map((a, i) => (
-                  <div key={i} className="bg-neutral-50 rounded-lg px-3 py-2"><b className="text-neutral-800">{a.area}</b> · <span className="text-neutral-600">{a.content}</span></div>
-                ))}</div>
-              </div>
-            )}
           </div>
         )}
 
@@ -2394,7 +2363,10 @@ export default function PlanPage() {
         if (!prev) return prev;
         const base = prev.goals ?? [];
         const newGoals: Goal[] = gs.map((g, i) => ({
-          id: uid(), name: g.name, targetDate: g.targetDate, status: 'active', order: base.length + i, strategies: [],
+          id: uid(), name: g.name, targetDate: g.targetDate,
+          // 첫 목표만 진행 중, 나머지는 보류 (기존 목표가 있으면 추가분은 전부 보류)
+          status: (base.length === 0 && i === 0) ? 'active' : 'onhold',
+          order: base.length + i, strategies: [],
           successCriteria: g.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod })),
         }));
         const next = { ...prev, goals: [...base, ...newGoals] };
@@ -2420,6 +2392,7 @@ export default function PlanPage() {
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };
+  // 목표 → 프로젝트 쪼개기: 미리보기 없이 바로 추가
   const breakdownGoal = async (goalId: string) => {
     if (!aiGate()) return;
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
@@ -2430,11 +2403,22 @@ export default function PlanPage() {
       const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-breakdown', context: buildContext(), goalName: goal.name, goalDesc: goal.statement ?? '', areas }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) { toast('AI 분해에 실패했어요.', 'error'); return; }
-      if (!((data.strategies?.length ?? 0) || (data.projects?.length ?? 0))) { toast('제안할 내용을 찾지 못했어요.', 'info'); return; }
-      setPreview({ kind: 'goal-breakdown', goalId, goalName: goal.name, data });
+      const projs = (data.projects ?? []) as { name: string; finalDeliverable: string }[];
+      if (!projs.length) { toast('제안할 프로젝트를 찾지 못했어요.', 'info'); return; }
+      setPlan(prev => {
+        if (!prev) return prev;
+        const baseCount = (prev.projects ?? []).filter(x => x.goalId === goalId).length;
+        const newProjects: Project[] = projs.map((p, i) => ({ id: uid(), name: p.name, goalId, order: baseCount + i, finalDeliverable: p.finalDeliverable, status: 'planned', areaDeliverables: [] }));
+        const next = { ...prev, projects: [...(prev.projects ?? []), ...newProjects] };
+        const wsId = selectedWsIdRef.current;
+        if (wsId) store.updatePlanInWs(wsId, next);
+        return next;
+      });
+      toast(`프로젝트 ${projs.length}개를 추가했어요. 🌿`, 'success');
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };
+  // 프로젝트 → 최종 결과물·산출물 쪼개기: 미리보기 없이 바로 채움
   const breakdownProject = async (goalId: string, projectId: string) => {
     if (!aiGate()) return;
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
@@ -2446,36 +2430,35 @@ export default function PlanPage() {
       const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'project-breakdown', context: buildContext(), goalName: goal?.name ?? '', projectName: project.name, areas }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) { toast('AI 분해에 실패했어요.', 'error'); return; }
-      if (!(data.finalDeliverable || (data.areaDeliverables?.length ?? 0))) { toast('제안할 내용을 찾지 못했어요.', 'info'); return; }
-      setPreview({ kind: 'project-breakdown', goalId, projectId, projectName: project.name, data });
+      const ads = (data.areaDeliverables ?? []) as { area: string; content: string }[];
+      const fd = String(data.finalDeliverable ?? '').trim();
+      if (!fd && !ads.length) { toast('제안할 내용을 찾지 못했어요.', 'info'); return; }
+      setPlan(prev => {
+        if (!prev) return prev;
+        const next = { ...prev, projects: (prev.projects ?? []).map(p => p.id === projectId ? {
+          ...p,
+          finalDeliverable: p.finalDeliverable || fd,
+          areaDeliverables: [...(p.areaDeliverables ?? []), ...ads.map(a => ({ id: uid(), area: a.area, content: a.content }))],
+        } : p) };
+        const wsId = selectedWsIdRef.current;
+        if (wsId) store.updatePlanInWs(wsId, next);
+        return next;
+      });
+      toast('산출물을 채웠어요. 🌿', 'success');
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };
-  // 미리보기 승인 → 실제 반영 (AI는 승인 전까지 아무것도 바꾸지 않음)
+  // 목표 점검 제안 승인 → 반영 (목표 자체를 바꾸는 점검만 미리보기 유지)
   const applyPreview = () => {
     if (!preview) return;
-    if (preview.kind === 'goal-review') {
-      const d = preview.data;
-      const criteria: SuccessCriterion[] = d.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric', name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod }));
-      update({ goals: (plan.goals ?? []).map(g => g.id === preview.goalId ? {
-        ...g,
-        name: d.title || g.name,
-        targetDate: d.targetDate || g.targetDate,
-        ...(criteria.length ? { successCriteria: criteria } : {}),
-      } : g) });
-    } else if (preview.kind === 'goal-breakdown') {
-      const d = preview.data; const goalId = preview.goalId;
-      const baseCount = (plan.projects ?? []).filter(x => x.goalId === goalId).length;
-      const newProjects: Project[] = d.projects.map((p, i) => ({ id: uid(), name: p.name, goalId, order: baseCount + i, finalDeliverable: p.finalDeliverable, status: 'planned', areaDeliverables: [] }));
-      update({ projects: [...(plan.projects ?? []), ...newProjects] });
-    } else if (preview.kind === 'project-breakdown') {
-      const d = preview.data;
-      update({ projects: (plan.projects ?? []).map(p => p.id === preview.projectId ? {
-        ...p,
-        finalDeliverable: p.finalDeliverable || d.finalDeliverable,
-        areaDeliverables: [...(p.areaDeliverables ?? []), ...d.areaDeliverables.map(a => ({ id: uid(), area: a.area, content: a.content }))],
-      } : p) });
-    }
+    const d = preview.data;
+    const criteria: SuccessCriterion[] = d.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric', name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod }));
+    update({ goals: (plan.goals ?? []).map(g => g.id === preview.goalId ? {
+      ...g,
+      name: d.title || g.name,
+      targetDate: d.targetDate || g.targetDate,
+      ...(criteria.length ? { successCriteria: criteria } : {}),
+    } : g) });
     setPreview(null);
     toast('적용했어요. 🌿', 'success');
   };

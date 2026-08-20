@@ -41,20 +41,22 @@ export async function POST(request: Request) {
 이 사업에 맞는 '구체적이고 현실적인 수치 기반 성장 목표' 2~4개를 성장 순서대로 제안해라.
 ⚠️ "런칭/성장/성장과 확장/성숙" 같은 막연한 단계 라벨 금지. 각 목표 name에는 한눈에 들어오는 '수치'를 담되 "3개월 내/6개월 내" 같은 기간 표현은 name에 넣지 마라 — 기간은 targetDate로 분리한다.
 단계마다 숫자가 커지게(예: 월 매출 500만원 → 1,000만원 → 2,000만원). 이 업종·규모에 현실적인 숫자로.
-각 목표: name(예: "월 매출 1,000만원", 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적 기한), successCriteria([{type:'metric',name,target,current,unit,measurementPeriod}]) — 목표의 핵심 수치를 metric 1개로.
-반드시 '오직 JSON만': {"goals":[{"name":"월 매출 1,000만원","targetDate":"YYYY-MM-DD","successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"}]}]}`;
+각 목표: name(예: "월 매출 1,000만원", 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적 기한), successCriteria.
+⚠️ successCriteria에는 이 목표의 달성을 판단할 수 있는 '관련 지표를 모두' 넣어라(2~5개, 사업 성격에 맞게). 예: 카페 → 월 매출·객단가·일평균 방문객·재방문율 / 유튜브 → 구독자 수·월 조회수·평균 시청시간 / 쇼핑몰 → 월 매출·주문 건수·전환율·재구매율. 1개만 넣지 말고 그 목표에 의미 있는 지표들을 함께 채워라. (current는 모르면 0)
+반드시 '오직 JSON만': {"goals":[{"name":"월 매출 1,000만원","targetDate":"YYYY-MM-DD","successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"},{"type":"metric","name":"객단가","target":8000,"current":0,"unit":"원"},{"type":"metric","name":"일평균 방문객","target":80,"current":0,"unit":"명"}]}]}`;
     user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}${areaHint}\n\n이 사업에 맞는 현실적인 수치 기반 성장 목표를 추천해줘(기간은 targetDate로).`;
   } else if (mode === 'goal-breakdown') {
     // Goal → 필요한 Projects(+finalDeliverable) — 전략 없이 실행 프로젝트만
     sys = `${SPIRA_PLANNING_CORE}
 
 # TASK: Goal을 실행 프로젝트로 분해 (제안만)
-주어진 'Goal'을 달성하기 위해 실제로 진행할 '프로젝트' 2~4개를 '진행 순서대로' 제안해라. 반드시 이 사업의 업종·업무 영역에 맞게.
-각 project는 name, finalDeliverable(끝났을 때 고객·관객 앞에 내놓는 최종 결과물).
-⚠️ 실제 '만들고·출시하는' 단계를 반드시 포함해라(기획→마케팅→피드백만 나열 금지). "기획서 작성"류를 프로젝트로 만들지 마라. 반복 운영(루틴)은 프로젝트로 만들지 마라.
+주어진 'Goal'을 달성하기 위한 '프로젝트'를 제안해라. 반드시 이 사업의 업종·업무 영역에 맞게.
+⚠️ 프로젝트는 '큰 마일스톤' 단위다. 개별 기능·작은 산출물(예: "AI 시나리오 기능 출시", "추천 기능 추가", "런칭 캠페인")을 각각 프로젝트로 만들지 마라 — 그것들은 하나의 큰 프로젝트(예: "MVP 개발 및 런칭") 안의 '산출물'로 묶여야 한다.
+그래서 프로젝트 개수는 보통 1~3개(초기 단계면 1개도 정상). 각 project는 name(큰 마일스톤), finalDeliverable(끝났을 때 고객·관객 앞에 내놓는 최종 결과물). 진행 순서대로.
+실제 '만들고·출시하는' 단계를 반드시 포함하고, 반복 운영(루틴)은 프로젝트로 만들지 마라. "기획서 작성"류를 프로젝트로 만들지 마라.
 ${DELIVERABLE_RULE}
-반드시 '오직 JSON만'(예시는 형식일 뿐): {"projects":[{"name":"프로젝트 이름","finalDeliverable":"최종 결과물"}]}`;
-    user = `사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n이 목표를 이루기 위해 실제로 진행할 프로젝트를 순서대로 제안해줘(실제 제작·출시 단계 포함).`;
+반드시 '오직 JSON만'(예시는 형식일 뿐): {"projects":[{"name":"MVP 개발 및 런칭","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 서비스 출시"}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n이 목표를 이루기 위한 '큰 마일스톤' 단위 프로젝트를 1~3개, 순서대로 제안해줘(작은 기능들은 각각 프로젝트로 쪼개지 말고 하나로 묶어서).`;
   } else if (mode === 'project-breakdown') {
     // Project → Final Deliverable → Area Deliverables
     sys = `${SPIRA_PLANNING_CORE}
