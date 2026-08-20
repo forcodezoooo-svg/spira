@@ -1436,7 +1436,9 @@ export default function ProgramsPage() {
     </aside>
   );
 
-  const listPrograms = quarterPrograms.filter(p => (p.deadlines ?? []).some(dl => dl.enabled !== false));
+  // Goals에는 Plan에서 '가져가기'로 들여온 항목만 표시 (기존 데이터는 가림)
+  const visiblePrograms = quarterPrograms.filter(p => p.fromPlan);
+  const listPrograms = visiblePrograms.filter(p => (p.deadlines ?? []).some(dl => dl.enabled !== false));
   const shortDate = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
 
   return (
@@ -1511,7 +1513,7 @@ export default function ProgramsPage() {
 
       {/* 우측: 간트차트 로드맵 (화면 꽉 차게) */}
       <div className="flex-1 min-w-0 min-h-0">
-        <GoalsRoadmap ref={calRef} programs={quarterPrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
+        <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
       </div>
       </div>
 

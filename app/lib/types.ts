@@ -231,6 +231,7 @@ export interface Program {
   enabled?: boolean; // 목표 on/off (false면 Task/오늘의 업무에 미반영). 기본 on
   priority?: number; // 우선순위 숫자 (중복 허용). 1번만 Task/오늘의 업무에 반영. 기본 1
   revenueSource?: string; // 연관 수익원(수익 수단) 이름 — Resources의 revenueSources와 연결
+  fromPlan?: boolean; // Plan '사업목표 → Goals로 가져가기'로 생성됨 (Goals 로드맵에 이 항목만 표시)
   deadlines?: ProgramDeadline[]; // 분기 내 데드라인 → 할일 (depth 2~3)
 }
 

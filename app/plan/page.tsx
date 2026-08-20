@@ -2678,6 +2678,7 @@ export default function PlanPage() {
       name: goal.name,
       goal: goal.statement || goal.name,
       color: BUSINESS_COLORS[0],
+      fromPlan: true,
       deadlines,
       year: anchorDate.getFullYear(),
       quarter: Math.floor(anchorDate.getMonth() / 3) + 1,
