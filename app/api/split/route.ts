@@ -40,9 +40,11 @@ export async function POST(request: Request) {
 
 # TASK: 사업 목표 5단계 추천 + 대화로 조정 (제안만)
 이 사업에 맞는 '사업 전체의 성장 목표' 5개를 성장 순서대로 제안해라. (위 GOAL 규칙 준수 — 고객/순이익/확장/새 수익모델 수준. "기능 개선/피드백/기능 출시" 같은 프로젝트 이하 단위 금지)
-⚠️ 1인 창업자가 '충분히 달성 가능하다'고 느끼게 하라. 처음부터 거창한 큰 숫자로 시작하지 마라. 1단계는 아주 작고 현실적으로(예: 첫 유료 고객 10명 / 월 매출 첫 100만원 / 구독자 첫 100명). 이후 단계는 '이전 단계 달성치에서 비례해 성장'하도록 촘촘하게(예: 월 매출 100 → 300 → 700 → 1,500 → 3,000만원처럼 배수로 서서히). 큰 그림은 마지막 5단계에만.
-각 목표: name(수치, "3개월 내" 같은 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적으로 단계마다 점점 뒤로), rationale(왜 이 수치를 목표로 삼았는지 1문장, 사업 맥락·직전 단계 대비 근거), successCriteria(관련 지표 2~4개 metric, current는 모르면 0).
-reply: 사용자에게 건네는 짧고 따뜻한 설명/답변 1~2문장(전반적으로 왜 이렇게 잡았는지, 또는 사용자의 요청을 어떻게 반영했는지).
+⚠️ 1인 창업자가 '충분히 달성 가능하다'고 느끼게 하라. 처음부터 거창한 큰 숫자로 시작하지 마라. 1단계는 아주 작고 현실적으로. 이후 단계는 '이전 단계 달성치에서 비례해 성장'하도록 촘촘하게(배수로 서서히). 큰 그림은 마지막 5단계에만.
+⚠️ 수치를 임의로 지어내지 마라. 목표는 실제 '단위 경제(가격·단가)'에 근거해야 한다. 예: 구독 서비스면 (구독가 × 유료 고객 수 = 매출)이 서로 '일관'되게 맞아야 한다. 고객 100명·매출 500만원처럼 단가와 안 맞는 숫자는 금지.
+⚠️ 만약 사업 정보에 '가격/단가'(예: 구독료, 객단가, 상품가)가 없으면, 절대 임의로 매출/고객 수를 확정하지 말고 — reply에서 사용자에게 먼저 물어봐라(예: "구독 상품 가격이 얼마인가요? 알려주시면 그 가격에 맞춰 고객 수와 매출 목표를 정확히 잡아드릴게요."). 이때 goals는 '합리적 가정을 rationale에 명시한 잠정치'로 제시하되, 가격을 알면 다시 맞추겠다고 반드시 안내해라. 사용자가 가격을 알려주면 그 가격 기반으로 고객 수·매출을 일관되게 재계산해라.
+각 목표: name(수치, "3개월 내" 같은 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적으로 단계마다 점점 뒤로), rationale(왜 이 수치인지 1문장 — 가격/단가 근거·직전 단계 대비), successCriteria(관련 지표 2~4개 metric, current는 모르면 0. 서로 수치가 일관되게).
+reply: 사용자에게 건네는 짧고 따뜻한 설명/답변 1~2문장. 가격 등 핵심 정보가 없으면 여기서 물어봐라.
 반드시 '오직 JSON만': {"reply":"...","goals":[{"name":"","targetDate":"","rationale":"","successCriteria":[{"type":"metric","name":"","target":0,"current":0,"unit":"","measurementPeriod":""}]}]}
 사용자가 대화로 수치·개수·방향 조정을 요청하면, 그 요청을 반영해 goals '전체'를 다시 제시하고 reply로 무엇을 바꿨는지 설명해라.${currentGoals ? `\n\n[현재 제안된 목표(조정 대상)]\n${JSON.stringify(currentGoals)}` : ''}`;
     user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}${areaHint}\n\n이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.`;
@@ -89,6 +91,9 @@ ${DELIVERABLE_RULE}
     return NextResponse.json({ error: 'bad-mode' }, { status: 400 });
   }
 
+  // 오늘 날짜(KST)를 시스템에 항상 주입 — 과거 연도(2024 등)로 일정 잡는 실수 방지
+  const todayKST = today || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const dateNote = `오늘 날짜는 ${todayKST}입니다. 모든 날짜(targetDate 등)는 반드시 오늘 이후(오늘부터 시작하는 미래)로만 잡고, 과거 연도(2024 등)는 절대 쓰지 마세요.`;
   // goal-suggest는 대화(messages)로 조정 가능 — 있으면 대화를, 없으면 초기 user 프롬프트를 사용
   const convo: ChatMsg[] = (mode === 'goal-suggest' && Array.isArray(messages) && messages.length)
     ? messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').slice(-12)
@@ -98,7 +103,7 @@ ${DELIVERABLE_RULE}
       model: 'gpt-4o',
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: sys },
+        { role: 'system', content: `${dateNote}\n\n${sys}` },
         ...convo,
       ],
     });

@@ -1934,30 +1934,33 @@ function GoalPlanModal({ context, areas, onApply, onClose }: {
   onApply: (goals: PlanGoal[]) => void;
   onClose: () => void;
 }) {
-  const [goals, setGoals] = useState<PlanGoal[]>([]);
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  type Msg = { role: 'user' | 'assistant'; content: string; goals?: PlanGoal[] };
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const startedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const SEED = '이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.';
+  // 가장 최근에 제안된 목표 (아래 새 버전이 쌓일수록 최신 것을 적용)
+  const latestGoals = [...messages].reverse().find(m => m.goals && m.goals.length)?.goals ?? [];
 
-  const call = async (log: { role: 'user' | 'assistant'; content: string }[]) => {
+  const call = async (log: Msg[]) => {
     setLoading(true);
     try {
       const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-      const convo = [{ role: 'user' as const, content: SEED }, ...log];
-      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context, areas, today, messages: convo, currentGoals: goals.length ? goals : undefined }) });
+      const convo = [{ role: 'user' as const, content: SEED }, ...log.map(m => ({ role: m.role, content: m.content }))];
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context, areas, today, messages: convo, currentGoals: latestGoals.length ? latestGoals : undefined }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) { setMessages(m => [...m, { role: 'assistant', content: '앗, 잠시 문제가 생겼어요. 다시 시도해 주세요.' }]); return; }
-      if (Array.isArray(data.goals) && data.goals.length) setGoals(data.goals as PlanGoal[]);
-      if (data.reply) setMessages(m => [...m, { role: 'assistant', content: String(data.reply) }]);
+      const gs = (Array.isArray(data.goals) ? data.goals : []) as PlanGoal[];
+      // 답변 + 이번 버전 목표를 하나의 어시스턴트 메시지로 아래에 쌓는다 (항상 새 버전이 최하단에 보이게)
+      setMessages(m => [...m, { role: 'assistant', content: String(data.reply ?? ''), goals: gs }]);
     } catch { setMessages(m => [...m, { role: 'assistant', content: '네트워크 오류가 발생했어요.' }]); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { if (startedRef.current) return; startedRef.current = true; void call([]); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [messages, goals, loading]);
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [messages, loading]);
 
   const send = () => { const t = input.trim(); if (!t || loading) return; const log = [...messages, { role: 'user' as const, content: t }]; setMessages(log); setInput(''); void call(log); };
 
@@ -1976,51 +1979,53 @@ function GoalPlanModal({ context, areas, onApply, onClose }: {
           <button onClick={onClose} className="text-neutral-300 hover:text-neutral-600 text-lg leading-none flex-shrink-0">×</button>
         </div>
 
-        {/* 스크롤: 목표 카드 + 대화 */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 space-y-3 min-h-[120px]">
-          {/* 제안 목표 */}
-          {goals.length === 0 && loading ? (
+        {/* 스크롤: 대화 + (각 응답마다) 새 목표 버전이 아래로 쌓임 */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 space-y-2.5 min-h-[140px] pb-1">
+          {messages.length === 0 && loading && (
             <div className="py-8 flex flex-col items-center gap-2 text-neutral-400">
               <span className="w-6 h-6 rounded-full border-2 border-neutral-200 border-t-violet-400 animate-spin" />
               <p className="text-[13px]">성장 목표를 설계하는 중…</p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {goals.map((g, i) => (
-                <div key={i} className="border border-neutral-200 rounded-xl px-3.5 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: '#EEF7E2', color: '#3E7A2E' }}>{i + 1}</span>
-                    <b className="text-[14px] text-neutral-900">{g.name}</b>
-                    {g.targetDate && <span className="text-[11px] text-neutral-400 flex-shrink-0">~{g.targetDate.slice(2).replace(/-/g, '.')}</span>}
-                  </div>
-                  {g.rationale && <p className="text-[12px] text-neutral-500 mt-1 ml-7">{g.rationale}</p>}
-                  {g.successCriteria.length > 0 && (
-                    <div className="mt-1.5 ml-7 flex flex-wrap gap-1">
-                      {g.successCriteria.map((c, j) => (
-                        <span key={j} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: '#EAF0FB', color: '#4E7CF5' }}>
-                          {c.name}{c.target !== undefined ? ` ${c.target.toLocaleString('ko-KR')}${c.unit ?? ''}` : ''}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
-
-          {/* 대화 */}
-          {messages.length > 0 && (
-            <div className="space-y-2 pt-1">
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[85%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={m.role === 'user' ? { backgroundColor: '#DFF9C4', color: '#16211E' } : { backgroundColor: '#F1F1EB', color: '#3E4A44' }}>
-                    {m.content}
+          {messages.map((m, mi) => (
+            m.role === 'user' ? (
+              <div key={mi} className="flex justify-end">
+                <div className="max-w-[85%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={{ backgroundColor: '#DFF9C4', color: '#16211E' }}>{m.content}</div>
+              </div>
+            ) : (
+              <div key={mi} className="space-y-2">
+                {m.content && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[90%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB', color: '#3E4A44' }}>{m.content}</div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {loading && goals.length > 0 && (
+                )}
+                {m.goals && m.goals.length > 0 && (
+                  <div className="space-y-2">
+                    {m.goals.map((g, i) => (
+                      <div key={i} className="border border-neutral-200 rounded-xl px-3.5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: '#EEF7E2', color: '#3E7A2E' }}>{i + 1}</span>
+                          <b className="text-[14px] text-neutral-900">{g.name}</b>
+                          {g.targetDate && <span className="text-[11px] text-neutral-400 flex-shrink-0">~{g.targetDate.slice(2).replace(/-/g, '.')}</span>}
+                        </div>
+                        {g.rationale && <p className="text-[12px] text-neutral-500 mt-1 ml-7">{g.rationale}</p>}
+                        {g.successCriteria.length > 0 && (
+                          <div className="mt-1.5 ml-7 flex flex-wrap gap-1">
+                            {g.successCriteria.map((c, j) => (
+                              <span key={j} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: '#EAF0FB', color: '#4E7CF5' }}>
+                                {c.name}{c.target !== undefined ? ` ${c.target.toLocaleString('ko-KR')}${c.unit ?? ''}` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ))}
+          {loading && messages.length > 0 && (
             <div className="flex justify-start"><div className="rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB' }}><span className="inline-block w-4 h-4 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" /></div></div>
           )}
         </div>
@@ -2030,14 +2035,14 @@ function GoalPlanModal({ context, areas, onApply, onClose }: {
           <div className="flex items-end gap-2 mb-2.5">
             <textarea value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
-              rows={1} placeholder="예: 첫 목표는 더 작게 / 카페라 월 매출 기준으로 / 6개월 더 여유있게"
+              rows={1} placeholder="예: 구독 가격은 9,900원이야 / 첫 목표는 더 작게 / 6개월 더 여유있게"
               className="flex-1 resize-none bg-neutral-50 border border-neutral-200 rounded-2xl px-3.5 py-2.5 text-[13px] outline-none focus:border-violet-400 max-h-24" />
             <button onClick={send} disabled={!input.trim() || loading} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-6 16-2.5-6L4 12z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>
             </button>
           </div>
-          <button onClick={() => onApply(goals)} disabled={!goals.length || loading} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>
-            이 목표로 만들기{goals.length ? ` (${goals.length})` : ''}
+          <button onClick={() => onApply(latestGoals)} disabled={!latestGoals.length || loading} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>
+            이 목표로 만들기{latestGoals.length ? ` (${latestGoals.length})` : ''}
           </button>
         </div>
       </div>

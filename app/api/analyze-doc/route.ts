@@ -63,12 +63,13 @@ goals는 이 사업의 '사업 목표'를 성장 순서대로 2~4개. ⚠️ 사
     return NextResponse.json({ error: 'unsupported' }, { status: 400 });
   }
 
+  const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   try {
     const completion = await getClient().chat.completions.create({
       model: 'gpt-4o',
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: sys },
+        { role: 'system', content: `오늘 날짜는 ${todayKST}입니다. 모든 날짜(targetDate 등)는 오늘 이후로만, 과거 연도 금지.\n\n${sys}` },
         { role: 'user', content: userParts },
       ],
     });
