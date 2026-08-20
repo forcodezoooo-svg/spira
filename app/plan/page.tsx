@@ -1584,21 +1584,14 @@ function BusinessDocBox({
         </div>
       )}
 
-      {/* 업종 카테고리 */}
-      <div className="mb-3">
-        <label className="text-[11px] font-semibold text-neutral-400 block mb-1.5">업종</label>
-        <div className="flex flex-wrap gap-1.5">
-          {BIZ_CATEGORIES.map(c => {
-            const on = ov.category === c;
-            return (
-              <button key={c} onClick={() => set({ category: on ? '' : c })}
-                className="text-[12px] font-medium px-2.5 py-1 rounded-full border transition-colors"
-                style={on ? { backgroundColor: '#DFF9C4', color: '#16211E', borderColor: '#9DFE3B' } : { backgroundColor: '#fff', color: '#5B6560', borderColor: 'var(--spira-border-subtle)' }}>
-                {c}
-              </button>
-            );
-          })}
-        </div>
+      {/* 업종 카테고리 (드롭다운) */}
+      <div className="mb-3 flex items-center gap-2">
+        <label className="text-[11px] font-semibold text-neutral-400 flex-shrink-0">업종</label>
+        <select value={ov.category ?? ''} onChange={e => set({ category: e.target.value })}
+          className="bg-white border border-neutral-200 rounded-full px-3 py-1.5 text-[12px] font-medium text-neutral-700 outline-none focus:border-violet-400">
+          <option value="">업종 선택</option>
+          {BIZ_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1657,7 +1650,33 @@ function periodKeyOf(period: string, d = new Date()): string {
     case '월': default: return `${y}-${String(m + 1).padStart(2, '0')}`;
   }
 }
-// 성과 지표 한 줄 — 목표 설정 + 주기별 기록 입력 + 누적 추이
+// 성과 지표 추이 미니 라인 차트 (단일 계열, 시간축 — 브랜드 그린 한 색, 목표선은 점선)
+function MiniLineChart({ data, unit, target }: { data: { period: string; value: number }[]; unit?: string; target?: number }) {
+  const vals = data.map(d => d.value);
+  const W = 200, H = 60, padX = 6, padY = 10;
+  const ys = target !== undefined ? [...vals, target] : vals;
+  const min = Math.min(...ys), max = Math.max(...ys); const range = max - min || 1;
+  const x = (i: number) => data.length === 1 ? W / 2 : padX + i * ((W - padX * 2) / (data.length - 1));
+  const y = (v: number) => H - padY - ((v - min) / range) * (H - padY * 2);
+  const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(' ');
+  const last = data[data.length - 1];
+  const shortP = (p: string) => p.replace(/^\d{4}-/, '');
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 56 }} preserveAspectRatio="none">
+        {target !== undefined && <line x1={padX} x2={W - padX} y1={y(target)} y2={y(target)} stroke="#C4CCC4" strokeWidth="1" strokeDasharray="3 3" />}
+        <path d={line} fill="none" stroke="#5EA63A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.value)} r="2.5" fill="#5EA63A" />)}
+      </svg>
+      <div className="flex justify-between text-[9px] text-neutral-400 tabular-nums px-1 mt-0.5">
+        <span>{shortP(data[0].period)}</span>
+        <span className="font-semibold text-neutral-600">{last.value.toLocaleString('ko-KR')}{unit ?? ''}</span>
+        <span>{shortP(last.period)}</span>
+      </div>
+    </div>
+  );
+}
+// 성과 지표 카드 — 목표 설정 + 주기별 기록 입력 + 누적 추이(그래프). 반응형 그리드 셀에 들어감
 function MetricRow({ c, onPatch, onDel, inputCls }: {
   c: SuccessCriterion;
   onPatch: (p: Partial<SuccessCriterion>) => void;
@@ -1665,6 +1684,7 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
   inputCls: string;
 }) {
   const [logVal, setLogVal] = useState('');
+  const [showGraph, setShowGraph] = useState(false);
   const period = c.measurementPeriod || '월';
   const hist = c.history ?? [];
   const doLog = () => {
@@ -1674,33 +1694,30 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
     onPatch({ history: next, currentValue: v });
     setLogVal('');
   };
-  const recent = hist.slice(-6);
   return (
     <div className="bg-white border border-neutral-200 rounded-lg p-2 space-y-1.5">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <input value={c.name} onChange={e => onPatch({ name: e.target.value })} placeholder="지표 (예: 월 매출)" className={`flex-1 min-w-[110px] font-semibold ${inputCls}`} />
-        <span className="text-[11px] text-neutral-400">목표</span>
-        <input type="number" value={c.targetValue ?? ''} onChange={e => onPatch({ targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`w-16 ${inputCls}`} />
-        <input value={c.unit ?? ''} onChange={e => onPatch({ unit: e.target.value })} placeholder="단위" className={`w-12 ${inputCls}`} />
-        <select value={period} onChange={e => onPatch({ measurementPeriod: e.target.value })} className={inputCls}>{PERIOD_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select>
+      <div className="flex items-center gap-1">
+        <input value={c.name} onChange={e => onPatch({ name: e.target.value })} placeholder="지표 (예: 월 매출)" className={`flex-1 min-w-0 font-semibold ${inputCls}`} />
+        <button onClick={() => setShowGraph(v => !v)} title="추이 그래프" className={`flex-shrink-0 transition-colors ${showGraph ? 'text-violet-500' : 'text-neutral-300 hover:text-neutral-600'}`}>
+          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M2 11l3-3 3 2 5-5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M2 14h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
+        </button>
         <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
       </div>
-      <div className="flex items-center gap-1.5 flex-wrap text-[12px] pl-0.5">
-        <span className="text-neutral-500">현재 <b className="text-neutral-800 tabular-nums">{c.currentValue !== undefined ? c.currentValue.toLocaleString('ko-KR') : '—'}</b>{c.unit ?? ''}</span>
-        <span className="text-neutral-300">·</span>
-        <span className="text-neutral-400">이번 {period} 기록</span>
-        <input type="number" value={logVal} onChange={e => setLogVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doLog(); }} placeholder="값" className={`w-16 ${inputCls}`} />
-        <button onClick={doLog} disabled={logVal === ''} className="text-[11px] font-semibold px-2 py-1 rounded-lg text-white bg-neutral-900 disabled:opacity-30 transition-opacity">기록</button>
-        {hist.length > 0 && <span className="text-neutral-400">· {hist.length}회</span>}
+      <div className="flex items-center gap-1 flex-wrap text-[11px]">
+        <span className="text-neutral-400">목표</span>
+        <input type="number" value={c.targetValue ?? ''} onChange={e => onPatch({ targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`w-14 ${inputCls}`} />
+        <input value={c.unit ?? ''} onChange={e => onPatch({ unit: e.target.value })} placeholder="단위" className={`w-11 ${inputCls}`} />
+        <select value={period} onChange={e => onPatch({ measurementPeriod: e.target.value })} className={inputCls}>{PERIOD_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select>
       </div>
-      {recent.length > 0 && (
-        <div className="flex items-center gap-1 flex-wrap pl-0.5">
-          {recent.map((h, i) => (
-            <span key={h.period} className="text-[10px] text-neutral-500 tabular-nums">
-              {i > 0 && <span className="text-neutral-300 mr-1">→</span>}{h.value.toLocaleString('ko-KR')}
-            </span>
-          ))}
-        </div>
+      <div className="text-[11px] text-neutral-500">현재 <b className="text-neutral-800 tabular-nums">{c.currentValue !== undefined ? c.currentValue.toLocaleString('ko-KR') : '—'}</b>{c.unit ?? ''}{hist.length > 0 && <span className="text-neutral-400"> · {hist.length}회</span>}</div>
+      <div className="flex items-center gap-1">
+        <input type="number" value={logVal} onChange={e => setLogVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doLog(); }} placeholder={`이번 ${period} 값`} className={`flex-1 min-w-0 ${inputCls}`} />
+        <button onClick={doLog} disabled={logVal === ''} className="text-[11px] font-semibold px-2 py-1 rounded-lg text-white bg-neutral-900 disabled:opacity-30 transition-opacity flex-shrink-0">기록</button>
+      </div>
+      {showGraph && (
+        hist.length >= 2
+          ? <MiniLineChart data={hist} unit={c.unit} target={c.targetValue} />
+          : <p className="text-[10px] text-neutral-400 text-center py-2">기록이 2개 이상 쌓이면 그래프가 보여요.</p>
       )}
     </div>
   );
@@ -1850,13 +1867,13 @@ function GoalsSection({
                       const add = () => setC([...cur, { id: uid(), type: 'metric', name: '' }]);
                       return (
                         <div>
-                          <div className="flex items-center gap-1.5 mb-1"><p className="text-[11px] font-semibold text-neutral-400">성과 지표</p><Hint text="목표 수치와 입력 주기를 정하고, 주기마다 값을 '기록'하면 추이가 쌓여요. (진행도 막대는 아래 프로젝트 완료로 계산돼요)" /></div>
-                          <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 mb-1"><p className="text-[11px] font-semibold text-neutral-400">성과 지표</p><Hint text="목표 수치와 입력 주기를 정하고, 주기마다 값을 '기록'하면 추이가 쌓여요. 그래프 아이콘으로 변동을 볼 수 있어요. (진행도 막대는 아래 프로젝트 완료로 계산돼요)" /></div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 items-start">
                             {cur.map(c => (
                               <MetricRow key={c.id} c={c} inputCls={inputCls} onPatch={p => patch(c.id, p)} onDel={() => del(c.id)} />
                             ))}
-                            <button onClick={add} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 지표 추가</button>
                           </div>
+                          <button onClick={add} className="mt-2 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 지표 추가</button>
                         </div>
                       );
                     })()}

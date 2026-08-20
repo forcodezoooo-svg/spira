@@ -62,7 +62,7 @@ reply: 짧고 따뜻한 설명/답변 1~2문장. 정보가 부족해 가정을 �
 각 project는 다음을 모두 포함한다:
 - name(큰 마일스톤), finalDeliverable(끝났을 때 고객·관객 앞에 내놓는 최종 결과물)
 - startDate/endDate("YYYY-MM-DD"): 오늘 이후로, 프로젝트 진행 기간을 현실적으로 배정(프로젝트들이 순서대로 이어지게, 마지막 프로젝트 endDate는 Goal 기한 이내로).
-- areaDeliverables: 그 결과물을 만들기 위해 '관련 있는 업무 영역'이 내놓을 결과물 2~4개 [{area, content}]. (관련 없는 영역 강제 X)
+- areaDeliverables: 그 결과물을 만들기 위해 '관련 있는 업무 영역'이 내놓을 결과물 5개 [{area, content}] (가능하면 5개, 서로 다른 업무 영역으로 다양하게).
 실제 '만들고·출시하는' 단계를 반드시 포함하고, 반복 운영(루틴)은 프로젝트로 만들지 마라. "기획서 작성"류를 프로젝트로 만들지 마라.
 ${DELIVERABLE_RULE}
 반드시 '오직 JSON만'(예시는 형식일 뿐): {"projects":[{"name":"MVP 개발 및 런칭","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 서비스 출시","startDate":"2026-01-05","endDate":"2026-03-15","areaDeliverables":[{"area":"개발","content":"배포된 서비스"},{"area":"디자인","content":"기본 UI 완성본"}]}]}`;
