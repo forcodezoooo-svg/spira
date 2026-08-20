@@ -1651,28 +1651,92 @@ function periodKeyOf(period: string, d = new Date()): string {
   }
 }
 // 성과 지표 추이 미니 라인 차트 (단일 계열, 시간축 — 브랜드 그린 한 색, 목표선은 점선)
-function MiniLineChart({ data, unit, target }: { data: { period: string; value: number }[]; unit?: string; target?: number }) {
-  const vals = data.map(d => d.value);
-  const W = 200, H = 60, padX = 6, padY = 10;
-  const ys = target !== undefined ? [...vals, target] : vals;
-  const min = Math.min(...ys), max = Math.max(...ys); const range = max - min || 1;
-  const x = (i: number) => data.length === 1 ? W / 2 : padX + i * ((W - padX * 2) / (data.length - 1));
-  const y = (v: number) => H - padY - ((v - min) / range) * (H - padY * 2);
-  const line = data.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.value).toFixed(1)}`).join(' ');
-  const last = data[data.length - 1];
+// 성과 지표 다중 시리즈 추이 그래프. 전체 보기(목표 대비 %로 정규화, 단일 축)에서 하나 클릭 시 그 지표만 실제 수치로.
+// 카테고리 색상은 dataviz 검증 팔레트(고정 순서). 지표별로 색이 고정됨.
+const METRIC_CAT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+function MetricsChart({ metrics, focusId, onFocus }: {
+  metrics: SuccessCriterion[];
+  focusId: string | null;
+  onFocus: (id: string | null) => void;
+}) {
   const shortP = (p: string) => p.replace(/^\d{4}-/, '');
+  const series = metrics.map((m, i) => ({
+    m, color: METRIC_CAT[i % METRIC_CAT.length],
+    hist: (m.history ?? []).slice().sort((a, b) => a.period < b.period ? -1 : 1),
+  }));
+  const withData = series.filter(s => s.hist.length > 0);
+  const focus = focusId ? series.find(s => s.m.id === focusId) ?? null : null;
+  const shown = focus ? [focus] : withData;
+  // 공유 시간축: 표시 중인 시리즈의 모든 기록 주기(키)를 합집합·정렬
+  const periods = Array.from(new Set(shown.flatMap(s => s.hist.map(h => h.period)))).sort();
+  const W = 560, H = 190, padL = 8, padR = 8, padT = 14, padB = 24;
+  const xOf = (p: string) => periods.length <= 1 ? (W - padL - padR) / 2 + padL : padL + periods.indexOf(p) * ((W - padL - padR) / (periods.length - 1));
+
+  // y 스케일: 포커스면 실제 수치(+목표 점선), 전체면 목표(없으면 자기 최대) 대비 %
+  const isFocus = !!focus;
+  let yMax: number, yMin: number, targetLine: number | undefined;
+  if (isFocus && focus) {
+    const vals = focus.hist.map(h => h.value);
+    const t = focus.m.targetValue;
+    const ys = t !== undefined ? [...vals, t] : vals;
+    yMax = Math.max(...ys); yMin = Math.min(...ys, 0); targetLine = t;
+  } else {
+    const norms = shown.flatMap(s => { const d = (s.m.targetValue && s.m.targetValue > 0) ? s.m.targetValue : Math.max(...s.hist.map(h => h.value), 1); return s.hist.map(h => (h.value / d) * 100); });
+    yMax = Math.max(...norms, 100); yMin = 0; targetLine = 100;
+  }
+  const range = yMax - yMin || 1;
+  const yOf = (v: number) => H - padB - ((v - yMin) / range) * (H - padT - padB);
+  const normVal = (s: typeof series[number], v: number) => { const d = (s.m.targetValue && s.m.targetValue > 0) ? s.m.targetValue : Math.max(...s.hist.map(h => h.value), 1); return (v / d) * 100; };
+
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 56 }} preserveAspectRatio="none">
-        {target !== undefined && <line x1={padX} x2={W - padX} y1={y(target)} y2={y(target)} stroke="#C4CCC4" strokeWidth="1" strokeDasharray="3 3" />}
-        <path d={line} fill="none" stroke="#5EA63A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.value)} r="2.5" fill="#5EA63A" />)}
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 190 }}>
+        {/* 목표 기준선 (전체=100%, 포커스=목표값) */}
+        {targetLine !== undefined && targetLine >= yMin && targetLine <= yMax && (
+          <>
+            <line x1={padL} x2={W - padR} y1={yOf(targetLine)} y2={yOf(targetLine)} stroke="#C4CCC4" strokeWidth="1" strokeDasharray="3 3" />
+            <text x={W - padR} y={yOf(targetLine) - 3} textAnchor="end" className="fill-neutral-400" style={{ fontSize: 9 }}>목표{isFocus ? '' : ' 100%'}</text>
+          </>
+        )}
+        {shown.map(s => {
+          const pts = s.hist;
+          const path = pts.map((h, i) => `${i === 0 ? 'M' : 'L'}${xOf(h.period).toFixed(1)},${yOf(isFocus ? h.value : normVal(s, h.value)).toFixed(1)}`).join(' ');
+          return (
+            <g key={s.m.id}>
+              {pts.length > 1 && <path d={path} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+              {pts.map((h, i) => (
+                <circle key={i} cx={xOf(h.period)} cy={yOf(isFocus ? h.value : normVal(s, h.value))} r="3" fill={s.color}>
+                  <title>{s.m.name} · {shortP(h.period)} · {h.value.toLocaleString('ko-KR')}{s.m.unit ?? ''}{isFocus ? '' : ` (${Math.round(normVal(s, h.value))}%)`}</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })}
+        {/* x축 라벨: 처음·마지막 주기 */}
+        {periods.length > 0 && (
+          <>
+            <text x={padL} y={H - 6} className="fill-neutral-400 tabular-nums" style={{ fontSize: 9 }}>{shortP(periods[0])}</text>
+            {periods.length > 1 && <text x={W - padR} y={H - 6} textAnchor="end" className="fill-neutral-400 tabular-nums" style={{ fontSize: 9 }}>{shortP(periods[periods.length - 1])}</text>}
+          </>
+        )}
       </svg>
-      <div className="flex justify-between text-[9px] text-neutral-400 tabular-nums px-1 mt-0.5">
-        <span>{shortP(data[0].period)}</span>
-        <span className="font-semibold text-neutral-600">{last.value.toLocaleString('ko-KR')}{unit ?? ''}</span>
-        <span>{shortP(last.period)}</span>
+      {/* 범례(클릭해서 하나만 보기) */}
+      <div className="flex flex-wrap gap-1.5 mt-1.5">
+        {series.map(s => {
+          const active = !focusId || focusId === s.m.id;
+          const empty = s.hist.length === 0;
+          return (
+            <button key={s.m.id} onClick={() => onFocus(focusId === s.m.id ? null : s.m.id)}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-semibold transition-all ${active ? 'border-neutral-200 bg-white' : 'border-transparent bg-transparent opacity-40'}`}>
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+              <span className={empty ? 'text-neutral-400' : 'text-neutral-700'}>{s.m.name || '(이름 없음)'}</span>
+              {empty && <span className="text-neutral-300 text-[9px]">기록 없음</span>}
+            </button>
+          );
+        })}
       </div>
+      {focusId && <p className="text-[10px] text-neutral-400 mt-1">지표를 다시 누르면 전체 보기로 돌아가요.</p>}
+      {!isFocus && <p className="text-[10px] text-neutral-400 mt-1">전체 보기는 목표(없으면 최고 기록) 대비 <b>%</b>로 겹쳐 보여줘요.</p>}
     </div>
   );
 }
@@ -1684,7 +1748,6 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
   inputCls: string;
 }) {
   const [logVal, setLogVal] = useState('');
-  const [showGraph, setShowGraph] = useState(false);
   const period = c.measurementPeriod || '월';
   const hist = c.history ?? [];
   const doLog = () => {
@@ -1698,9 +1761,6 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
     <div className="bg-white border border-neutral-200 rounded-lg p-2 space-y-1.5">
       <div className="flex items-center gap-1">
         <input value={c.name} onChange={e => onPatch({ name: e.target.value })} placeholder="지표 (예: 월 매출)" className={`flex-1 min-w-0 font-semibold ${inputCls}`} />
-        <button onClick={() => setShowGraph(v => !v)} title="추이 그래프" className={`flex-shrink-0 transition-colors ${showGraph ? 'text-violet-500' : 'text-neutral-300 hover:text-neutral-600'}`}>
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M2 11l3-3 3 2 5-5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M2 14h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
-        </button>
         <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
       </div>
       <div className="flex items-center gap-1 flex-wrap text-[11px]">
@@ -1714,11 +1774,6 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
         <input type="number" value={logVal} onChange={e => setLogVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doLog(); }} placeholder={`이번 ${period} 값`} className={`flex-1 min-w-0 ${inputCls}`} />
         <button onClick={doLog} disabled={logVal === ''} className="text-[11px] font-semibold px-2 py-1 rounded-lg text-white bg-neutral-900 disabled:opacity-30 transition-opacity flex-shrink-0">기록</button>
       </div>
-      {showGraph && (
-        hist.length >= 2
-          ? <MiniLineChart data={hist} unit={c.unit} target={c.targetValue} />
-          : <p className="text-[10px] text-neutral-400 text-center py-2">기록이 2개 이상 쌓이면 그래프가 보여요.</p>
-      )}
     </div>
   );
 }
@@ -1751,6 +1806,8 @@ function GoalsSection({
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [chartGoals, setChartGoals] = useState<Set<string>>(new Set()); // 그래프 탭 켜진 목표
+  const [chartFocus, setChartFocus] = useState<Record<string, string | null>>({}); // 목표별 포커스 지표
   const toggle = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
     setFn(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const startEdit = (id: string, cur: string) => { setEditId(id); setEditVal(cur); };
@@ -1784,16 +1841,16 @@ function GoalsSection({
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
   const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void) => (
     <div className="flex items-start gap-2">
+      <input value={area} onChange={e => onArea(e.target.value)} placeholder={areaPh} list="spira-areas" className={`w-28 flex-shrink-0 font-semibold ${inputCls} ${done ? 'line-through text-neutral-400' : ''}`} />
+      <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
+        <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
+      </div>
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
           className={`flex-shrink-0 mt-1 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
           <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       )}
-      <input value={area} onChange={e => onArea(e.target.value)} placeholder={areaPh} list="spira-areas" className={`w-28 flex-shrink-0 font-semibold ${inputCls} ${done ? 'line-through text-neutral-400' : ''}`} />
-      <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
-        <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
-      </div>
       <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1.5">×</button>
     </div>
   );
@@ -1835,7 +1892,12 @@ function GoalsSection({
                   </button>
                   {editId !== g.id && (
                     <>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: st.bg, color: st.color }}>{st.label}</span>
+                      <input type="date" value={g.targetDate ?? ''} onClick={e => e.stopPropagation()} onChange={e => onUpdateGoal(g.id, { targetDate: e.target.value })}
+                        title="기한" className="text-[11px] text-neutral-500 border border-neutral-200 rounded-lg px-1.5 py-0.5 flex-shrink-0 outline-none focus:border-violet-400 tabular-nums" />
+                      <select value={g.status ?? 'active'} onClick={e => e.stopPropagation()} onChange={e => onUpdateGoal(g.id, { status: e.target.value as ProjectStatus })}
+                        title="상태" className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 border-0 outline-none cursor-pointer appearance-none" style={{ backgroundColor: st.bg, color: st.color }}>
+                        <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
+                      </select>
                       {aiEnabled && <AiBtn id={g.id} icon="check" label="목표 점검" onClick={() => onReviewGoal(g.id)} />}
                       {aiEnabled && <AiBtn id={g.id} icon="split" label="쪼개기" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
                       <button onClick={() => startEdit(g.id, g.name)} className="text-neutral-300 hover:text-neutral-700 text-xs transition-colors flex-shrink-0">이름 수정</button>
@@ -1844,17 +1906,12 @@ function GoalsSection({
                   )}
                 </div>
                 {projects.length > 0 && <p className="mt-1 ml-6 text-[12px] text-neutral-500 truncate">프로젝트: {projects.map(p => p.name).join(' · ')}</p>}
-                {(prog !== null || g.targetDate) && (
-                  <div className="mt-2 ml-6 flex items-center gap-2 flex-wrap">
-                    {prog !== null && (
-                      <div className="flex items-center gap-2">
-                        <div className="w-28 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#EEF1EC' }}>
-                          <div className="h-full rounded-full" style={{ width: `${Math.round(prog * 100)}%`, backgroundColor: '#5EA63A' }} />
-                        </div>
-                        <span className="text-[11px] font-semibold text-neutral-500 tabular-nums">{doneCount}/{projects.length} 완료 · {Math.round(prog * 100)}%</span>
-                      </div>
-                    )}
-                    {g.targetDate && <span className="text-[11px] text-neutral-400">📅 ~{dateShort(g.targetDate)}</span>}
+                {prog !== null && (
+                  <div className="mt-2 ml-6 flex items-center gap-2">
+                    <div className="w-28 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#EEF1EC' }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.round(prog * 100)}%`, backgroundColor: '#5EA63A' }} />
+                    </div>
+                    <span className="text-[11px] font-semibold text-neutral-500 tabular-nums">{doneCount}/{projects.length} 완료 · {Math.round(prog * 100)}%</span>
                   </div>
                 )}
               </div>
@@ -1862,34 +1919,42 @@ function GoalsSection({
               {/* 펼침: Goal 상세 + Strategy + Projects */}
               {gOpen && (
                 <div className="px-4 pb-4 pl-9 space-y-4 border-t border-neutral-100 pt-3">
-                  {/* Goal 상세 편집 (수치 목표·기한·상태) */}
-                  <div className="bg-neutral-50 rounded-xl p-3 space-y-2.5">
-                    {/* 성과 지표 (수치 목표, 선택) — 진행도는 아래 프로젝트 완료로 계산됨 */}
+                  {/* 성과 지표 — [지표] 편집 / [그래프] 추이 두 탭. 진행도는 아래 프로젝트 완료로 계산됨 */}
+                  <div className="bg-neutral-50 rounded-xl p-3">
                     {(() => {
                       const cur = (g.successCriteria ?? effectiveCriteria(g)).filter(c => c.type === 'metric');
                       const setC = (arr: SuccessCriterion[]) => onUpdateGoal(g.id, { successCriteria: arr });
                       const patch = (id: string, p: Partial<SuccessCriterion>) => setC(cur.map(c => c.id === id ? { ...c, ...p } : c));
                       const del = (id: string) => setC(cur.filter(c => c.id !== id));
                       const add = () => setC([...cur, { id: uid(), type: 'metric', name: '' }]);
+                      const isChart = chartGoals.has(g.id);
+                      const hasData = cur.some(c => (c.history ?? []).length > 0);
+                      const tabCls = (on: boolean) => `text-[11px] font-semibold px-2.5 py-1 rounded-full transition-colors ${on ? 'bg-neutral-900 text-white' : 'text-neutral-400 hover:text-neutral-700'}`;
                       return (
                         <div>
-                          <div className="flex items-center gap-1.5 mb-1"><p className="text-[11px] font-semibold text-neutral-400">성과 지표</p><Hint text="목표 수치와 입력 주기를 정하고, 주기마다 값을 '기록'하면 추이가 쌓여요. 그래프 아이콘으로 변동을 볼 수 있어요. (진행도 막대는 아래 프로젝트 완료로 계산돼요)" /></div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 items-start">
-                            {cur.map(c => (
-                              <MetricRow key={c.id} c={c} inputCls={inputCls} onPatch={p => patch(c.id, p)} onDel={() => del(c.id)} />
-                            ))}
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <p className="text-[11px] font-semibold text-neutral-400 mr-1">성과 지표</p>
+                            <button onClick={() => setChartGoals(prev => { const n = new Set(prev); n.delete(g.id); return n; })} className={tabCls(!isChart)}>지표</button>
+                            <button onClick={() => setChartGoals(prev => { const n = new Set(prev); n.add(g.id); return n; })} className={tabCls(isChart)}>그래프</button>
+                            <Hint text="목표 수치와 입력 주기를 정하고, 주기마다 값을 '기록'하면 추이가 쌓여요. '그래프' 탭에서 지표별 추이를 겹쳐 보고, 하나를 눌러 그것만 볼 수 있어요. (진행도 막대는 아래 프로젝트 완료로 계산돼요)" />
                           </div>
-                          <button onClick={add} className="mt-2 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 지표 추가</button>
+                          {isChart ? (
+                            hasData
+                              ? <MetricsChart metrics={cur} focusId={chartFocus[g.id] ?? null} onFocus={id => setChartFocus(prev => ({ ...prev, [g.id]: id }))} />
+                              : <p className="text-[11px] text-neutral-400 text-center py-8">아직 기록된 값이 없어요. ‘지표’ 탭에서 값을 기록하면 추이 그래프가 그려져요.</p>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 items-start">
+                                {cur.map(c => (
+                                  <MetricRow key={c.id} c={c} inputCls={inputCls} onPatch={p => patch(c.id, p)} onDel={() => del(c.id)} />
+                                ))}
+                              </div>
+                              <button onClick={add} className="mt-2 text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 지표 추가</button>
+                            </>
+                          )}
                         </div>
                       );
                     })()}
-                    <div className="flex items-center gap-2 flex-wrap pt-1">
-                      <label className="text-[11px] text-neutral-400">기한</label>
-                      <input type="date" value={g.targetDate ?? ''} onChange={e => onUpdateGoal(g.id, { targetDate: e.target.value })} className={inputCls} />
-                      <select value={g.status ?? 'active'} onChange={e => onUpdateGoal(g.id, { status: e.target.value as ProjectStatus })} className={inputCls}>
-                        <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
-                      </select>
-                    </div>
                   </div>
 
                   {/* Projects (진행 순서 → 화살표) */}
