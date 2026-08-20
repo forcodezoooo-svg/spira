@@ -1441,23 +1441,20 @@ export default function ProgramsPage() {
   const listPrograms = visiblePrograms.filter(p => (p.deadlines ?? []).some(dl => dl.enabled !== false));
 
   // Goals가 비어 있을 때 추천할 Plan 사업목표(프로젝트가 있는 것)
-  const planGoalsList = store.data.plan.goals ?? [];
-  const planProjectsList = store.data.plan.projects ?? [];
-  // 프로젝트가 있는 목표를 우선 추천하되, 없어도 목표 자체는 추천 (미리보기가 항상 뜨도록)
-  const recommendGoals = [...planGoalsList].sort((a, b) => {
-    const na = planProjectsList.some(p => p.goalId === a.id) ? 0 : 1;
-    const nb = planProjectsList.some(p => p.goalId === b.id) ? 0 : 1;
-    return na - nb;
-  });
+  // 모든 사업(워크스페이스)의 Plan 사업목표를 사업 정보와 함께 추천 (프로젝트 있는 목표 우선)
+  const recommendGoals = store.allWorkspacesEntries.flatMap(e =>
+    (e.plan?.goals ?? []).map(g => ({
+      goal: g, wsId: e.workspace.id, wsName: e.workspace.name,
+      projects: (e.plan?.projects ?? []).filter(p => p.goalId === g.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    })),
+  ).sort((a, b) => (a.projects.length ? 0 : 1) - (b.projects.length ? 0 : 1));
+  type RecoGoal = (typeof recommendGoals)[number];
   const shortD = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
-  const importPlanGoal = (goalId: string) => {
-    if (!wsId) return;
-    const goal = planGoalsList.find(g => g.id === goalId);
-    if (!goal) return;
-    const projects = planProjectsList.filter(p => p.goalId === goalId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const importPlanGoal = (reco: RecoGoal) => {
+    const { goal, wsId: gWsId, projects } = reco;
     // 프로젝트가 없으면 목표 자체를 하나의 데드라인으로 만들어 배치
     if (!projects.length) {
-      store.addProgramToWs(wsId, {
+      store.addProgramToWs(gWsId, {
         name: goal.name, goal: goal.statement || goal.name, color: COLORS[0], fromPlan: true,
         deadlines: [{ id: uid(), name: goal.name, date: goal.targetDate || '', startDate: goal.startDate, todos: [], enabled: true }],
       });
@@ -1502,10 +1499,15 @@ export default function ProgramsPage() {
                 </div>
                 <p className="text-[11px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>세워둔 사업목표를 로드맵으로 가져와 날짜대로 배치할까요?</p>
                 {(() => {
-                  const g = recommendGoals[0];
-                  const projs = planProjectsList.filter(p => p.goalId === g.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                  const reco = recommendGoals[0];
+                  const g = reco.goal;
+                  const projs = reco.projects;
                   return (
                     <div className="rounded-xl bg-white border p-2.5 mb-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(reco.wsId) }} />
+                        <span className="text-[10px] font-bold truncate" style={{ color: '#7A857E' }}>{reco.wsName}</span>
+                      </div>
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <span className="text-[13px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{g.name}</span>
                         {g.targetDate && <span className="text-[10px] flex-shrink-0" style={{ color: '#7A9463' }}>~{shortD(g.targetDate)}</span>}
@@ -1525,11 +1527,14 @@ export default function ProgramsPage() {
                     </div>
                   );
                 })()}
-                <button onClick={() => importPlanGoal(recommendGoals[0].id)} className="w-full py-2 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
+                <button onClick={() => importPlanGoal(recommendGoals[0])} className="w-full py-2 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
                 {recommendGoals.length > 1 && (
                   <div className="mt-2.5 flex flex-wrap gap-1">
-                    {recommendGoals.slice(1).map(g => (
-                      <button key={g.id} onClick={() => importPlanGoal(g.id)} className="text-[11px] font-semibold rounded-full px-2 py-0.5 border bg-white transition-colors hover:bg-neutral-50 truncate max-w-full" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} title={g.name}>+ {g.name}</button>
+                    {recommendGoals.slice(1).map(reco => (
+                      <button key={reco.goal.id} onClick={() => importPlanGoal(reco)} className="flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 border bg-white transition-colors hover:bg-neutral-50 max-w-full" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} title={`${reco.wsName} · ${reco.goal.name}`}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(reco.wsId) }} />
+                        <span className="truncate">{reco.goal.name}</span>
+                      </button>
                     ))}
                   </div>
                 )}
