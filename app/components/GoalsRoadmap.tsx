@@ -48,6 +48,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [scale, setScale] = useState<Scale>('month');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null); // enterLevel 시 스크롤 목표 날짜
   const [visLabel, setVisLabel] = useState('');
   const [notPlaced, setNotPlaced] = useState<string | null>(null);
   const [offOpen, setOffOpen] = useState(false);
@@ -64,6 +65,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const cfg = CFG[scale];
   const isDayScale = scale === 'day' || scale === 'hour';
+  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : 3; // 스케일별 표시 최대 depth
+  const LEVEL_SCALE: Scale[] = ['year', 'month', 'week', 'day']; // 0=사업목표→연, 1=프로젝트→월, 2=산출물→주, 3=task→일
 
   // ── 표시 범위(연속) ──
   const allDates: string[] = [];
@@ -169,12 +172,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }, [calDrag?.key, calDrag?.mode]);
   useEffect(() => { if (!notPlaced) return; const t = setTimeout(() => setNotPlaced(null), 2800); return () => clearTimeout(t); }, [notPlaced]);
 
-  // 초기/스케일 변경 시 오늘로 스크롤
-  useEffect(() => { const el = scrollRef.current; if (!el) return; el.scrollLeft = Math.max(0, xOf(todayStr) - el.clientWidth / 2); updateVisLabel(el); /* eslint-disable-next-line */ }, [scale]);
+  // 초기/스케일 변경 시: enterLevel 목표가 있으면 그곳으로, 없으면 오늘로 스크롤
+  useEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    const t = scrollTarget || todayStr;
+    el.scrollTo({ left: Math.max(0, xOf(t) - el.clientWidth / 2), behavior: scrollTarget ? 'smooth' : 'auto' });
+    updateVisLabel(el);
+    if (scrollTarget) setScrollTarget(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale, scrollTarget]);
   const fmtVis = (d: string) => { const dd = new Date(d); return scale === 'year' ? `${dd.getFullYear()}년` : scale === 'week' || scale === 'day' || scale === 'hour' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
   const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / cfg.pxPerDay), 0, span - 1); setVisLabel(fmtVis(addDaysStr(rangeStart, di))); };
   const scrollByScreen = (dir: -1 | 1) => { const el = scrollRef.current; if (!el) return; el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' }); };
   const scrollToToday = () => { const el = scrollRef.current; if (!el) return; el.scrollTo({ left: Math.max(0, xOf(todayStr) - el.clientWidth / 2), behavior: 'smooth' }); };
+  // 라벨 텍스트 클릭 → 그 단계의 카테고리(스케일)로 전환 + 그 항목으로 스크롤 (하위는 스케일이 자동으로 가림)
+  const enterLevel = (r: Row) => { setSelectedKey(r.key); setScale(LEVEL_SCALE[r.level]); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
@@ -184,17 +196,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
     const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
     const pp = progPeriod(p);
-    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: dls.length > 0, wsId: p.wsId, programId: p.id, pgKey });
-    if (collapsed.has(pgKey)) continue;
+    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: dls.length > 0 && maxDepth > 0, wsId: p.wsId, programId: p.id, pgKey });
+    if (maxDepth < 1 || collapsed.has(pgKey)) continue;
     for (const dl of dls) {
       const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl); const todos = dl.todos.filter(t => !t.done);
-      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: todos.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
-      if (collapsed.has(dKey)) continue;
+      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: todos.length > 0 && maxDepth > 1, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
+      if (maxDepth < 2 || collapsed.has(dKey)) continue;
       for (const t of todos) {
         const tKey = `t-${t.id}`; const subs = (t.subtasks ?? []).filter(s => !s.done);
         const ts = t.date || t.deadline, te = t.deadline || t.date;
-        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: subs.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
-        if (collapsed.has(tKey)) continue;
+        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: subs.length > 0 && maxDepth > 2, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
+        if (maxDepth < 3 || collapsed.has(tKey)) continue;
         for (const s of subs) { const ss = s.date || s.deadline, se = s.deadline || s.date; rows.push({ key: `s-${s.id}`, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey }); }
       }
     }
@@ -271,7 +283,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
-  const barH = (lvl: number) => lvl === 1 ? 24 : lvl === 2 ? 20 : 16;
+  const barH = (lvl: number) => lvl === 0 ? 24 : lvl === 1 ? 24 : lvl === 2 ? 20 : 16;
   const pgOrder = new Map<string, number>(); programs.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
 
   return (
@@ -341,7 +353,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               return (
                 <div key={r.key} data-rm-row={r.key} className="flex" style={{ height: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div
-                    onClick={() => setSelectedKey(sel ? null : r.key)}
+                    onClick={() => enterLevel(r)}
                     className="group sticky left-0 z-10 flex items-center gap-1 pr-2 border-b cursor-pointer"
                     style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15, borderColor: '#F4F4F0', backgroundColor: sel ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
                     draggable={r.level > 0 && !placed}
@@ -357,22 +369,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     <button onClick={e => { e.stopPropagation(); delRow(r); }} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
-                    {placed && (r.level === 0 ? (
-                      <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left, width }}>
-                        <div className="h-[3px] rounded-full" style={{ backgroundColor: r.color }} />
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-2.5 rounded" style={{ backgroundColor: r.color }} />
-                        <span className="absolute right-0 top-1/2 -translate-y-1/2 w-[3px] h-2.5 rounded" style={{ backgroundColor: r.color }} />
-                      </div>
-                    ) : (
+                    {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-grab active:cursor-grabbing overflow-visible"
-                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 1 ? '2E' : r.level === 2 ? '1C' : '14'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 10 : undefined }}
-                        title={`${r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}>
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none" style={{ fontSize: r.level === 1 ? 11 : 10, fontWeight: r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
-                        <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} className="absolute -left-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
-                        <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} className="absolute -right-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
-                        <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearSchedule(r); }} className="absolute -right-1.5 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="일정만 삭제(내용 유지)">×</button>
+                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : '14'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 10 : undefined }}
+                        title={`${r.name} — 드래그로 이동${r.level > 0 ? ', 양끝을 잡아 기간 조절' : ''}`}>
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none" style={{ fontSize: r.level <= 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
+                        {r.level > 0 && <>
+                          <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} className="absolute -left-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
+                          <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} className="absolute -right-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
+                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearSchedule(r); }} className="absolute -right-1.5 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="일정만 삭제(내용 유지)">×</button>
+                        </>}
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               );
