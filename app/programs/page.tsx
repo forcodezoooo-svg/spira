@@ -1483,126 +1483,65 @@ export default function ProgramsPage() {
       {/* 상단: 주간 업무시간 타임테이블 */}
       <div className="flex-shrink-0"><WorkHoursPanel /></div>
 
-      <div className="flex gap-4 flex-1 min-h-0">
-      {/* 좌측: 계획된 업무 리스트 (좁게) */}
-      <aside className="w-[300px] shrink-0 flex flex-col min-h-0">
-        <h1 className="text-[22px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>Goals</h1>
-        <p className="text-[12px] mt-1 mb-3" style={{ color: '#9AA39D' }}>계획된 업무를 오른쪽 로드맵으로 끌어 배치하세요.</p>
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
-          {listPrograms.length === 0 ? (
-            recommendGoals.length > 0 ? (
-              /* 추천: Plan 사업목표를 가져오기 미리보기 */
-              <div className="rounded-2xl border p-3" style={{ borderColor: '#BCE89A', backgroundColor: '#F8FBF3' }}>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" style={{ color: '#5EA63A' }}><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  <span className="text-[13px] font-black" style={{ color: '#16211E' }}>Plan 목표 가져오기</span>
-                </div>
-                <p className="text-[11px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>세워둔 사업목표를 로드맵으로 가져와 날짜대로 배치할까요?</p>
-                {(() => {
-                  const reco = recommendGoals[0];
-                  const g = reco.goal;
-                  const projs = reco.projects;
-                  return (
-                    <div className="rounded-xl bg-white border p-2.5 mb-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(reco.wsId) }} />
-                        <span className="text-[10px] font-bold truncate" style={{ color: '#7A857E' }}>{reco.wsName}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className="text-[13px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{g.name}</span>
-                        {g.targetDate && <span className="text-[10px] flex-shrink-0" style={{ color: '#7A9463' }}>~{shortD(g.targetDate)}</span>}
-                      </div>
-                      {projs.length > 0 ? (
-                        <ul className="space-y-1">
-                          {projs.map(p => (
-                            <li key={p.id} className="text-[11px] leading-tight" style={{ color: '#5B6560' }}>
-                              <span className="font-semibold">· {p.name}</span>
-                              <span style={{ color: '#9AA39D' }}> {p.startDate && (p.endDate || p.deadline) ? `(${shortD(p.startDate)}~${shortD(p.endDate || p.deadline)})` : ''} 산출물 {(p.areaDeliverables?.length ?? 0)}개</span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-[10px]" style={{ color: '#9AA39D' }}>프로젝트 없음 · 목표만 배치돼요</p>
-                      )}
+      <div className="flex-1 min-h-0">
+        {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
+          /* 비어 있을 때: Plan 사업목표 가져오기 추천 */
+          <div className="bg-white border rounded-[24px] h-full overflow-y-auto p-8 flex flex-col items-center justify-center text-center" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
+            <div className="w-full max-w-[520px]">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#EEF7E4' }}>
+                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" style={{ color: '#5EA63A' }}><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </div>
+              <h2 className="text-[20px] font-black mb-1.5" style={{ color: '#16211E' }}>Plan의 사업목표를 가져올까요?</h2>
+              <p className="text-[13px] leading-relaxed mb-5" style={{ color: '#5B6560' }}>세워둔 사업목표와 그 안의 프로젝트·산출물을 로드맵으로 가져와 날짜대로 배치해 드릴게요.</p>
+              {(() => {
+                const reco = recommendGoals[0];
+                const g = reco.goal;
+                const projs = reco.projects;
+                return (
+                  <div className="rounded-2xl border text-left p-4 mb-4" style={{ borderColor: '#BCE89A', backgroundColor: '#F8FBF3' }}>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(reco.wsId) }} />
+                      <span className="text-[11px] font-bold" style={{ color: '#7A857E' }}>{reco.wsName}</span>
                     </div>
-                  );
-                })()}
-                <button onClick={() => importPlanGoal(recommendGoals[0])} className="w-full py-2 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
-                {recommendGoals.length > 1 && (
-                  <div className="mt-2.5 flex flex-wrap gap-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{g.name}</span>
+                      {g.targetDate && <span className="text-[11px] flex-shrink-0" style={{ color: '#7A9463' }}>📅 ~{shortD(g.targetDate)}</span>}
+                    </div>
+                    {projs.length > 0 ? (
+                      <ul className="space-y-1">
+                        {projs.map(p => (
+                          <li key={p.id} className="flex items-center gap-2 text-[12px]" style={{ color: '#5B6560' }}>
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#5EA63A' }} />
+                            <span className="font-semibold truncate">{p.name}</span>
+                            <span className="flex-shrink-0" style={{ color: '#9AA39D' }}>{p.startDate && (p.endDate || p.deadline) ? `${shortD(p.startDate)}~${shortD(p.endDate || p.deadline)}` : '날짜 미정'} · 산출물 {(p.areaDeliverables?.length ?? 0)}개</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px]" style={{ color: '#9AA39D' }}>프로젝트 없음 · 목표만 배치돼요</p>
+                    )}
+                  </div>
+                );
+              })()}
+              <button onClick={() => importPlanGoal(recommendGoals[0])} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
+              {recommendGoals.length > 1 && (
+                <div className="mt-4">
+                  <p className="text-[11px] mb-1.5" style={{ color: '#9AA39D' }}>다른 목표도 가져올 수 있어요</p>
+                  <div className="flex flex-wrap justify-center gap-1.5">
                     {recommendGoals.slice(1).map(reco => (
-                      <button key={reco.goal.id} onClick={() => importPlanGoal(reco)} className="flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 py-0.5 border bg-white transition-colors hover:bg-neutral-50 max-w-full" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} title={`${reco.wsName} · ${reco.goal.name}`}>
+                      <button key={reco.goal.id} onClick={() => importPlanGoal(reco)} className="flex items-center gap-1 text-[12px] font-semibold rounded-full px-2.5 py-1 border bg-white transition-colors hover:bg-neutral-50 max-w-full" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} title={`${reco.wsName} · ${reco.goal.name}`}>
                         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(reco.wsId) }} />
                         <span className="truncate">{reco.goal.name}</span>
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-[13px] leading-relaxed" style={{ color: '#9AA39D' }}>계획된 업무가 없어요.<br />Plan에서 사업목표·프로젝트를 먼저 만들어보세요.</p>
-            )
-          ) : listPrograms.map(p => {
-            const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
-            if (!dls.length) return null;
-            return (
-              <div key={p.id}>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
-                  <span className="text-[12px] font-bold truncate" style={{ color: '#5B6560' }}>{p.name}</span>
                 </div>
-                <div className="space-y-1">
-                  {dls.map(dl => {
-                    const dp = dlPeriod(p, dl);
-                    const placed = !!dl.date;
-                    const focused = previewTask?.name === dl.name;
-                    return (
-                      <div key={dl.id}>
-                        <div
-                          draggable
-                          onDragStart={e => startListDrag({ level: 'deadline', wsId: p.wsId, programId: p.id, deadlineId: dl.id }, e)}
-                          onClick={() => focusCal('deadline', `d-${dl.id}`, dp?.start, dp?.end, dl.name)}
-                          className="group flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing transition-colors hover:bg-neutral-50"
-                          style={focused ? { backgroundColor: '#F3F0FF' } : undefined}
-                        >
-                          <span className="text-[13px] font-semibold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{dl.name}</span>
-                          <span className="text-[10px] flex-shrink-0 font-semibold" style={{ color: placed ? '#7A9463' : '#C4A24A' }}>{placed ? shortDate(dl.date) : '미배치'}</span>
-                        </div>
-                        {dl.todos.filter(t => !t.done).length > 0 && (
-                          <div className="ml-3 mt-0.5 space-y-0.5">
-                            {dl.todos.filter(t => !t.done).map(t => {
-                              const tPlaced = !!(t.date || t.deadline);
-                              const tFocused = previewTask?.name === t.name && !editingTodoId;
-                              return (
-                                <div key={t.id}
-                                  draggable
-                                  onDragStart={e => startListDrag({ level: 'todo', wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id }, e)}
-                                  onClick={() => focusCal('todo', `t-${t.id}`, t.date || t.deadline, t.deadline || t.date, t.name)}
-                                  className="flex items-center gap-2 rounded-md px-2 py-1 cursor-grab active:cursor-grabbing transition-colors hover:bg-neutral-50"
-                                  style={tFocused ? { backgroundColor: '#F3F0FF' } : undefined}
-                                >
-                                  <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: '#C4CCC4' }} />
-                                  <span className="text-[12px] truncate flex-1 min-w-0" style={{ color: '#5B6560' }}>{t.name}</span>
-                                  {!tPlaced && <span className="text-[9px] flex-shrink-0" style={{ color: '#C4A24A' }}>미배치</span>}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </aside>
-
-      {/* 우측: 간트차트 로드맵 (화면 꽉 차게) */}
-      <div className="flex-1 min-w-0 min-h-0">
-        <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
-      </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
+        )}
       </div>
 
       {flagAward && <FlagAward flagSrc={flagAward.flagSrc} heading={flagAward.heading} sub={flagAward.sub} foot={flagAward.foot} onClose={() => setFlagAward(null)} />}
