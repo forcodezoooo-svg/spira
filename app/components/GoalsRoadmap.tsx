@@ -9,11 +9,11 @@ import type { Program } from '../lib/types';
 // 큰 '추가' 버튼은 현재 스케일에 맞는 depth로 항목을 추가(부모=선택 항목 계보). (Goals 전용)
 
 type Scale = 'year' | 'month' | 'week' | 'day' | 'hour';
-type Lvl = 'program' | 'deadline' | 'todo' | 'subtask';
+type Lvl = 'program' | 'deadline' | 'todo' | 'subtask' | 'unit';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
-type Payload = { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string };
-type Row = { key: string; level: 0 | 1 | 2 | 3; kind: Lvl; name: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; pgKey: string };
+type Payload = { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string };
+type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string };
 
 export interface GoalsRoadmapHandle { focus: (level: Lvl, key: string, start?: string, end?: string, name?: string) => void; startListDrag: (payload: Payload, e: React.DragEvent) => void; }
 interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string } | null; cardClassName?: string; }
@@ -23,7 +23,7 @@ const ROW_H = 34;
 const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주'], ['day', '일'], ['hour', '시']];
-const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물', day: 'task', hour: 'task' };
+const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물', day: 'task', hour: '세부 작업' };
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
   year: { pxPerDay: 4, buffer: 400, minSpan: 3660 },   // ±5년
@@ -57,26 +57,27 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offOpen, setOffOpen] = useState(false);
   const [offStart, setOffStart] = useState('');
   const [offEnd, setOffEnd] = useState('');
-  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : 3; // 스케일별 기본 표시 depth
+  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : scale === 'day' ? 3 : 4; // 스케일별 기본 표시 depth (연0~시4)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
   const toggleOpen = (key: string, level: number) => setOpenMap(prev => { const n = new Map(prev); n.set(key, !(prev.has(key) ? prev.get(key)! : level < maxDepth)); return n; });
 
-  type DragTarget = { key: string; level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; start: string; end: string };
+  type DragTarget = { key: string; level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; start: string; end: string };
   const [calDrag, setCalDrag] = useState<(DragTarget & { mode: 'move' | 'resize-start' | 'resize-end'; grabDate: string; origStart: string; origEnd: string }) | null>(null);
   const calDragRef = useRef(calDrag); calDragRef.current = calDrag;
+  const movedRef = useRef(false); // 막대 드래그가 실제로 이동했는지(클릭과 구분)
   const dragPayloadRef = useRef<Payload | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const cfg = CFG[scale];
   const isDayScale = scale === 'day' || scale === 'hour';
-  const LEVEL_SCALE: Scale[] = ['year', 'month', 'week', 'day']; // 0=사업목표→연, 1=프로젝트→월, 2=산출물→주, 3=task→일
+  const LEVEL_SCALE: Scale[] = ['year', 'month', 'week', 'day', 'hour']; // 0=목표→연,1=프로젝트→월,2=산출물→주,3=task→일,4=세부→시
 
   // ── 표시 범위(연속) ──
   const allDates: string[] = [];
   for (const p of programs) for (const dl of (p.deadlines ?? [])) {
     if (dl.startDate) allDates.push(dl.startDate); if (dl.date) allDates.push(dl.date);
-    for (const t of dl.todos) { if (t.date) allDates.push(t.date); if (t.deadline) allDates.push(t.deadline); for (const s of (t.subtasks ?? [])) { if (s.date) allDates.push(s.date); if (s.deadline) allDates.push(s.deadline); } }
+    for (const t of dl.todos) { if (t.date) allDates.push(t.date); if (t.deadline) allDates.push(t.deadline); for (const s of (t.subtasks ?? [])) { if (s.date) allDates.push(s.date); if (s.deadline) allDates.push(s.deadline); for (const u of (s.units ?? [])) { if (u.date) allDates.push(u.date); if (u.deadline) allDates.push(u.deadline); } } }
   }
   let lo = todayStr, hi = todayStr;
   if (allDates.length) { const sorted = [...allDates, todayStr].sort(); lo = sorted[0]; hi = sorted[sorted.length - 1]; }
@@ -94,11 +95,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // ── 배치 범위 제한 ──
   type Bounds = { min?: string; max?: string };
   const findProg = (wsId: string, programId: string) => store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.programs.find(x => x.id === programId);
-  const boundsForTarget = (t: { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string }): Bounds | null => {
+  const boundsForTarget = (t: { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string }): Bounds | null => {
     const p = findProg(t.wsId, t.programId);
     if (t.level === 'deadline') return { min: p?.startDate || undefined, max: p?.deadline || undefined };
     if (t.level === 'todo') { const dl = p?.deadlines?.find(d => d.id === t.deadlineId); return { min: dl?.startDate || undefined, max: dl?.date || undefined }; }
     if (t.level === 'subtask') { const td = p?.deadlines?.find(d => d.id === t.deadlineId)?.todos.find(x => x.id === t.todoId); return { min: td?.date || undefined, max: td?.deadline || undefined }; }
+    if (t.level === 'unit') { const st = p?.deadlines?.find(d => d.id === t.deadlineId)?.todos.find(x => x.id === t.todoId)?.subtasks?.find(x => x.id === t.subtaskId); return { min: st?.date || undefined, max: st?.deadline || undefined }; }
     return null;
   };
   const clampRange = (mode: 'move' | 'resize-start' | 'resize-end', start: string, end: string, bounds: Bounds | null) => {
@@ -115,14 +117,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(d.wsId, d.programId); if (!prog) return;
     const delta = daysBetween(d.origEnd, d.end);
     const shift = (x?: string) => (x ? addDaysStr(x, delta) : x);
-    if (d.level === 'program') { store.updateProgramInWs(d.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => ({ ...dl, date: shift(dl.date) ?? dl.date, startDate: shift(dl.startDate), todos: dl.todos.map(t => ({ ...t, date: shift(t.date), deadline: shift(t.deadline), subtasks: (t.subtasks ?? []).map(s => ({ ...s, date: shift(s.date), deadline: shift(s.deadline) })) })) })) }); return; }
+    const shSub = (s: NonNullable<Deadline['todos'][number]['subtasks']>[number]) => ({ ...s, date: shift(s.date), deadline: shift(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: shift(u.date), deadline: shift(u.deadline) })) });
+    if (d.level === 'program') { store.updateProgramInWs(d.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => ({ ...dl, date: shift(dl.date) ?? dl.date, startDate: shift(dl.startDate), todos: dl.todos.map(t => ({ ...t, date: shift(t.date), deadline: shift(t.deadline), subtasks: (t.subtasks ?? []).map(shSub) })) })) }); return; }
     const deadlines = (prog.deadlines ?? []).map(dl => {
       if (dl.id !== d.deadlineId) return dl;
-      if (d.level === 'deadline') { if (d.mode === 'move') return { ...dl, date: d.end, startDate: d.start, todos: dl.todos.map(t => ({ ...t, date: shift(t.date), deadline: shift(t.deadline), subtasks: (t.subtasks ?? []).map(s => ({ ...s, date: shift(s.date), deadline: shift(s.deadline) })) })) }; if (d.mode === 'resize-end') return { ...dl, date: d.end }; return { ...dl, startDate: d.start }; }
+      if (d.level === 'deadline') { if (d.mode === 'move') return { ...dl, date: d.end, startDate: d.start, todos: dl.todos.map(t => ({ ...t, date: shift(t.date), deadline: shift(t.deadline), subtasks: (t.subtasks ?? []).map(shSub) })) }; if (d.mode === 'resize-end') return { ...dl, date: d.end }; return { ...dl, startDate: d.start }; }
       return { ...dl, todos: dl.todos.map(t => {
         if (t.id !== d.todoId) return t;
-        if (d.level === 'todo') { if (d.mode === 'move') return { ...t, date: d.start, deadline: d.end, subtasks: (t.subtasks ?? []).map(s => ({ ...s, date: shift(s.date), deadline: shift(s.deadline) })) }; if (d.mode === 'resize-end') return { ...t, deadline: d.end }; return { ...t, date: d.start }; }
-        return { ...t, subtasks: (t.subtasks ?? []).map(s => { if (s.id !== d.subtaskId) return s; if (d.mode === 'move') return { ...s, date: d.start, deadline: d.end }; if (d.mode === 'resize-end') return { ...s, deadline: d.end }; return { ...s, date: d.start }; }) };
+        if (d.level === 'todo') { if (d.mode === 'move') return { ...t, date: d.start, deadline: d.end, subtasks: (t.subtasks ?? []).map(shSub) }; if (d.mode === 'resize-end') return { ...t, deadline: d.end }; return { ...t, date: d.start }; }
+        return { ...t, subtasks: (t.subtasks ?? []).map(s => {
+          if (s.id !== d.subtaskId) return s;
+          if (d.level === 'subtask') { if (d.mode === 'move') return { ...s, date: d.start, deadline: d.end, units: (s.units ?? []).map(u => ({ ...u, date: shift(u.date), deadline: shift(u.deadline) })) }; if (d.mode === 'resize-end') return { ...s, deadline: d.end }; return { ...s, date: d.start }; }
+          return { ...s, units: (s.units ?? []).map(u => { if (u.id !== d.unitId) return u; if (d.mode === 'move') return { ...u, date: d.start, deadline: d.end }; if (d.mode === 'resize-end') return { ...u, deadline: d.end }; return { ...u, date: d.start }; }) };
+        }) };
       }) };
     });
     store.updateProgramInWs(d.wsId, { ...prog, deadlines });
@@ -130,8 +137,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const startCalDrag = (r: Row, mode: 'move' | 'resize-start' | 'resize-end', e: React.MouseEvent) => {
     if (!r.start || !r.end) return;
     e.preventDefault(); e.stopPropagation();
+    movedRef.current = false;
     const grab = dateFromClientX(e.clientX) || r.start;
-    setCalDrag({ key: r.key, level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, start: r.start, end: r.end, mode, grabDate: grab, origStart: r.start, origEnd: r.end });
+    setCalDrag({ key: r.key, level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId, start: r.start, end: r.end, mode, grabDate: grab, origStart: r.start, origEnd: r.end });
   };
 
   const dropOnDate = (payload: Payload, date: string) => {
@@ -143,7 +151,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       return { ...dl, date: dl.date && dl.date > date ? dl.date : date, startDate: dl.startDate && date < dl.startDate ? date : dl.startDate, todos: dl.todos.map(t => {
         if (t.id !== payload.todoId) return t;
         if (payload.level === 'todo') return { ...t, date, deadline: date };
-        return { ...t, date: t.date && t.date > date ? t.date : date, deadline: t.deadline && t.deadline > date ? t.deadline : date, subtasks: (t.subtasks ?? []).map(s => s.id === payload.subtaskId ? { ...s, date, deadline: date } : s) };
+        return { ...t, date: t.date && t.date > date ? t.date : date, deadline: t.deadline && t.deadline > date ? t.deadline : date, subtasks: (t.subtasks ?? []).map(s => {
+          if (s.id !== payload.subtaskId) return s;
+          if (payload.level === 'subtask') return { ...s, date, deadline: date };
+          return { ...s, date: s.date && s.date > date ? s.date : date, deadline: s.deadline && s.deadline > date ? s.deadline : date, units: (s.units ?? []).map(u => u.id === payload.unitId ? { ...u, date, deadline: date } : u) };
+        }) };
       }) };
     });
     store.updateProgramInWs(payload.wsId, { ...prog, deadlines });
@@ -165,6 +177,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (!calDrag) return;
     const onMove = (e: MouseEvent) => {
       const ds = dateFromClientX(e.clientX); if (!ds) return;
+      if (calDragRef.current && ds !== calDragRef.current.grabDate) movedRef.current = true;
       setCalDrag(prev => { if (!prev) return prev; let next: { start: string; end: string };
         if (prev.mode === 'resize-start') next = { start: ds <= prev.origEnd ? ds : prev.origEnd, end: prev.origEnd };
         else if (prev.mode === 'resize-end') next = { start: prev.origStart, end: ds >= prev.origStart ? ds : prev.origStart };
@@ -195,7 +208,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const enterLevel = (r: Row) => { setSelectedKey(r.key); setOpenMap(new Map()); setScale(LEVEL_SCALE[r.level]); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
-  const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
+  const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
   const dlPeriod = (p: CalProgram, dl: Deadline) => { if (!dl.date) { const ts = dl.todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = dl.todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
   const rows: Row[] = [];
   for (const p of programs) {
@@ -213,7 +226,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         const ts = t.date || t.deadline, te = t.deadline || t.date;
         rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: subs.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
         if (!isOpen(tKey, 2)) continue;
-        for (const s of subs) { const ss = s.date || s.deadline, se = s.deadline || s.date; rows.push({ key: `s-${s.id}`, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey }); }
+        for (const s of subs) {
+          const sKey = `s-${s.id}`; const units = (s.units ?? []).filter(u => !u.done);
+          const ss = s.date || s.deadline, se = s.deadline || s.date;
+          rows.push({ key: sKey, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: units.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey });
+          if (!isOpen(sKey, 3)) continue;
+          for (const u of units) { const us = u.date || u.deadline, ue = u.deadline || u.date; rows.push({ key: `u-${u.id}`, level: 4, kind: 'unit', name: u.name, start: us && ue ? (us > ue ? ue : us) : undefined, end: ue || us, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, unitId: u.id, pgKey }); }
+        }
       }
     }
   }
@@ -222,15 +241,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   // ── 항목 추가 (스케일별 depth, 부모=선택 계보) ──
   const resolveChain = (key: string | null) => {
-    if (!key) return {} as { program?: CalProgram; deadlineId?: string; todoId?: string };
+    if (!key) return {} as { program?: CalProgram; deadlineId?: string; todoId?: string; subtaskId?: string };
     for (const p of programs) { if (key === `p-${p.id}`) return { program: p };
       for (const dl of (p.deadlines ?? [])) { if (key === `d-${dl.id}`) return { program: p, deadlineId: dl.id };
         for (const t of dl.todos) { if (key === `t-${t.id}`) return { program: p, deadlineId: dl.id, todoId: t.id };
-          for (const s of (t.subtasks ?? [])) if (key === `s-${s.id}`) return { program: p, deadlineId: dl.id, todoId: t.id }; } } }
+          for (const s of (t.subtasks ?? [])) { if (key === `s-${s.id}`) return { program: p, deadlineId: dl.id, todoId: t.id, subtaskId: s.id };
+            for (const u of (s.units ?? [])) if (key === `u-${u.id}`) return { program: p, deadlineId: dl.id, todoId: t.id, subtaskId: s.id }; } } } }
     return {};
   };
   const addAtScale = () => {
-    const L = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : 3;
+    const L = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : scale === 'day' ? 3 : 4;
     const chain = resolveChain(selectedKey);
     if (L === 0) { const name = window.prompt('사업목표 이름')?.trim(); if (!name) return; const wsId = store.data.workspace?.id; if (!wsId) return; store.addProgramToWs(wsId, { name, goal: name, color: businessColor(wsId), fromPlan: true, deadlines: [] }); return; }
     const prog = chain.program ?? programs[0];
@@ -242,8 +262,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const dl = prog.deadlines?.find(d => d.id === dlId);
     const tdId = chain.todoId ?? dl?.todos.find(t => !t.done)?.id;
     if (!tdId) { window.alert('먼저 영역별 산출물을 추가하세요.'); return; }
-    const name = window.prompt('task 이름')?.trim(); if (!name) return;
-    store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === tdId ? { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] } : t) } : d) });
+    if (L === 3) { const name = window.prompt('task 이름')?.trim(); if (!name) return; store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === tdId ? { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] } : t) } : d) }); return; }
+    const td = dl?.todos.find(t => t.id === tdId);
+    const stId = chain.subtaskId ?? td?.subtasks?.find(s => !s.done)?.id;
+    if (!stId) { window.alert('먼저 task를 추가하세요.'); return; }
+    const name = window.prompt('세부 작업 이름')?.trim(); if (!name) return;
+    store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === tdId ? { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === stId ? { ...s, units: [...(s.units ?? []), { id: uid(), name, done: false }] } : s) } : t) } : d) });
   };
   const delRow = (r: Row) => {
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
@@ -255,7 +279,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       return [{ ...dl, todos: dl.todos.flatMap(t => {
         if (t.id !== r.todoId) return [t];
         if (r.kind === 'todo') return [];
-        return [{ ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== r.subtaskId) }];
+        return [{ ...t, subtasks: (t.subtasks ?? []).flatMap(s => {
+          if (s.id !== r.subtaskId) return [s];
+          if (r.kind === 'subtask') return [];
+          return [{ ...s, units: (s.units ?? []).filter(u => u.id !== r.unitId) }];
+        }) }];
       }) }];
     }) });
   };
@@ -267,7 +295,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       return { ...dl, todos: dl.todos.map(t => {
         if (t.id !== r.todoId) return t;
         if (r.kind === 'todo') return { ...t, date: undefined, deadline: undefined };
-        return { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === r.subtaskId ? { ...s, date: undefined, deadline: undefined } : s) };
+        return { ...t, subtasks: (t.subtasks ?? []).map(s => {
+          if (s.id !== r.subtaskId) return s;
+          if (r.kind === 'subtask') return { ...s, date: undefined, deadline: undefined };
+          return { ...s, units: (s.units ?? []).map(u => u.id === r.unitId ? { ...u, date: undefined, deadline: undefined } : u) };
+        }) };
       }) };
     }) });
   };
@@ -289,7 +321,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
-  const barH = (lvl: number) => lvl === 0 ? 24 : lvl === 1 ? 24 : lvl === 2 ? 20 : 16;
+  const barH = (lvl: number) => lvl === 0 ? 24 : lvl === 1 ? 24 : lvl === 2 ? 20 : lvl === 3 ? 17 : 15;
   const pgOrder = new Map<string, number>(); programs.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
 
   return (
@@ -363,7 +395,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
                     style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15, borderColor: '#F4F4F0', backgroundColor: sel ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
                     draggable={r.level > 0 && !placed}
-                    onDragStart={r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId }, e); } : undefined}
+                    onDragStart={r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, e); } : undefined}
                     title={!placed && r.level > 0 ? '드래그해서 타임라인에 배치' : r.name}
                   >
                     {r.hasChildren ? (
@@ -376,14 +408,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
-                      <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-grab active:cursor-grabbing overflow-visible"
-                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : '14'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 5 : 1 }}
-                        title={`${r.name} — 드래그로 이동${r.level > 0 ? ', 양끝을 잡아 기간 조절' : ''}`}>
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none" style={{ fontSize: r.level <= 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
+                      <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
+                        className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-pointer overflow-hidden"
+                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : r.level === 3 ? '16' : '12'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 5 : 1 }}
+                        title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동${r.level > 0 ? ' · 양끝: 기간 조절' : ''}`}>
+                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level <= 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
                         {r.level > 0 && <>
-                          <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} className="absolute -left-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
-                          <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} className="absolute -right-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
-                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearSchedule(r); }} className="absolute -right-1.5 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="일정만 삭제(내용 유지)">×</button>
+                          <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
+                          <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
+                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearSchedule(r); }} className="absolute right-0.5 top-0.5 z-30 w-3.5 h-3.5 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[9px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="일정만 삭제(내용 유지)">×</button>
                         </>}
                       </div>
                     )}

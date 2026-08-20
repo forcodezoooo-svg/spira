@@ -183,12 +183,20 @@ export interface TodoRecord {
 }
 
 // 데드라인 내 할일 (depth 3)
-export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위 세부 작업(task)
+export interface ProgramUnit {      // 5단계: task 하위 세부 작업 (시간 단위)
+  id: string;
+  name: string;
+  done: boolean;
+  date?: string;
+  deadline?: string;
+}
+export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위 task
   id: string;
   name: string;
   done: boolean;
   date?: string;     // 시작 날짜 YYYY-MM-DD
   deadline?: string; // 완수 기한 YYYY-MM-DD
+  units?: ProgramUnit[]; // 하위 세부 작업 (시간 단위)
 }
 export interface ProgramTodo {
   id: string;
