@@ -1782,10 +1782,16 @@ function GoalsSection({
     );
   };
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
-  const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string) => (
+  const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void) => (
     <div className="flex items-start gap-2">
-      <input value={area} onChange={e => onArea(e.target.value)} placeholder={areaPh} list="spira-areas" className={`w-28 flex-shrink-0 font-semibold ${inputCls}`} />
-      <div className="flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5">
+      {onToggle && (
+        <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
+          className={`flex-shrink-0 mt-1 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
+          <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      )}
+      <input value={area} onChange={e => onArea(e.target.value)} placeholder={areaPh} list="spira-areas" className={`w-28 flex-shrink-0 font-semibold ${inputCls} ${done ? 'line-through text-neutral-400' : ''}`} />
+      <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
         <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
       </div>
       <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1.5">×</button>
@@ -1933,7 +1939,7 @@ function GoalsSection({
                                     </select>
                                   </div>
                                   <div>
-                                    <label className="text-[10px] font-semibold text-neutral-400 block mb-1">업무 영역별 산출물</label>
+                                    <label className="text-[10px] font-semibold text-neutral-400 block mb-1">업무 영역별 산출물{(() => { const ads = p.areaDeliverables ?? []; const d = ads.filter(x => x.done).length; return ads.length ? ` · ${d}/${ads.length} 완료` : ''; })()}</label>
                                     <div className="space-y-1.5">
                                       {(p.areaDeliverables ?? []).map(a => areaRow(
                                         a.area, a.content,
@@ -1941,6 +1947,8 @@ function GoalsSection({
                                         v => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, content: v } : x) }),
                                         () => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).filter(x => x.id !== a.id) }),
                                         '업무 영역', '이 영역의 결과물',
+                                        a.done,
+                                        () => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, done: !x.done } : x) }),
                                       ))}
                                       <button onClick={() => onUpdateProject(p.id, { areaDeliverables: [...(p.areaDeliverables ?? []), { id: uid(), area: '', content: '' }] })}
                                         className="w-full py-1.5 rounded-lg border-2 border-dashed border-neutral-200 text-[12px] text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물</button>

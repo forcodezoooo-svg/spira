@@ -90,6 +90,7 @@ export interface AreaDeliverable {   // 3단계: 업무 영역별 산출물
   id: string;
   area: string;    // 업무 영역 이름
   content: string; // 그 영역의 산출물
+  done?: boolean;  // 완료 여부
 }
 export interface Deliverable {        // 2단계: 산출물
   id: string;
