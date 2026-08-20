@@ -8,7 +8,7 @@ import type { Program } from '../lib/types';
 // 가로 시간축은 연/월/주/일/시로 확대·축소하며 '연속 스크롤'(윈도우 제한 없음).
 // 큰 '추가' 버튼은 현재 스케일에 맞는 depth로 항목을 추가(부모=선택 항목 계보). (Goals 전용)
 
-type Scale = 'year' | 'month' | 'week' | 'day' | 'hour';
+type Scale = 'year' | 'month' | 'week';
 type Lvl = 'program' | 'deadline' | 'todo' | 'subtask' | 'unit';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
@@ -22,16 +22,19 @@ const LABEL_W = 240;
 const ROW_H = 34;
 const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주'], ['day', '일'], ['hour', '시']];
-const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물', day: 'task', hour: '세부 작업' };
+const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주']];
+const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물' };
 const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
+const KANBAN_COLS: { key: 'todo' | 'doing' | 'done'; label: string; color: string }[] = [
+  { key: 'todo', label: '할 일', color: '#9AA39D' },
+  { key: 'doing', label: '진행 중', color: '#5EA63A' },
+  { key: 'done', label: '완료', color: '#7C3AED' },
+];
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
   year: { pxPerDay: 4, buffer: 400, minSpan: 3660 },   // ±5년
   month: { pxPerDay: 20, buffer: 180, minSpan: 2190 }, // ±3년
   week: { pxPerDay: 70, buffer: 90, minSpan: 1100 },   // ±1.5년
-  day: { pxPerDay: 110, buffer: 45, minSpan: 550 },    // ±9개월
-  hour: { pxPerDay: 600, buffer: 20, minSpan: 122 },   // ±2개월
 };
 const SPAN_CAP = 9000;
 
@@ -49,6 +52,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
   const [scale, setScale] = useState<Scale>('month');
+  const [kanban, setKanban] = useState(false); // 칸반 탭 여부
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
   const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -58,7 +62,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offOpen, setOffOpen] = useState(false);
   const [offStart, setOffStart] = useState('');
   const [offEnd, setOffEnd] = useState('');
-  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : scale === 'day' ? 3 : 4; // 스케일별 기본 표시 depth (연0~시4)
+  const [kbDrag, setKbDrag] = useState<string | null>(null); // 칸반 드래그 중인 task key
+  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
   const toggleOpen = (key: string, level: number) => setOpenMap(prev => { const n = new Map(prev); n.set(key, !(prev.has(key) ? prev.get(key)! : level < maxDepth)); return n; });
 
@@ -71,8 +76,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const cfg = CFG[scale];
-  const isDayScale = scale === 'day' || scale === 'hour';
-  const LEVEL_SCALE: Scale[] = ['year', 'month', 'week', 'day', 'hour']; // 0=목표→연,1=프로젝트→월,2=산출물→주,3=task→일,4=세부→시
+  const LEVEL_SCALE: Scale[] = ['year', 'month', 'week']; // 0=목표→연,1=프로젝트→월,2=산출물→주 (task 이하는 칸반)
 
   // ── 표시 범위(연속) ──
   const allDates: string[] = [];
@@ -201,12 +205,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (scrollTarget) setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scale, scrollTarget]);
-  const fmtVis = (d: string) => { const dd = new Date(d); return scale === 'year' ? `${dd.getFullYear()}년` : scale === 'week' || scale === 'day' || scale === 'hour' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
+  const fmtVis = (d: string) => { const dd = new Date(d); return scale === 'year' ? `${dd.getFullYear()}년` : scale === 'week' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
   const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / cfg.pxPerDay), 0, span - 1); setVisLabel(fmtVis(addDaysStr(rangeStart, di))); };
   const scrollByScreen = (dir: -1 | 1) => { const el = scrollRef.current; if (!el) return; el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' }); };
   const scrollToToday = () => { const el = scrollRef.current; if (!el) return; el.scrollTo({ left: Math.max(0, xOf(todayStr) - el.clientWidth / 2), behavior: 'smooth' }); };
   // 라벨 텍스트 클릭 → 그 단계의 카테고리(스케일)로 전환 + 그 항목으로 스크롤 (하위는 스케일이 자동으로 가림)
-  const enterLevel = (r: Row) => { setSelectedKey(r.key); setOpenMap(new Map()); setScale(LEVEL_SCALE[r.level]); setScrollTarget(r.start ?? r.end ?? null); };
+  const enterLevel = (r: Row) => { setSelectedKey(r.key); setOpenMap(new Map()); setScale(LEVEL_SCALE[Math.min(r.level, 2)]); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
@@ -225,19 +229,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       if (!isOpen(dKey, 1)) continue;
       if (todos.length === 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
       for (const t of todos) {
-        const tKey = `t-${t.id}`; const subs = (t.subtasks ?? []).filter(s => !s.done);
+        // 산출물(2단계)이 로드맵의 최하위 — 하위 task들은 칸반 탭에서 관리
+        const tKey = `t-${t.id}`;
         const ts = t.date || t.deadline, te = t.deadline || t.date;
-        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
-        if (!isOpen(tKey, 2)) continue;
-        if (subs.length === 0) rows.push({ key: `add-${tKey}`, level: 3, kind: 'subtask', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, isAdd: true, addKind: 'subtask' });
-        for (const s of subs) {
-          const sKey = `s-${s.id}`; const units = (s.units ?? []).filter(u => !u.done);
-          const ss = s.date || s.deadline, se = s.deadline || s.date;
-          rows.push({ key: sKey, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey });
-          if (!isOpen(sKey, 3)) continue;
-          if (units.length === 0) rows.push({ key: `add-${sKey}`, level: 4, kind: 'unit', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey, isAdd: true, addKind: 'unit' });
-          for (const u of units) { const us = u.date || u.deadline, ue = u.deadline || u.date; rows.push({ key: `u-${u.id}`, level: 4, kind: 'unit', name: u.name, start: us && ue ? (us > ue ? ue : us) : undefined, end: ue || us, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, unitId: u.id, pgKey }); }
-        }
+        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
       }
     }
   }
@@ -255,7 +250,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     return {};
   };
   const addAtScale = () => {
-    const L = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : scale === 'day' ? 3 : 4;
+    const L = scale === 'year' ? 0 : scale === 'month' ? 1 : 2;
     const chain = resolveChain(selectedKey);
     if (L === 0) { const name = window.prompt('사업목표 이름')?.trim(); if (!name) return; const wsId = store.data.workspace?.id; if (!wsId) return; store.addProgramToWs(wsId, { name, goal: name, color: businessColor(wsId), fromPlan: true, deadlines: [] }); return; }
     const prog = chain.program ?? programs[0];
@@ -263,16 +258,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (L === 1) { const name = window.prompt('프로젝트 이름')?.trim(); if (!name) return; store.updateProgramInWs(prog.wsId, { ...prog, deadlines: [...(prog.deadlines ?? []), { id: uid(), name, date: '', todos: [], enabled: true }] }); return; }
     const dlId = chain.deadlineId ?? prog.deadlines?.[0]?.id;
     if (!dlId) { window.alert('먼저 프로젝트를 추가하세요.'); return; }
-    if (L === 2) { const name = window.prompt('영역별 산출물 이름')?.trim(); if (!name) return; store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id === dlId ? { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] } : dl) }); return; }
-    const dl = prog.deadlines?.find(d => d.id === dlId);
-    const tdId = chain.todoId ?? dl?.todos.find(t => !t.done)?.id;
-    if (!tdId) { window.alert('먼저 영역별 산출물을 추가하세요.'); return; }
-    if (L === 3) { const name = window.prompt('task 이름')?.trim(); if (!name) return; store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === tdId ? { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] } : t) } : d) }); return; }
-    const td = dl?.todos.find(t => t.id === tdId);
-    const stId = chain.subtaskId ?? td?.subtasks?.find(s => !s.done)?.id;
-    if (!stId) { window.alert('먼저 task를 추가하세요.'); return; }
-    const name = window.prompt('세부 작업 이름')?.trim(); if (!name) return;
-    store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === tdId ? { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === stId ? { ...s, units: [...(s.units ?? []), { id: uid(), name, done: false }] } : s) } : t) } : d) });
+    const name = window.prompt('영역별 산출물 이름')?.trim(); if (!name) return;
+    store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id === dlId ? { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] } : dl) });
   };
   // 빈 상위 노드의 인라인 '추가' (그 자리에 하위 항목 생성)
   const addSpecific = (r: Row) => {
@@ -324,20 +311,52 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     }) });
   };
 
-  // ── 그리드/눈금/근무밴드/오늘 (px, 범위 전체) ──
-  const dayLines: number[] = []; const strongLines: number[] = []; const labels: { x: number; text: string }[] = []; const hourLines: number[] = [];
+  // ── 칸반: 3단계(산출물) 이후의 task를 상태 컬럼으로 관리 ──
+  type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
+  type KbCard = { p: CalProgram; dlId: string; todoId: string; todoName: string; s: Sub };
+  const kbScope = resolveChain(selectedKey);
+  const kbCards: KbCard[] = [];
+  for (const p of programs) {
+    if (kbScope.program && kbScope.program.id !== p.id) continue;
+    for (const dl of (p.deadlines ?? [])) {
+      if (kbScope.deadlineId && kbScope.deadlineId !== dl.id) continue;
+      for (const t of dl.todos) {
+        if (kbScope.todoId && kbScope.todoId !== t.id) continue;
+        for (const s of (t.subtasks ?? [])) kbCards.push({ p, dlId: dl.id, todoId: t.id, todoName: t.name, s });
+      }
+    }
+  }
+  const kbStatusOf = (s: Sub): 'todo' | 'doing' | 'done' => s.status ?? (s.done ? 'done' : 'todo');
+  const kbAddTodo = kbScope.todoId ? { p: kbScope.program!, dlId: kbScope.deadlineId!, todoId: kbScope.todoId } : null;
+  const kbScopeName = kbScope.todoId ? (kbCards[0]?.todoName || '선택 산출물') : kbScope.deadlineId ? '선택 프로젝트' : kbScope.program ? kbScope.program.name : '전체';
+  const updateSub = (p: CalProgram, dlId: string, todoId: string, sId: string, patch: Partial<Sub>) => {
+    const prog = findProg(p.wsId, p.id); if (!prog) return;
+    store.updateProgramInWs(p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
+  };
+  const kbMove = (c: KbCard, status: 'todo' | 'doing' | 'done') => { if (kbStatusOf(c.s) === status) return; updateSub(c.p, c.dlId, c.todoId, c.s.id, { status, done: status === 'done' }); };
+  const kbAdd = (status: 'todo' | 'doing' | 'done') => {
+    if (!kbAddTodo) { window.alert('먼저 로드맵에서 산출물을 선택하세요.'); return; }
+    const name = window.prompt('task 이름')?.trim(); if (!name) return;
+    const prog = findProg(kbAddTodo.p.wsId, kbAddTodo.p.id); if (!prog) return;
+    store.updateProgramInWs(kbAddTodo.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== kbAddTodo.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== kbAddTodo.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: status === 'done', status }] }) }) });
+  };
+  const kbDel = (c: KbCard) => {
+    const prog = findProg(c.p.wsId, c.p.id); if (!prog) return;
+    store.updateProgramInWs(c.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== c.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== c.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== c.s.id) }) }) });
+  };
+  const kbAddUnit = (c: KbCard) => { const name = window.prompt('세부 작업 이름')?.trim(); if (!name) return; updateSub(c.p, c.dlId, c.todoId, c.s.id, { units: [...(c.s.units ?? []), { id: uid(), name, done: false }] }); };
+  const kbToggleUnit = (c: KbCard, uId: string) => updateSub(c.p, c.dlId, c.todoId, c.s.id, { units: (c.s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) });
+
+  // ── 그리드/눈금/오늘 (px, 범위 전체) ──
+  const dayLines: number[] = []; const strongLines: number[] = []; const labels: { x: number; text: string }[] = [];
   for (let i = 0; i < span; i++) {
     const d = addDaysStr(rangeStart, i); const dd = new Date(d); const x = i * cfg.pxPerDay; const dow = dd.getDay(); const dom = dd.getDate();
-    if (scale === 'year') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: dom === 1 && dd.getMonth() === 0 ? `${dd.getFullYear()}년` : `${dd.getMonth() + 1}월` }); } }
+    if (scale === 'year') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: dd.getMonth() === 0 ? `${dd.getFullYear()}년` : `${dd.getMonth() + 1}월` }); } }
     else if (scale === 'month') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getFullYear()}.${dd.getMonth() + 1}` }); } else if (dow === 1) { dayLines.push(x); labels.push({ x, text: `${dom}` }); } }
-    else if (scale === 'week') { if (dow === 1 || dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}` }); } else dayLines.push(x); }
-    else if (scale === 'day') { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}(${DOW[dow]})` }); for (let h = 6; h < 24; h += 6) hourLines.push(x + (h / 24) * cfg.pxPerDay); }
-    else { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}(${DOW[dow]})` }); for (let h = 1; h < 24; h++) hourLines.push(x + (h / 24) * cfg.pxPerDay); }
+    else { if (dow === 1 || dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}` }); } else dayLines.push(x); }
   }
-  const todayX = isDayScale ? xOf(todayStr) + (now.getHours() + now.getMinutes() / 60) / 24 * cfg.pxPerDay : xOf(todayStr) + cfg.pxPerDay / 2;
-  const toH = (t: string) => { const [h, m] = (t || '0:0').split(':').map(Number); return (h || 0) + (m || 0) / 60; };
-  const workBands: { x: number; w: number }[] = [];
-  if (isDayScale) for (let i = 0; i < span; i++) { const wd = schedule[new Date(addDaysStr(rangeStart, i)).getDay()]; if (wd?.on) { const bx = i * cfg.pxPerDay; workBands.push({ x: bx + toH(wd.start) / 24 * cfg.pxPerDay, w: (toH(wd.end) - toH(wd.start)) / 24 * cfg.pxPerDay }); } }
+  const todayX = xOf(todayStr) + cfg.pxPerDay / 2;
+  void schedule; void DOW;
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
@@ -346,26 +365,34 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   return (
     <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-      {/* 상단: 이동 + 현재 위치 + 스케일 + 추가 */}
+      {/* 상단: 이동/현재위치(로드맵) 또는 칸반 범위 + 추가 */}
       <div className="flex items-center justify-between mb-2.5 gap-2">
-        <div className="flex items-center gap-1">
-          <button onClick={() => scrollByScreen(-1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} title="이전"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-          <button onClick={scrollToToday} className="text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>오늘</button>
-          <button onClick={() => scrollByScreen(1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} title="다음"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-          <span className="text-[15px] font-bold ml-1" style={{ color: '#16211E' }}>{visLabel}</span>
-        </div>
-        <button onClick={addAtScale} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={`${DEPTH_NAME[scale]} 추가${selectedKey ? ' (선택 항목 계보에)' : ''}`}>
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>{DEPTH_NAME[scale]} 추가
+        {!kanban ? (
+          <div className="flex items-center gap-1 min-w-0">
+            <button onClick={() => scrollByScreen(-1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="이전"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+            <button onClick={scrollToToday} className="text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>오늘</button>
+            <button onClick={() => scrollByScreen(1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="다음"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+            <span className="text-[15px] font-bold ml-1 truncate" style={{ color: '#16211E' }}>{visLabel}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[15px] font-bold" style={{ color: '#16211E' }}>칸반</span>
+            <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
+          </div>
+        )}
+        <button onClick={() => (kanban ? kbAdd('todo') : addAtScale())} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={kanban ? 'task 추가 (선택 산출물)' : `${DEPTH_NAME[scale]} 추가${selectedKey ? ' (선택 항목 계보에)' : ''}`}>
+          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>{kanban ? 'task 추가' : `${DEPTH_NAME[scale]} 추가`}
         </button>
       </div>
 
       <div className="flex items-center gap-2 mb-3">
         <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#F1F1EB' }}>
-          {SCALES.map(([s, label]) => (<button key={s} onClick={() => setScale(s)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={scale === s ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>))}
+          {SCALES.map(([s, label]) => (<button key={s} onClick={() => { setScale(s); setKanban(false); }} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={!kanban && scale === s ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>))}
+          <button onClick={() => setKanban(true)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={kanban ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>칸반</button>
         </div>
-        <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>
+        {!kanban && <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>}
       </div>
-      {offOpen && (
+      {!kanban && offOpen && (
         <div className="rounded-2xl p-3 mb-3" style={{ backgroundColor: '#FCF6EC', border: '1px solid #F2E2C4' }}>
           <div className="flex items-center gap-1.5 flex-wrap">
             <input type="date" value={offStart} onChange={e => setOffStart(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
@@ -376,9 +403,56 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       )}
-      {notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
+      {!kanban && notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
 
-      {/* 간트: 좌측 트리(고정) + 우측 타임라인(연속 가로/세로 스크롤) */}
+      {kanban ? (
+        /* 칸반: 3단계(산출물) 이후 task를 상태 컬럼으로 */
+        <div className="flex-1 min-h-0 grid grid-cols-3 gap-3">
+          {KANBAN_COLS.map(col => {
+            const cards = kbCards.filter(c => kbStatusOf(c.s) === col.key);
+            return (
+              <div key={col.key} className="flex flex-col min-h-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
+                onDragOver={e => { if (kbDrag) e.preventDefault(); }}
+                onDrop={() => { const c = kbCards.find(x => x.s.id === kbDrag); if (c) kbMove(c, col.key); setKbDrag(null); }}>
+                <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                  <span className="flex items-center gap-1.5 text-[13px] font-bold" style={{ color: '#16211E' }}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color }} />{col.label}</span>
+                  <span className="text-[11px] tabular-nums" style={{ color: '#9AA39D' }}>{cards.length}</span>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                  {cards.length === 0 && <p className="text-[11px] text-center py-6" style={{ color: '#C4CCC4' }}>비어 있어요</p>}
+                  {cards.map(c => {
+                    const units = c.s.units ?? [];
+                    return (
+                      <div key={c.s.id} draggable onDragStart={() => setKbDrag(c.s.id)} onDragEnd={() => setKbDrag(null)}
+                        className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === c.s.id ? 0.5 : 1 }}>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: businessColor(c.p.wsId) }} />
+                          <span className="text-[13px] font-semibold flex-1 min-w-0 break-words" style={{ color: '#16211E' }}>{c.s.name}</span>
+                          <button onClick={() => kbDel(c)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
+                        </div>
+                        {!kbScope.todoId && <p className="text-[10px] mt-0.5 ml-3 truncate" style={{ color: '#9AA39D' }}>{c.todoName}</p>}
+                        {units.length > 0 && (
+                          <div className="mt-1.5 ml-3 space-y-0.5">
+                            {units.map(u => (
+                              <button key={u.id} onClick={() => kbToggleUnit(c, u.id)} className="flex items-center gap-1.5 text-left w-full">
+                                <span className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>
+                                <span className="text-[11px] truncate" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <button onClick={() => kbAddUnit(c)} className="mt-1 ml-3 text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#9AA39D' }}>+ 세부 작업</button>
+                      </div>
+                    );
+                  })}
+                  <button onClick={() => kbAdd(col.key)} className="w-full py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task 추가</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+      /* 간트: 좌측 트리(고정) + 우측 타임라인(연속 가로/세로 스크롤) */
       <div ref={scrollRef} onScroll={e => updateVisLabel(e.currentTarget)} className="flex-1 min-h-0 overflow-auto overscroll-contain border rounded-xl" style={{ borderColor: 'var(--spira-border-subtle)' }} onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
         <div className="relative" style={{ width: LABEL_W + contentWidth }}>
           {/* 헤더 */}
@@ -390,10 +464,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
           {/* 본문 */}
           <div className="relative">
-            {/* 배경: 그리드/근무밴드/오늘 (타임라인 영역) */}
+            {/* 배경: 그리드/오늘 (타임라인 영역) */}
             <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: LABEL_W, width: contentWidth }}>
-              {workBands.map((b, i) => <div key={`w${i}`} className="absolute top-0 bottom-0" style={{ left: b.x, width: b.w, backgroundColor: '#F1FAE6' }} />)}
-              {hourLines.map((x, i) => <div key={`h${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#F4F4EF' }} />)}
               {dayLines.map((x, i) => <div key={`d${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#EEEEE8' }} />)}
               {strongLines.map((x, i) => <div key={`s${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#E2E2DA' }} />)}
               {todayStr >= rangeStart && daysBetween(rangeStart, todayStr) < span && <div className="absolute top-0 bottom-0 w-px" style={{ left: todayX, backgroundColor: '#9DFE3B' }} />}
@@ -458,6 +530,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 });

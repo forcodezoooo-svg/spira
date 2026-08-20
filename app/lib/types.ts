@@ -190,13 +190,14 @@ export interface ProgramUnit {      // 5단계: task 하위 세부 작업 (시�
   date?: string;
   deadline?: string;
 }
-export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위 task
+export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위 task — 칸반으로 관리
   id: string;
   name: string;
   done: boolean;
+  status?: 'todo' | 'doing' | 'done'; // 칸반 컬럼 (없으면 done 기준)
   date?: string;     // 시작 날짜 YYYY-MM-DD
   deadline?: string; // 완수 기한 YYYY-MM-DD
-  units?: ProgramUnit[]; // 하위 세부 작업 (시간 단위)
+  units?: ProgramUnit[]; // 하위 세부 작업 (체크리스트)
 }
 export interface ProgramTodo {
   id: string;
