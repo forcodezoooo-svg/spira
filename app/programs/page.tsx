@@ -1439,6 +1439,33 @@ export default function ProgramsPage() {
   // Goals에는 Plan에서 '가져가기'로 들여온 항목만 표시 (기존 데이터는 가림)
   const visiblePrograms = quarterPrograms.filter(p => p.fromPlan);
   const listPrograms = visiblePrograms.filter(p => (p.deadlines ?? []).some(dl => dl.enabled !== false));
+
+  // Goals가 비어 있을 때 추천할 Plan 사업목표(프로젝트가 있는 것)
+  const planGoalsList = store.data.plan.goals ?? [];
+  const planProjectsList = store.data.plan.projects ?? [];
+  const recommendGoals = planGoalsList.filter(g => planProjectsList.some(p => p.goalId === g.id));
+  const shortD = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
+  const importPlanGoal = (goalId: string) => {
+    if (!wsId) return;
+    const goal = planGoalsList.find(g => g.id === goalId);
+    const projects = planProjectsList.filter(p => p.goalId === goalId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    if (!goal || !projects.length) return;
+    const deadlines = projects.map(p => {
+      const start = p.startDate || '';
+      const end = p.endDate || p.deadline || goal.targetDate || start || '';
+      const todos = (p.areaDeliverables ?? []).map(a => ({
+        id: uid(),
+        name: a.area ? `${a.area}: ${a.content}` : a.content,
+        done: !!a.done,
+        ...(start ? { date: start } : end ? { date: end } : {}),
+        ...(end ? { deadline: end } : {}),
+      }));
+      return { id: uid(), name: p.name, date: end, startDate: start || undefined, todos, enabled: true, projectId: p.id };
+    });
+    const allDates = deadlines.flatMap(d => [d.startDate, d.date]).filter(Boolean) as string[];
+    const anchorDate = allDates.length ? new Date(allDates.sort()[0]) : new Date();
+    store.addProgramToWs(wsId, { name: goal.name, goal: goal.statement || goal.name, color: COLORS[0], fromPlan: true, deadlines, year: anchorDate.getFullYear(), quarter: Math.floor(anchorDate.getMonth() / 3) + 1 });
+  };
   const shortDate = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
 
   return (
@@ -1511,9 +1538,59 @@ export default function ProgramsPage() {
         </div>
       </aside>
 
-      {/* 우측: 간트차트 로드맵 (화면 꽉 차게) */}
+      {/* 우측: 간트차트 로드맵 (화면 꽉 차게). 비어 있고 추천할 목표가 있으면 가져오기 미리보기 */}
       <div className="flex-1 min-w-0 min-h-0">
-        <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
+        {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
+          <div className="bg-white border rounded-[24px] h-full overflow-y-auto p-8 flex flex-col items-center justify-center text-center" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
+            <div className="w-full max-w-[440px]">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#EEF7E4' }}>
+                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" style={{ color: '#5EA63A' }}><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </div>
+              <h2 className="text-[20px] font-black mb-1.5" style={{ color: '#16211E' }}>Plan의 사업목표를 가져올까요?</h2>
+              <p className="text-[13px] leading-relaxed mb-5" style={{ color: '#5B6560' }}>세워둔 사업목표와 그 안의 프로젝트·산출물을 Goals 로드맵으로 가져와 날짜대로 배치해 드릴게요.</p>
+
+              {/* 첫 번째 추천 목표 미리보기 */}
+              {(() => {
+                const g = recommendGoals[0];
+                const projs = planProjectsList.filter(p => p.goalId === g.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                return (
+                  <div className="rounded-2xl border text-left p-4 mb-4" style={{ borderColor: '#BCE89A', backgroundColor: '#F8FBF3' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{g.name}</span>
+                      {g.targetDate && <span className="text-[11px] flex-shrink-0" style={{ color: '#7A9463' }}>📅 ~{shortD(g.targetDate)}</span>}
+                    </div>
+                    <ul className="space-y-1">
+                      {projs.map(p => (
+                        <li key={p.id} className="flex items-center gap-2 text-[12px]" style={{ color: '#5B6560' }}>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#5EA63A' }} />
+                          <span className="font-semibold truncate">{p.name}</span>
+                          <span className="flex-shrink-0" style={{ color: '#9AA39D' }}>
+                            {p.startDate && (p.endDate || p.deadline) ? `${shortD(p.startDate)}~${shortD(p.endDate || p.deadline)}` : '날짜 미정'} · 산출물 {(p.areaDeliverables?.length ?? 0)}개
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
+
+              <button onClick={() => importPlanGoal(recommendGoals[0].id)} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
+
+              {recommendGoals.length > 1 && (
+                <div className="mt-4">
+                  <p className="text-[11px] mb-1.5" style={{ color: '#9AA39D' }}>다른 목표도 가져올 수 있어요</p>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {recommendGoals.slice(1).map(g => (
+                      <button key={g.id} onClick={() => importPlanGoal(g.id)} className="text-[12px] font-semibold rounded-full px-2.5 py-1 border transition-colors hover:bg-neutral-50" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>+ {g.name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
+        )}
       </div>
       </div>
 
