@@ -2677,7 +2677,7 @@ export default function PlanPage() {
     store.addProgramToWs(selectedWsId, {
       name: goal.name,
       goal: goal.statement || goal.name,
-      color: BUSINESS_COLORS[0],
+      color: store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId)?.workspace.color || BUSINESS_COLORS[0],
       fromPlan: true,
       deadlines,
       year: anchorDate.getFullYear(),

@@ -1455,7 +1455,7 @@ export default function ProgramsPage() {
     // 프로젝트가 없으면 목표 자체를 하나의 데드라인으로 만들어 배치
     if (!projects.length) {
       store.addProgramToWs(gWsId, {
-        name: goal.name, goal: goal.statement || goal.name, color: COLORS[0], fromPlan: true,
+        name: goal.name, goal: goal.statement || goal.name, color: businessColor(gWsId), fromPlan: true,
         deadlines: [{ id: uid(), name: goal.name, date: goal.targetDate || '', startDate: goal.startDate, todos: [], enabled: true }],
       });
       return;
@@ -1474,7 +1474,7 @@ export default function ProgramsPage() {
     });
     const allDates = deadlines.flatMap(d => [d.startDate, d.date]).filter(Boolean) as string[];
     const anchorDate = allDates.length ? new Date(allDates.sort()[0]) : new Date();
-    store.addProgramToWs(wsId, { name: goal.name, goal: goal.statement || goal.name, color: COLORS[0], fromPlan: true, deadlines, year: anchorDate.getFullYear(), quarter: Math.floor(anchorDate.getMonth() / 3) + 1 });
+    store.addProgramToWs(gWsId, { name: goal.name, goal: goal.statement || goal.name, color: businessColor(gWsId), fromPlan: true, deadlines, year: anchorDate.getFullYear(), quarter: Math.floor(anchorDate.getMonth() / 3) + 1 });
   };
   const shortDate = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
 

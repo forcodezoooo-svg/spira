@@ -25,7 +25,6 @@ interface Props {
   cardClassName?: string;
 }
 
-const LABEL_W = 150;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주'], ['day', '일'], ['hour', '시']];
 
@@ -307,13 +306,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       )}
 
       {/* 헤더 눈금 */}
-      <div className="flex mb-1.5">
-        <div className="shrink-0" style={{ width: LABEL_W }} />
-        <div ref={timelineRef} className="relative flex-1 h-5">
+      <div className="mb-1.5">
+        <div ref={timelineRef} className="relative h-5">
           {headerTicks.map((t, i) => (
             <div key={i} className="absolute top-0 text-[10px] font-medium whitespace-nowrap" style={{ left: `${t.left}%`, color: '#9AA39D', transform: 'translateX(2px)' }}>{t.label}</div>
           ))}
-          {workBand && <div className="absolute -top-0 text-[9px] font-semibold" style={{ left: `${workBand.left}%`, color: '#7A9463' }} />}
         </div>
       </div>
 
@@ -322,42 +319,42 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         {ranges.length === 0 ? (
           <p className="text-[12px] text-center py-8 leading-relaxed" style={{ color: '#9AA39D' }}>이 기간에 표시할 일정이 없어요.<br />왼쪽 항목을 타임라인으로 드래그해 배치하거나, 네비로 기간을 옮겨보세요.</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {ranges.map(r => {
               const left = xStartPct(r.start < winStartStr ? winStartStr : r.start);
               const right = xEndPct(r.end > winEndStr ? winEndStr : r.end);
-              const width = Math.max(right - left, 1.2);
+              const width = Math.max(right - left, 0.8);
               const startsHere = r.start >= winStartStr;
               const endsHere = r.end <= winEndStr;
               const dragging = calDrag?.key === r.key;
               const hot = r.key === highlightKey;
               const isDl = r.kind === 'deadline';
               return (
-                <div key={r.key} data-rm-row={r.key} className="flex items-center h-8">
-                  <button onClick={() => focus(r.level, r.key, r.start, r.end, r.name)} className="shrink-0 pr-2 text-left leading-tight truncate" style={{ width: LABEL_W, color: hot ? '#16211E' : isDl ? '#5B6560' : '#7A857E', fontSize: isDl ? 12 : 11, fontWeight: hot ? 700 : isDl ? 700 : 500, paddingLeft: isDl ? 0 : 10 }} title={r.name}>{r.name}</button>
-                  <div className="relative flex-1 h-full">
-                    <TrackGrid />
-                    <div
-                      data-rm-bar={r.key}
-                      onMouseDown={e => startCalDrag(r, 'move', e)}
-                      className={`group/bar absolute top-1/2 -translate-y-1/2 rounded-full flex items-center cursor-grab active:cursor-grabbing ${dragging ? 'opacity-90' : ''}`}
-                      style={{ left: `${left}%`, width: `${width}%`, height: isDl ? 6 : 10, backgroundColor: r.color, opacity: dragging || hot ? 1 : isDl ? 0.5 : 0.9, boxShadow: hot ? `0 0 0 2px #fff, 0 0 0 4px ${r.color}` : undefined }}
-                      title={`${r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
-                    >
-                      {startsHere && (
-                        <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-4 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절">
-                          <span className="w-[9px] h-[9px] rounded-full" style={{ backgroundColor: r.color, boxShadow: '0 0 0 2px #fff' }} />
-                        </div>
-                      )}
-                      {endsHere && (
-                        <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} className="absolute -right-1.5 top-1/2 -translate-y-1/2 w-3 h-4 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절 (기간 연장)">
-                          <span className="w-[9px] h-[9px] rounded-full" style={{ backgroundColor: r.color, boxShadow: '0 0 0 2px #fff' }} />
-                        </div>
-                      )}
-                      {endsHere && (
-                        <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearOneSchedule(r); }} className="absolute -right-1.5 -top-3 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="이 일정을 로드맵에서 삭제 (내용 유지)">×</button>
-                      )}
-                    </div>
+                <div key={r.key} data-rm-row={r.key} className="relative h-8">
+                  <TrackGrid />
+                  {/* 사각형 막대 안에 내용 표기. 좁으면 이름이 오른쪽으로 흘러 보임 */}
+                  <div
+                    data-rm-bar={r.key}
+                    onMouseDown={e => startCalDrag(r, 'move', e)}
+                    className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-grab active:cursor-grabbing overflow-visible"
+                    style={{ left: `${left}%`, width: `${width}%`, height: 26, backgroundColor: `${r.color}${isDl ? '30' : '1F'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: hot ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: hot ? 10 : undefined }}
+                    title={`${r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
+                  >
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none flex items-center gap-1.5" style={{ fontSize: isDl ? 12 : 11, fontWeight: isDl ? 800 : 600, color: '#16211E' }}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
+                      {r.name}
+                    </span>
+                    {startsHere && (
+                      <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} className="absolute -left-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절">
+                        <span className="w-1 h-3.5 rounded-full" style={{ backgroundColor: r.color }} />
+                      </div>
+                    )}
+                    {endsHere && (
+                      <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} className="absolute -right-1 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절 (기간 연장)">
+                        <span className="w-1 h-3.5 rounded-full" style={{ backgroundColor: r.color }} />
+                      </div>
+                    )}
+                    <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearOneSchedule(r); }} className="absolute -right-1.5 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="이 일정을 로드맵에서 삭제 (내용 유지)">×</button>
                   </div>
                 </div>
               );
