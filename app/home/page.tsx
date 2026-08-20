@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { DashboardSkeleton } from '../components/Skeleton';
@@ -10,6 +10,7 @@ import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
+import GoalsCalendar from '../components/GoalsCalendar';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
 
@@ -31,9 +32,6 @@ export default function Home() {
   const { stopTaskTimer } = useTimer();
   const [workspaceName, setWorkspaceName] = useState('');
   const [editTodoTarget, setEditTodoTarget] = useState<GoalTask | null>(null);
-  const [progressWsId, setProgressWsId] = useState<string | null>(null);
-  const [progressMenuOpen, setProgressMenuOpen] = useState(false);
-  const progressRef = useRef<HTMLDivElement>(null);
   const [homeFilterWs, setHomeFilterWs] = useState<string | null>(null); // 오늘의 업무 비즈니스 필터 (null = 전체)
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
   const [showYesterday, setShowYesterday] = useState(false);
@@ -45,8 +43,6 @@ export default function Home() {
     /* eslint-disable react-hooks/set-state-in-effect */
     try { setHomeOrder(JSON.parse(localStorage.getItem('spira_home_task_order') ?? '[]')); }
     catch { setHomeOrder([]); }
-    const savedWs = localStorage.getItem('spira_home_progress_ws');
-    if (savedWs) setProgressWsId(savedWs);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
@@ -54,16 +50,6 @@ export default function Home() {
   useEffect(() => {
     return () => { closeChat(); };
   }, [closeChat]);
-
-  // 프로젝트 진행상황 비즈니스 드롭다운 바깥 클릭 시 닫기
-  useEffect(() => {
-    if (!progressMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (progressRef.current && !progressRef.current.contains(e.target as Node)) setProgressMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [progressMenuOpen]);
 
   if (!store.ready) return <DashboardSkeleton />;
 
@@ -285,48 +271,12 @@ export default function Home() {
   const journey = journeyGroups.slice(0, 5); // 다가오는 목표 5개 고정
 
 
-  // ── 프로젝트 진행상황 (업무 영역 안의 '데드라인' 단위 — 각 데드라인의 할일 진행률) ──
-  const projectProgress = store.allWorkspacesEntries
-    .flatMap(e => e.programs
-      .filter(p => p.workAreaId) // 미분류 제외
-      .flatMap(p => (p.deadlines ?? [])
-        .filter(dl => dl.date && dl.enabled !== false && !dl.done) // 날짜 있고 진행 중인 데드라인
-        .map(dl => {
-          const todos = dl.todos ?? [];
-          let pct: number | null = null;
-          if (todos.length > 0) pct = Math.round((todos.filter(t => t.done).length / todos.length) * 100);
-          const dday = dl.date ? calcDday(dl.date) : null;
-          return {
-            id: dl.id,
-            name: dl.name,
-            color: workspaceColor(store.allWorkspacesEntries, e.workspace.id),
-            pct,
-            dday,
-            deadline: dl.date,
-            wsName: e.workspace.name,
-            wsId: e.workspace.id,
-          };
-        })))
-    // 디데이 임박 순
-    .sort((a, b) => {
-      if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
-      if (a.deadline) return -1;
-      if (b.deadline) return 1;
-      return 0;
-    });
-
-  const goToGoals = (wsId: string) => {
-    store.switchWorkspace(wsId);
-    router.push('/programs');
-  };
-
-  // 프로젝트 진행상황: 선택한 비즈니스(토글)의 프로젝트만 표시.
-  // 저장된 선택값이 있으면 그것을 유지(새로고침 무관), 없거나 삭제된 비즈니스면 활성 워크스페이스로 폴백.
-  const effProgressWs = (progressWsId && store.allWorkspaces.some(w => w.id === progressWsId))
-    ? progressWsId
-    : (store.data.workspace?.id ?? null);
-  const progressList = projectProgress.filter(p => p.wsId === effProgressWs);
-  const effProgressName = store.allWorkspaces.find(w => w.id === effProgressWs)?.name ?? '—';
+  // ── Goals 캘린더용 데이터 (모든 사업의 프로그램 → 데드라인/할일 일정) ──
+  const calPrograms = store.allWorkspacesEntries.flatMap(e =>
+    e.programs.map(p => ({ ...p, wsId: e.workspace.id, wsName: e.workspace.name })));
+  const calBusinessColor = (id: string) => workspaceColor(store.allWorkspacesEntries, id);
+  const calResolveProject = (wsId: string, id?: string) =>
+    id ? ((store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.plan.projects ?? []).find(p => p.id === id) ?? null) : null;
 
 
   // 드래그 손잡이 (잡아서 끌어 순서 변경)
@@ -466,7 +416,7 @@ export default function Home() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
       {/* ── 왼쪽: 메인 ── */}
       <div className="min-w-0">
         {/* D-day 타임라인 */}
@@ -677,64 +627,13 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 프로젝트 진행상황 */}
-        <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2.5">
-              <span className="w-6 h-6 rounded-md flex items-center justify-center" style={{ backgroundColor: '#EEF7E4', color: '#44543C' }}>
-                <svg viewBox="0 0 16 20" className="w-[13px] h-auto" fill="currentColor"><path d="M3.03027 0H0.704717C0.315512 0 0 0.315512 0 0.704717V19.1824C0 19.5716 0.315512 19.8871 0.704717 19.8871H3.03027C3.41948 19.8871 3.73499 19.5716 3.73499 19.1824V0.704717C3.73499 0.315512 3.41948 0 3.03027 0Z" /><path d="M15.0435 7.968L3.73047 1.43762V16.434L15.0435 9.90362C15.7858 9.47609 15.7858 8.40022 15.0435 7.968ZM6.87351 11.7547C6.15469 10.7117 5.25265 9.80496 4.20497 9.08615C5.24795 8.36734 6.15469 7.4653 6.87351 6.41762C7.59232 7.4606 8.49435 8.36734 9.54203 9.08615C8.49905 9.80496 7.59232 10.707 6.87351 11.7547Z" /></svg>
-              </span>
-              <span className="text-[16px] font-bold" style={{ color: '#16211E' }}>프로젝트 진행상황</span>
-            </div>
-            {store.allWorkspaces.length > 0 && (
-              <div className="relative" ref={progressRef}>
-                <button
-                  onClick={() => setProgressMenuOpen(o => !o)}
-                  className="inline-flex items-center gap-1.5 text-[13px] transition-colors hover:opacity-70"
-                  style={{ color: '#5B6560' }}
-                  title="비즈니스 선택"
-                >
-                  {effProgressName}<span className={`transition-transform ${progressMenuOpen ? 'rotate-180' : ''}`} style={{ color: '#9AA39D' }}>▾</span>
-                </button>
-                {progressMenuOpen && (
-                  <div className="absolute right-0 top-full mt-1.5 w-40 bg-white border border-neutral-200 rounded-xl shadow-lg overflow-hidden z-20">
-                    {store.allWorkspaces.map(ws => (
-                      <button
-                        key={ws.id}
-                        onClick={() => { setProgressWsId(ws.id); localStorage.setItem('spira_home_progress_ws', ws.id); setProgressMenuOpen(false); }}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-[13px] text-left hover:bg-neutral-100 transition-colors"
-                      >
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: workspaceColor(store.allWorkspacesEntries, ws.id) }} />
-                        <span style={{ color: ws.id === effProgressWs ? '#16211E' : '#5B6560', fontWeight: ws.id === effProgressWs ? 600 : 400 }}>{ws.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {progressList.length === 0 ? (
-            <p className="text-[13px]" style={{ color: '#9AA39D' }}>이번 분기 프로젝트가 없어요</p>
-          ) : (
-            <div className="space-y-5">
-              {progressList.map(p => (
-                <div key={p.id}>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <button onClick={() => goToGoals(p.wsId)} className="text-[14px] truncate text-left transition-colors hover:opacity-70" style={{ color: '#16211E' }}>{p.name}</button>
-                    {p.dday ? (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ml-2" style={p.dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : p.dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{p.dday.label}</span>
-                    ) : p.pct !== null ? (
-                      <span className="font-mono text-[12px] tabular-nums flex-shrink-0 ml-2" style={{ color: '#9AA39D' }}>{p.pct}%</span>
-                    ) : null}
-                  </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: '#E7E7E7' }}>
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.pct ?? 0}%`, background: p.color }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Goals 캘린더 — 일정 배치·드래그 편집 (Goals 페이지와 동일) */}
+        <GoalsCalendar
+          programs={calPrograms}
+          businessColor={calBusinessColor}
+          resolveProject={calResolveProject}
+          cardClassName="h-[640px]"
+        />
       </aside>
 
       {editTodoTarget && (
