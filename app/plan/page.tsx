@@ -1496,6 +1496,9 @@ const HINTS: Record<string, string> = {
   products: '이 사업에서 판매·출시하는 것을 항목별로 정리하세요. 예: 웹앱, 아이패드 전용 앱, 휴대폰 앱, 굿즈 등',
 };
 
+// 업종 카테고리 (사업 개요) — AI가 업종에 맞는 목표/전략을 제안하도록 컨텍스트로 사용
+const BIZ_CATEGORIES = ['서비스', '콘텐츠/크리에이터', '스튜디오', '자영업/매장', '커머스/쇼핑몰', '앱/온라인 서비스', '프리랜서', '교육/클래스', '제조/공방', '컨설팅', '기타'];
+
 // ── 상단 박스: 사업계획서 업로드 또는 사업 개요 직접 작성 ──────────────────────────
 function BusinessDocBox({
   doc, overview, onSetDoc, onRemoveDoc, onChangeOverview, onGenerateField, aiEnabled, analyzing,
@@ -1581,6 +1584,23 @@ function BusinessDocBox({
         </div>
       )}
 
+      {/* 업종 카테고리 */}
+      <div className="mb-3">
+        <label className="text-[11px] font-semibold text-neutral-400 block mb-1.5">업종</label>
+        <div className="flex flex-wrap gap-1.5">
+          {BIZ_CATEGORIES.map(c => {
+            const on = ov.category === c;
+            return (
+              <button key={c} onClick={() => set({ category: on ? '' : c })}
+                className="text-[12px] font-medium px-2.5 py-1 rounded-full border transition-colors"
+                style={on ? { backgroundColor: '#DFF9C4', color: '#16211E', borderColor: '#9DFE3B' } : { backgroundColor: '#fff', color: '#5B6560', borderColor: 'var(--spira-border-subtle)' }}>
+                {c}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {OV_FIELDS.map(f => (
           <div key={f.key} className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
@@ -1624,6 +1644,67 @@ const GOAL_STATUS_META: Record<string, { label: string; color: string; bg: strin
 };
 const fmtNum = (n?: number) => (n === undefined ? '' : n.toLocaleString('ko-KR'));
 const dateShort = (d?: string) => (d ? d.slice(2).replace(/-/g, '.') : '');
+
+// 성과 지표 입력 주기 → 이번 주기의 키 (기록 이력 누적용)
+const PERIOD_OPTS = ['일', '주', '월', '분기', '연'];
+function periodKeyOf(period: string, d = new Date()): string {
+  const y = d.getFullYear(); const m = d.getMonth();
+  switch (period) {
+    case '일': return `${y}-${String(m + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    case '주': { const jan1 = new Date(y, 0, 1); const wk = Math.ceil((((d.getTime() - jan1.getTime()) / 86400000) + jan1.getDay() + 1) / 7); return `${y}-W${String(wk).padStart(2, '0')}`; }
+    case '분기': return `${y}-Q${Math.floor(m / 3) + 1}`;
+    case '연': return `${y}`;
+    case '월': default: return `${y}-${String(m + 1).padStart(2, '0')}`;
+  }
+}
+// 성과 지표 한 줄 — 목표 설정 + 주기별 기록 입력 + 누적 추이
+function MetricRow({ c, onPatch, onDel, inputCls }: {
+  c: SuccessCriterion;
+  onPatch: (p: Partial<SuccessCriterion>) => void;
+  onDel: () => void;
+  inputCls: string;
+}) {
+  const [logVal, setLogVal] = useState('');
+  const period = c.measurementPeriod || '월';
+  const hist = c.history ?? [];
+  const doLog = () => {
+    if (logVal === '') return; const v = Number(logVal); if (!Number.isFinite(v)) return;
+    const key = periodKeyOf(period);
+    const next = [...hist.filter(h => h.period !== key), { period: key, value: v }].sort((a, b) => a.period < b.period ? -1 : 1);
+    onPatch({ history: next, currentValue: v });
+    setLogVal('');
+  };
+  const recent = hist.slice(-6);
+  return (
+    <div className="bg-white border border-neutral-200 rounded-lg p-2 space-y-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <input value={c.name} onChange={e => onPatch({ name: e.target.value })} placeholder="지표 (예: 월 매출)" className={`flex-1 min-w-[110px] font-semibold ${inputCls}`} />
+        <span className="text-[11px] text-neutral-400">목표</span>
+        <input type="number" value={c.targetValue ?? ''} onChange={e => onPatch({ targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`w-16 ${inputCls}`} />
+        <input value={c.unit ?? ''} onChange={e => onPatch({ unit: e.target.value })} placeholder="단위" className={`w-12 ${inputCls}`} />
+        <select value={period} onChange={e => onPatch({ measurementPeriod: e.target.value })} className={inputCls}>{PERIOD_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select>
+        <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap text-[12px] pl-0.5">
+        <span className="text-neutral-500">현재 <b className="text-neutral-800 tabular-nums">{c.currentValue !== undefined ? c.currentValue.toLocaleString('ko-KR') : '—'}</b>{c.unit ?? ''}</span>
+        <span className="text-neutral-300">·</span>
+        <span className="text-neutral-400">이번 {period} 기록</span>
+        <input type="number" value={logVal} onChange={e => setLogVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') doLog(); }} placeholder="값" className={`w-16 ${inputCls}`} />
+        <button onClick={doLog} disabled={logVal === ''} className="text-[11px] font-semibold px-2 py-1 rounded-lg text-white bg-neutral-900 disabled:opacity-30 transition-opacity">기록</button>
+        {hist.length > 0 && <span className="text-neutral-400">· {hist.length}회</span>}
+      </div>
+      {recent.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap pl-0.5">
+          {recent.map((h, i) => (
+            <span key={h.period} className="text-[10px] text-neutral-500 tabular-nums">
+              {i > 0 && <span className="text-neutral-300 mr-1">→</span>}{h.value.toLocaleString('ko-KR')}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── 사업 목표: Goal > Strategy > Project > Area Deliverable (Progressive Disclosure) ──
 function GoalsSection({
@@ -1769,17 +1850,10 @@ function GoalsSection({
                       const add = () => setC([...cur, { id: uid(), type: 'metric', name: '' }]);
                       return (
                         <div>
-                          <div className="flex items-center gap-1.5 mb-1"><p className="text-[11px] font-semibold text-neutral-400">성과 지표 (수치 목표)</p><Hint text="이 목표의 핵심 숫자예요(선택). 예: 월 매출 1,000만원. 진행도는 아래 프로젝트를 완료할 때마다 올라가요." /></div>
+                          <div className="flex items-center gap-1.5 mb-1"><p className="text-[11px] font-semibold text-neutral-400">성과 지표</p><Hint text="목표 수치와 입력 주기를 정하고, 주기마다 값을 '기록'하면 추이가 쌓여요. (진행도 막대는 아래 프로젝트 완료로 계산돼요)" /></div>
                           <div className="space-y-1.5">
                             {cur.map(c => (
-                              <div key={c.id} className="flex items-center gap-1.5 flex-wrap">
-                                <input value={c.name} onChange={e => patch(c.id, { name: e.target.value })} placeholder="지표 (예: 월 매출)" className={`flex-1 min-w-[120px] ${inputCls}`} />
-                                <input type="number" value={c.currentValue ?? ''} onChange={e => patch(c.id, { currentValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="현재" className={`w-16 ${inputCls}`} />
-                                <span className="text-neutral-300 text-xs">/</span>
-                                <input type="number" value={c.targetValue ?? ''} onChange={e => patch(c.id, { targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`w-16 ${inputCls}`} />
-                                <input value={c.unit ?? ''} onChange={e => patch(c.id, { unit: e.target.value })} placeholder="단위" className={`w-14 ${inputCls}`} />
-                                <button onClick={() => del(c.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
-                              </div>
+                              <MetricRow key={c.id} c={c} inputCls={inputCls} onPatch={p => patch(c.id, p)} onDel={() => del(c.id)} />
                             ))}
                             <button onClick={add} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 지표 추가</button>
                           </div>
@@ -2334,15 +2408,20 @@ export default function PlanPage() {
   const removeWorkArea = (id: string) =>
     update({ workAreas: (plan.workAreas ?? []).filter(x => x.id !== id) });
 
-  const buildContext = () => [
-    plan.tagline && `한 줄 소개: ${plan.tagline}`,
-    plan.mission && `미션: ${plan.mission}`,
-    plan.vision && `비전: ${plan.vision}`,
-    plan.concept && `컨셉: ${plan.concept}`,
-    plan.problems.length && `문제:\n${plan.problems.map(p => `- ${p}`).join('\n')}`,
-    plan.solutions.length && `솔루션:\n${plan.solutions.map(s => `- ${s.title}${s.memo ? `: ${s.memo}` : ''}`).join('\n')}`,
-    plan.revenueModel.length && `수익 구조:\n${plan.revenueModel.map(r => `- ${r.title}${r.memo ? `: ${r.memo}` : ''}`).join('\n')}`,
-  ].filter(Boolean).join('\n') || '(아직 사업 정보가 없습니다)';
+  const buildContext = () => {
+    const ov = plan.overview ?? deriveOverview(plan);
+    return [
+      selectedWsName && `사업명: ${selectedWsName}`,
+      plan.overview?.category && `업종: ${plan.overview.category}`,
+      (ov.tagline || plan.tagline) && `한 줄 소개: ${ov.tagline || plan.tagline}`,
+      (ov.concept || plan.concept) && `컨셉: ${ov.concept || plan.concept}`,
+      (ov.problem || plan.problems.length) && `문제: ${ov.problem || plan.problems.join(', ')}`,
+      (ov.solution || plan.solutions.length) && `솔루션: ${ov.solution || plan.solutions.map(s => s.title).join(', ')}`,
+      (ov.mission || plan.mission) && `미션: ${ov.mission || plan.mission}`,
+      (ov.vision || plan.vision) && `비전: ${ov.vision || plan.vision}`,
+      plan.revenueModel.length && `수익 구조: ${plan.revenueModel.map(r => r.title).join(', ')}`,
+    ].filter(Boolean).join('\n') || '(아직 사업 정보가 없습니다)';
+  };
 
   // 항목별 채우기 — API엔 상세 명령(마커 지시) 전송, 화면 말풍선엔 자연어만 표시
   const genField = (apiPrompt: string, display: string) => {
@@ -2370,7 +2449,7 @@ export default function PlanPage() {
     `아래 사업 정보를 바탕으로 이 사업이 해결하려는 고객의 핵심 문제를 2~3개로 구체적으로 정의해줘. 조언만 하지 말고, 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 problems 배열이 담긴 JSON을 출력해줘.\n\n${buildContext()}`,
     '문제 정의를 작성해줘');
   // 사업 개요(overview) 항목별 AI 채우기 — 각 항목을 대응하는 plan 필드로 출력하게 지시(핸들러가 overview로 동기화)
-  const OVERVIEW_FIELD_PROMPT: Record<keyof BusinessOverview, string> = {
+  const OVERVIEW_FIELD_PROMPT: Partial<Record<keyof BusinessOverview, string>> = {
     tagline: "이 사업의 '한 줄 소개'를 매력적인 한 문장으로 작성해줘. JSON 키는 tagline(문자열).",
     concept: "이 브랜드의 '컨셉'(핵심 아이디어·방향성·감성)을 한두 문장으로 작성해줘. JSON 키는 concept(문자열).",
     problem: "이 사업이 해결하려는 '핵심 문제'를 2~3개로 구체적으로 정의해줘. JSON 키는 problems(문자열 배열).",
@@ -2514,15 +2593,20 @@ export default function PlanPage() {
     setAiBusyId(goalId);
     try {
       const areas = (plan.workAreas ?? []).map(a => a.name);
-      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-breakdown', context: buildContext(), goalName: goal.name, goalDesc: goal.statement ?? '', areas }) });
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-breakdown', context: buildContext(), goalName: goal.name, goalDesc: goal.statement ?? '', goalTargetDate: goal.targetDate ?? '', today, areas }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) { toast('AI 분해에 실패했어요.', 'error'); return; }
-      const projs = (data.projects ?? []) as { name: string; finalDeliverable: string }[];
+      const projs = (data.projects ?? []) as { name: string; finalDeliverable: string; startDate?: string; endDate?: string; areaDeliverables?: { area: string; content: string }[] }[];
       if (!projs.length) { toast('제안할 프로젝트를 찾지 못했어요.', 'info'); return; }
       setPlan(prev => {
         if (!prev) return prev;
         const baseCount = (prev.projects ?? []).filter(x => x.goalId === goalId).length;
-        const newProjects: Project[] = projs.map((p, i) => ({ id: uid(), name: p.name, goalId, order: baseCount + i, finalDeliverable: p.finalDeliverable, status: 'planned', areaDeliverables: [] }));
+        const newProjects: Project[] = projs.map((p, i) => ({
+          id: uid(), name: p.name, goalId, order: baseCount + i, finalDeliverable: p.finalDeliverable,
+          startDate: p.startDate || undefined, endDate: p.endDate || undefined, status: 'planned',
+          areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
+        }));
         const next = { ...prev, projects: [...(prev.projects ?? []), ...newProjects] };
         const wsId = selectedWsIdRef.current;
         if (wsId) store.updatePlanInWs(wsId, next);

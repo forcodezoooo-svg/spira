@@ -76,6 +76,7 @@ export interface PlanDoc {
 
 // 사업계획서가 없을 때 직접 작성하는 간략한 사업 개요
 export interface BusinessOverview {
+  category?: string; // 업종 카테고리 (서비스/콘텐츠/스튜디오/자영업 등)
   tagline: string;  // 한 줄 소개
   concept: string;  // 컨셉
   problem: string;  // 문제 정의
@@ -117,10 +118,11 @@ export interface SuccessCriterion {
   id: string;
   type: SuccessCriterionType;
   name: string;               // 지표명(월 매출) 또는 완료 조건(매장 공사 완료)
-  currentValue?: number;      // metric: 현재값
+  currentValue?: number;      // metric: 현재값 (마지막 기록치)
   targetValue?: number;       // metric: 목표값
   unit?: string;              // metric: 단위 (원, 명, % 등)
-  measurementPeriod?: string; // metric: 측정 주기 (월/주/분기 등)
+  measurementPeriod?: string; // metric: 입력 주기 (일/주/월/분기/연)
+  history?: { period: string; value: number }[]; // metric: 주기별 기록 이력 (쌓여서 추세로)
   completed?: boolean;        // completion: 완료 여부
 }
 

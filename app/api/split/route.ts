@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   let body: { mode?: string; context?: string; goalName?: string; goalDesc?: string; deliverableName?: string; projectName?: string; areas?: string[]; today?: string; messages?: ChatMsg[]; currentGoals?: unknown } = {};
   try { body = await request.json(); } catch { /* ignore */ }
   const { mode, context = '', goalName = '', goalDesc = '', deliverableName = '', projectName = '', areas = [], today = '', messages = [], currentGoals } = body;
+  const goalTargetDate = (body as { goalTargetDate?: string }).goalTargetDate ?? '';
   const areaHint = Array.isArray(areas) && areas.length ? `\n참고: 이 사업의 업무 영역 목록: ${areas.join(', ')} (가능하면 이 중에서 고르되 필요하면 추가 가능)` : '';
 
   let sys = '';
@@ -57,11 +58,15 @@ reply: 짧고 따뜻한 설명/답변 1~2문장. 정보가 부족해 가정을 �
 # TASK: Goal을 실행 프로젝트로 분해 (제안만)
 주어진 'Goal'을 달성하기 위한 '프로젝트'를 제안해라. 반드시 이 사업의 업종·업무 영역에 맞게.
 ⚠️ 프로젝트는 '큰 마일스톤' 단위다. 개별 기능·작은 산출물(예: "AI 시나리오 기능 출시", "추천 기능 추가", "런칭 캠페인")을 각각 프로젝트로 만들지 마라 — 그것들은 하나의 큰 프로젝트(예: "MVP 개발 및 런칭") 안의 '산출물'로 묶여야 한다.
-그래서 프로젝트 개수는 보통 1~3개(초기 단계면 1개도 정상). 각 project는 name(큰 마일스톤), finalDeliverable(끝났을 때 고객·관객 앞에 내놓는 최종 결과물). 진행 순서대로.
+그래서 프로젝트 개수는 보통 1~3개(초기 단계면 1개도 정상). 진행 순서대로.
+각 project는 다음을 모두 포함한다:
+- name(큰 마일스톤), finalDeliverable(끝났을 때 고객·관객 앞에 내놓는 최종 결과물)
+- startDate/endDate("YYYY-MM-DD"): 오늘 이후로, 프로젝트 진행 기간을 현실적으로 배정(프로젝트들이 순서대로 이어지게, 마지막 프로젝트 endDate는 Goal 기한 이내로).
+- areaDeliverables: 그 결과물을 만들기 위해 '관련 있는 업무 영역'이 내놓을 결과물 2~4개 [{area, content}]. (관련 없는 영역 강제 X)
 실제 '만들고·출시하는' 단계를 반드시 포함하고, 반복 운영(루틴)은 프로젝트로 만들지 마라. "기획서 작성"류를 프로젝트로 만들지 마라.
 ${DELIVERABLE_RULE}
-반드시 '오직 JSON만'(예시는 형식일 뿐): {"projects":[{"name":"MVP 개발 및 런칭","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 서비스 출시"}]}`;
-    user = `사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n이 목표를 이루기 위한 '큰 마일스톤' 단위 프로젝트를 1~3개, 순서대로 제안해줘(작은 기능들은 각각 프로젝트로 쪼개지 말고 하나로 묶어서).`;
+반드시 '오직 JSON만'(예시는 형식일 뿐): {"projects":[{"name":"MVP 개발 및 런칭","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 서비스 출시","startDate":"2026-01-05","endDate":"2026-03-15","areaDeliverables":[{"area":"개발","content":"배포된 서비스"},{"area":"디자인","content":"기본 UI 완성본"}]}]}`;
+    user = `${today ? `오늘 날짜: ${today}\n` : ''}${goalTargetDate ? `이 Goal의 기한: ${goalTargetDate}\n` : ''}사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n이 목표를 이루기 위한 '큰 마일스톤' 단위 프로젝트를 1~3개, 순서대로 제안해줘. 각 프로젝트에 진행 기간(startDate/endDate)과 업무 영역별 산출물도 함께 넣어줘.`;
   } else if (mode === 'project-breakdown') {
     // Project → Final Deliverable → Area Deliverables
     sys = `${SPIRA_PLANNING_CORE}
@@ -123,7 +128,7 @@ ${DELIVERABLE_RULE}
       return NextResponse.json({ goals, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'goal-breakdown') {
       const projects = Array.isArray(parsed.projects)
-        ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim() }; }).filter(p => p.name).slice(0, 6)
+        ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim(), startDate: String(pp.startDate ?? '').trim(), endDate: String(pp.endDate ?? '').trim(), areaDeliverables: parseAreas(pp.areaDeliverables) }; }).filter(p => p.name).slice(0, 6)
         : [];
       return NextResponse.json({ projects });
     } else if (mode === 'project-breakdown') {
