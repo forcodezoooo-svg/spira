@@ -183,10 +183,18 @@ export interface TodoRecord {
 }
 
 // 데드라인 내 할일 (depth 3)
+export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위 세부 작업(task)
+  id: string;
+  name: string;
+  done: boolean;
+  date?: string;     // 시작 날짜 YYYY-MM-DD
+  deadline?: string; // 완수 기한 YYYY-MM-DD
+}
 export interface ProgramTodo {
   id: string;
   name: string;
   done: boolean;
+  subtasks?: ProgramSubtask[]; // 하위 task (일/시 단위)
   date?: string;     // 시작 날짜 YYYY-MM-DD
   days?: number[];   // 매주 반복 요일 (0=일 ~ 6=토)
   deadline?: string; // 완수 기한 YYYY-MM-DD
