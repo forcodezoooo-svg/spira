@@ -374,4 +374,9 @@ export interface AppData {
   areaOrder?: string[]; // 업무 영역(이름) 표시 순서 — Goals에서 사용자가 조정
   calendarMemos?: Record<string, string>; // 월별("YYYY-MM") 간단 메모
   journeyFlags?: JourneyFlag[]; // 나의 여정 지도 — 달성한 영역 목표 깃발 (전 비즈니스 통합)
+  workSchedule?: WorkSchedule; // 주간 업무시간 타임테이블 (요일별 근무 가능 시간)
 }
+
+// 주간 업무시간 — 요일(0=일 ~ 6=토)별로 근무 여부 + 시작·종료 시각("HH:MM")
+export interface WorkDay { on: boolean; start: string; end: string }
+export type WorkSchedule = WorkDay[]; // 길이 7, 인덱스 = 요일(0=일)

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
-import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, Project, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord } from './types';
+import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, Project, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord, WorkSchedule, WorkDay } from './types';
 import { empty, emptyPlan, load, save, uid, todayStr, todayDow } from './store';
 
 // ── 전역 공유 스토어 ──────────────────────────────────────────────────────────
@@ -120,6 +120,19 @@ export function useStore() {
         ? (d.offDays ?? []).filter(x => x !== dateStr)
         : [...(d.offDays ?? []), dateStr],
     }));
+
+  // 주간 업무시간 타임테이블 (요일별 근무 가능 시간). 기본값: 월~금 09:00-18:00
+  const DEFAULT_WORK_SCHEDULE: WorkSchedule = Array.from({ length: 7 }, (_, i) => ({
+    on: i >= 1 && i <= 5, start: '09:00', end: '18:00',
+  }));
+  const workSchedule: WorkSchedule = (appData.workSchedule && appData.workSchedule.length === 7)
+    ? appData.workSchedule
+    : DEFAULT_WORK_SCHEDULE;
+  const setWorkDay = (day: number, patch: Partial<WorkDay>) =>
+    update(d => {
+      const base = (d.workSchedule && d.workSchedule.length === 7) ? d.workSchedule : DEFAULT_WORK_SCHEDULE;
+      return { ...d, workSchedule: base.map((wd, i) => (i === day ? { ...wd, ...patch } : wd)) };
+    });
 
   // 업무 영역 표시 순서 (이름 기준). Goals에서 사용자가 조정
   const areaOrder = appData.areaOrder ?? [];
@@ -654,6 +667,7 @@ export function useStore() {
     journeyFlags: appData.journeyFlags ?? [],
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo,
     offDays, isOffDay, toggleOffDay,
+    workSchedule, setWorkDay,
     areaOrder, moveArea, setAreaOrder,
     calendarMemos, setCalendarMemo,
     homeHiddenToday, hideTodoFromHome, unhideTodoFromHome,

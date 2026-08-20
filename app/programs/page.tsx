@@ -25,6 +25,7 @@ import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
 import GoalsRoadmap, { GoalsRoadmapHandle } from '../components/GoalsRoadmap';
+import WorkHoursPanel from '../components/WorkHoursPanel';
 import FlagAward from '../components/FlagAward';
 
 type ProgramWithWs = Program & { wsId: string; wsName: string };
@@ -1439,7 +1440,11 @@ export default function ProgramsPage() {
   const shortDate = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-4rem)] min-h-0">
+    <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] min-h-0">
+      {/* 상단: 주간 업무시간 타임테이블 */}
+      <div className="flex-shrink-0"><WorkHoursPanel /></div>
+
+      <div className="flex gap-4 flex-1 min-h-0">
       {/* 좌측: 계획된 업무 리스트 (좁게) */}
       <aside className="w-[300px] shrink-0 flex flex-col min-h-0">
         <h1 className="text-[22px] font-black tracking-[-0.02em]" style={{ color: '#16211E' }}>Goals</h1>
@@ -1507,6 +1512,7 @@ export default function ProgramsPage() {
       {/* 우측: 간트차트 로드맵 (화면 꽉 차게) */}
       <div className="flex-1 min-w-0 min-h-0">
         <GoalsRoadmap ref={calRef} programs={quarterPrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
+      </div>
       </div>
 
       {flagAward && <FlagAward flagSrc={flagAward.flagSrc} heading={flagAward.heading} sub={flagAward.sub} foot={flagAward.foot} onClose={() => setFlagAward(null)} />}
