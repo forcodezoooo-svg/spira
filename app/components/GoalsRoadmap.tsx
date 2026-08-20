@@ -13,7 +13,7 @@ type Lvl = 'program' | 'deadline' | 'todo' | 'subtask' | 'unit';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
 type Payload = { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string };
-type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string };
+type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string; isAdd?: boolean; addKind?: Lvl };
 
 export interface GoalsRoadmapHandle { focus: (level: Lvl, key: string, start?: string, end?: string, name?: string) => void; startListDrag: (payload: Payload, e: React.DragEvent) => void; }
 interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string } | null; cardClassName?: string; }
@@ -24,6 +24,7 @@ const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주'], ['day', '일'], ['hour', '시']];
 const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물', day: 'task', hour: '세부 작업' };
+const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
   year: { pxPerDay: 4, buffer: 400, minSpan: 3660 },   // ±5년
@@ -215,22 +216,26 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
     const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
     const pp = progPeriod(p);
-    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: dls.length > 0, wsId: p.wsId, programId: p.id, pgKey });
+    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, pgKey });
     if (!isOpen(pgKey, 0)) continue;
+    if (dls.length === 0) rows.push({ key: `add-${pgKey}`, level: 1, kind: 'deadline', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, pgKey, isAdd: true, addKind: 'deadline' });
     for (const dl of dls) {
       const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl); const todos = dl.todos.filter(t => !t.done);
-      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: todos.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
+      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
       if (!isOpen(dKey, 1)) continue;
+      if (todos.length === 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
       for (const t of todos) {
         const tKey = `t-${t.id}`; const subs = (t.subtasks ?? []).filter(s => !s.done);
         const ts = t.date || t.deadline, te = t.deadline || t.date;
-        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: subs.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
+        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
         if (!isOpen(tKey, 2)) continue;
+        if (subs.length === 0) rows.push({ key: `add-${tKey}`, level: 3, kind: 'subtask', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, isAdd: true, addKind: 'subtask' });
         for (const s of subs) {
           const sKey = `s-${s.id}`; const units = (s.units ?? []).filter(u => !u.done);
           const ss = s.date || s.deadline, se = s.deadline || s.date;
-          rows.push({ key: sKey, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: units.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey });
+          rows.push({ key: sKey, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey });
           if (!isOpen(sKey, 3)) continue;
+          if (units.length === 0) rows.push({ key: `add-${sKey}`, level: 4, kind: 'unit', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey, isAdd: true, addKind: 'unit' });
           for (const u of units) { const us = u.date || u.deadline, ue = u.deadline || u.date; rows.push({ key: `u-${u.id}`, level: 4, kind: 'unit', name: u.name, start: us && ue ? (us > ue ? ue : us) : undefined, end: ue || us, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, unitId: u.id, pgKey }); }
         }
       }
@@ -268,6 +273,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (!stId) { window.alert('먼저 task를 추가하세요.'); return; }
     const name = window.prompt('세부 작업 이름')?.trim(); if (!name) return;
     store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, todos: d.todos.map(t => t.id === tdId ? { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === stId ? { ...s, units: [...(s.units ?? []), { id: uid(), name, done: false }] } : s) } : t) } : d) });
+  };
+  // 빈 상위 노드의 인라인 '추가' (그 자리에 하위 항목 생성)
+  const addSpecific = (r: Row) => {
+    const prog = findProg(r.wsId, r.programId); if (!prog) return;
+    const name = window.prompt(`${CHILD_NAME[r.addKind!] ?? '항목'} 이름`)?.trim(); if (!name) return;
+    if (r.addKind === 'deadline') { store.updateProgramInWs(r.wsId, { ...prog, deadlines: [...(prog.deadlines ?? []), { id: uid(), name, date: '', todos: [], enabled: true }] }); return; }
+    store.updateProgramInWs(r.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => {
+      if (dl.id !== r.deadlineId) return dl;
+      if (r.addKind === 'todo') return { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] };
+      return { ...dl, todos: dl.todos.map(t => {
+        if (t.id !== r.todoId) return t;
+        if (r.addKind === 'subtask') return { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] };
+        return { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === r.subtaskId ? { ...s, units: [...(s.units ?? []), { id: uid(), name, done: false }] } : s) };
+      }) };
+    }) });
   };
   const delRow = (r: Row) => {
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
@@ -381,10 +401,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {rowsDraw.length === 0 ? (
               <div className="flex"><div className="sticky left-0 bg-white" style={{ width: LABEL_W }} /><p className="text-[12px] py-8 px-4" style={{ color: '#9AA39D' }}>항목이 없어요. 오른쪽 위 ‘추가’로 만들어보세요.</p></div>
             ) : rowsDraw.map(r => {
+              const pgIdx0 = pgOrder.get(r.pgKey) ?? 0;
+              if (r.isAdd) return (
+                <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
+                  <div className="sticky left-0 z-20 flex items-center border-b" style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
+                    <button onClick={() => addSpecific(r)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} title={`${CHILD_NAME[r.addKind!]} 추가`}>
+                      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>{CHILD_NAME[r.addKind!]} 추가
+                    </button>
+                  </div>
+                  <div className="relative" style={{ width: contentWidth }} />
+                </div>
+              );
               const placed = !!(r.start && r.end);
               const isCollapsed = !isOpen(r.key, r.level);
               const sel = r.key === selectedKey;
-              const pgIdx = pgOrder.get(r.pgKey) ?? 0;
+              const pgIdx = pgIdx0;
               const left = placed ? xOf(r.start!) : 0;
               const width = placed ? wOf(r.start!, r.end!) : 0;
               const dragging = calDrag?.key === r.key;
