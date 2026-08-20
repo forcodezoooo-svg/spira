@@ -1443,13 +1443,26 @@ export default function ProgramsPage() {
   // Goals가 비어 있을 때 추천할 Plan 사업목표(프로젝트가 있는 것)
   const planGoalsList = store.data.plan.goals ?? [];
   const planProjectsList = store.data.plan.projects ?? [];
-  const recommendGoals = planGoalsList.filter(g => planProjectsList.some(p => p.goalId === g.id));
+  // 프로젝트가 있는 목표를 우선 추천하되, 없어도 목표 자체는 추천 (미리보기가 항상 뜨도록)
+  const recommendGoals = [...planGoalsList].sort((a, b) => {
+    const na = planProjectsList.some(p => p.goalId === a.id) ? 0 : 1;
+    const nb = planProjectsList.some(p => p.goalId === b.id) ? 0 : 1;
+    return na - nb;
+  });
   const shortD = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
   const importPlanGoal = (goalId: string) => {
     if (!wsId) return;
     const goal = planGoalsList.find(g => g.id === goalId);
+    if (!goal) return;
     const projects = planProjectsList.filter(p => p.goalId === goalId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (!goal || !projects.length) return;
+    // 프로젝트가 없으면 목표 자체를 하나의 데드라인으로 만들어 배치
+    if (!projects.length) {
+      store.addProgramToWs(wsId, {
+        name: goal.name, goal: goal.statement || goal.name, color: COLORS[0], fromPlan: true,
+        deadlines: [{ id: uid(), name: goal.name, date: goal.targetDate || '', startDate: goal.startDate, todos: [], enabled: true }],
+      });
+      return;
+    }
     const deadlines = projects.map(p => {
       const start = p.startDate || '';
       const end = p.endDate || p.deadline || goal.targetDate || start || '';
@@ -1480,7 +1493,50 @@ export default function ProgramsPage() {
         <p className="text-[12px] mt-1 mb-3" style={{ color: '#9AA39D' }}>계획된 업무를 오른쪽 로드맵으로 끌어 배치하세요.</p>
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4">
           {listPrograms.length === 0 ? (
-            <p className="text-[13px] leading-relaxed" style={{ color: '#9AA39D' }}>계획된 업무가 없어요.<br />Plan에서 프로젝트·산출물을 먼저 만들어보세요.</p>
+            recommendGoals.length > 0 ? (
+              /* 추천: Plan 사업목표를 가져오기 미리보기 */
+              <div className="rounded-2xl border p-3" style={{ borderColor: '#BCE89A', backgroundColor: '#F8FBF3' }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" style={{ color: '#5EA63A' }}><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <span className="text-[13px] font-black" style={{ color: '#16211E' }}>Plan 목표 가져오기</span>
+                </div>
+                <p className="text-[11px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>세워둔 사업목표를 로드맵으로 가져와 날짜대로 배치할까요?</p>
+                {(() => {
+                  const g = recommendGoals[0];
+                  const projs = planProjectsList.filter(p => p.goalId === g.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                  return (
+                    <div className="rounded-xl bg-white border p-2.5 mb-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="text-[13px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{g.name}</span>
+                        {g.targetDate && <span className="text-[10px] flex-shrink-0" style={{ color: '#7A9463' }}>~{shortD(g.targetDate)}</span>}
+                      </div>
+                      {projs.length > 0 ? (
+                        <ul className="space-y-1">
+                          {projs.map(p => (
+                            <li key={p.id} className="text-[11px] leading-tight" style={{ color: '#5B6560' }}>
+                              <span className="font-semibold">· {p.name}</span>
+                              <span style={{ color: '#9AA39D' }}> {p.startDate && (p.endDate || p.deadline) ? `(${shortD(p.startDate)}~${shortD(p.endDate || p.deadline)})` : ''} 산출물 {(p.areaDeliverables?.length ?? 0)}개</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[10px]" style={{ color: '#9AA39D' }}>프로젝트 없음 · 목표만 배치돼요</p>
+                      )}
+                    </div>
+                  );
+                })()}
+                <button onClick={() => importPlanGoal(recommendGoals[0].id)} className="w-full py-2 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
+                {recommendGoals.length > 1 && (
+                  <div className="mt-2.5 flex flex-wrap gap-1">
+                    {recommendGoals.slice(1).map(g => (
+                      <button key={g.id} onClick={() => importPlanGoal(g.id)} className="text-[11px] font-semibold rounded-full px-2 py-0.5 border bg-white transition-colors hover:bg-neutral-50 truncate max-w-full" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} title={g.name}>+ {g.name}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-[13px] leading-relaxed" style={{ color: '#9AA39D' }}>계획된 업무가 없어요.<br />Plan에서 사업목표·프로젝트를 먼저 만들어보세요.</p>
+            )
           ) : listPrograms.map(p => {
             const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
             if (!dls.length) return null;
@@ -1538,59 +1594,9 @@ export default function ProgramsPage() {
         </div>
       </aside>
 
-      {/* 우측: 간트차트 로드맵 (화면 꽉 차게). 비어 있고 추천할 목표가 있으면 가져오기 미리보기 */}
+      {/* 우측: 간트차트 로드맵 (화면 꽉 차게) */}
       <div className="flex-1 min-w-0 min-h-0">
-        {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
-          <div className="bg-white border rounded-[24px] h-full overflow-y-auto p-8 flex flex-col items-center justify-center text-center" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-            <div className="w-full max-w-[440px]">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: '#EEF7E4' }}>
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" style={{ color: '#5EA63A' }}><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </div>
-              <h2 className="text-[20px] font-black mb-1.5" style={{ color: '#16211E' }}>Plan의 사업목표를 가져올까요?</h2>
-              <p className="text-[13px] leading-relaxed mb-5" style={{ color: '#5B6560' }}>세워둔 사업목표와 그 안의 프로젝트·산출물을 Goals 로드맵으로 가져와 날짜대로 배치해 드릴게요.</p>
-
-              {/* 첫 번째 추천 목표 미리보기 */}
-              {(() => {
-                const g = recommendGoals[0];
-                const projs = planProjectsList.filter(p => p.goalId === g.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-                return (
-                  <div className="rounded-2xl border text-left p-4 mb-4" style={{ borderColor: '#BCE89A', backgroundColor: '#F8FBF3' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[15px] font-bold truncate" style={{ color: '#16211E' }}>{g.name}</span>
-                      {g.targetDate && <span className="text-[11px] flex-shrink-0" style={{ color: '#7A9463' }}>📅 ~{shortD(g.targetDate)}</span>}
-                    </div>
-                    <ul className="space-y-1">
-                      {projs.map(p => (
-                        <li key={p.id} className="flex items-center gap-2 text-[12px]" style={{ color: '#5B6560' }}>
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#5EA63A' }} />
-                          <span className="font-semibold truncate">{p.name}</span>
-                          <span className="flex-shrink-0" style={{ color: '#9AA39D' }}>
-                            {p.startDate && (p.endDate || p.deadline) ? `${shortD(p.startDate)}~${shortD(p.endDate || p.deadline)}` : '날짜 미정'} · 산출물 {(p.areaDeliverables?.length ?? 0)}개
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })()}
-
-              <button onClick={() => importPlanGoal(recommendGoals[0].id)} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>이 목표 가져오기</button>
-
-              {recommendGoals.length > 1 && (
-                <div className="mt-4">
-                  <p className="text-[11px] mb-1.5" style={{ color: '#9AA39D' }}>다른 목표도 가져올 수 있어요</p>
-                  <div className="flex flex-wrap justify-center gap-1.5">
-                    {recommendGoals.slice(1).map(g => (
-                      <button key={g.id} onClick={() => importPlanGoal(g.id)} className="text-[12px] font-semibold rounded-full px-2.5 py-1 border transition-colors hover:bg-neutral-50" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>+ {g.name}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
-        )}
+        <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
       </div>
       </div>
 
