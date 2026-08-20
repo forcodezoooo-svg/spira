@@ -24,13 +24,15 @@ const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주'], ['day', '일'], ['hour', '시']];
 const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물', day: 'task', hour: 'task' };
-const CFG: Record<Scale, { pxPerDay: number; buffer: number; maxDays: number }> = {
-  year: { pxPerDay: 4, buffer: 200, maxDays: 1830 },
-  month: { pxPerDay: 22, buffer: 90, maxDays: 760 },
-  week: { pxPerDay: 90, buffer: 40, maxDays: 260 },
-  day: { pxPerDay: 150, buffer: 20, maxDays: 120 },
-  hour: { pxPerDay: 720, buffer: 8, maxDays: 30 },
+// minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
+const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
+  year: { pxPerDay: 4, buffer: 400, minSpan: 3660 },   // ±5년
+  month: { pxPerDay: 20, buffer: 180, minSpan: 2190 }, // ±3년
+  week: { pxPerDay: 70, buffer: 90, minSpan: 1100 },   // ±1.5년
+  day: { pxPerDay: 110, buffer: 45, minSpan: 550 },    // ±9개월
+  hour: { pxPerDay: 600, buffer: 20, minSpan: 122 },   // ±2개월
 };
+const SPAN_CAP = 9000;
 
 const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap(
   { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0' }, ref,
@@ -46,7 +48,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
   const [scale, setScale] = useState<Scale>('month');
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
+  const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [scrollTarget, setScrollTarget] = useState<string | null>(null); // enterLevel 시 스크롤 목표 날짜
   const [visLabel, setVisLabel] = useState('');
@@ -54,7 +57,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offOpen, setOffOpen] = useState(false);
   const [offStart, setOffStart] = useState('');
   const [offEnd, setOffEnd] = useState('');
-  const toggleCollapse = (key: string) => setCollapsed(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : 3; // 스케일별 기본 표시 depth
+  const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
+  const toggleOpen = (key: string, level: number) => setOpenMap(prev => { const n = new Map(prev); n.set(key, !(prev.has(key) ? prev.get(key)! : level < maxDepth)); return n; });
 
   type DragTarget = { key: string; level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; start: string; end: string };
   const [calDrag, setCalDrag] = useState<(DragTarget & { mode: 'move' | 'resize-start' | 'resize-end'; grabDate: string; origStart: string; origEnd: string }) | null>(null);
@@ -65,7 +70,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const cfg = CFG[scale];
   const isDayScale = scale === 'day' || scale === 'hour';
-  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : scale === 'week' ? 2 : 3; // 스케일별 표시 최대 depth
   const LEVEL_SCALE: Scale[] = ['year', 'month', 'week', 'day']; // 0=사업목표→연, 1=프로젝트→월, 2=산출물→주, 3=task→일
 
   // ── 표시 범위(연속) ──
@@ -78,7 +82,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   if (allDates.length) { const sorted = [...allDates, todayStr].sort(); lo = sorted[0]; hi = sorted[sorted.length - 1]; }
   lo = addDaysStr(lo, -cfg.buffer); hi = addDaysStr(hi, cfg.buffer);
   let span = daysBetween(lo, hi) + 1;
-  if (span > cfg.maxDays) { lo = addDaysStr(todayStr, -Math.floor(cfg.maxDays / 2)); hi = addDaysStr(lo, cfg.maxDays - 1); span = cfg.maxDays; }
+  // 데이터가 적어도 넓게 스크롤되도록 minSpan 확보(오늘 중심으로 확장)
+  if (span < cfg.minSpan) { const extra = cfg.minSpan - span; lo = addDaysStr(lo, -Math.ceil(extra / 2)); hi = addDaysStr(hi, Math.floor(extra / 2)); span = cfg.minSpan; }
+  if (span > SPAN_CAP) { lo = addDaysStr(todayStr, -Math.floor(SPAN_CAP / 2)); hi = addDaysStr(lo, SPAN_CAP - 1); span = SPAN_CAP; }
   const rangeStart = lo;
   const contentWidth = span * cfg.pxPerDay;
   const xOf = (d: string) => daysBetween(rangeStart, d) * cfg.pxPerDay;
@@ -186,7 +192,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const scrollByScreen = (dir: -1 | 1) => { const el = scrollRef.current; if (!el) return; el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' }); };
   const scrollToToday = () => { const el = scrollRef.current; if (!el) return; el.scrollTo({ left: Math.max(0, xOf(todayStr) - el.clientWidth / 2), behavior: 'smooth' }); };
   // 라벨 텍스트 클릭 → 그 단계의 카테고리(스케일)로 전환 + 그 항목으로 스크롤 (하위는 스케일이 자동으로 가림)
-  const enterLevel = (r: Row) => { setSelectedKey(r.key); setScale(LEVEL_SCALE[r.level]); setScrollTarget(r.start ?? r.end ?? null); };
+  const enterLevel = (r: Row) => { setSelectedKey(r.key); setOpenMap(new Map()); setScale(LEVEL_SCALE[r.level]); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
@@ -196,17 +202,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
     const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
     const pp = progPeriod(p);
-    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: dls.length > 0 && maxDepth > 0, wsId: p.wsId, programId: p.id, pgKey });
-    if (maxDepth < 1 || collapsed.has(pgKey)) continue;
+    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: dls.length > 0, wsId: p.wsId, programId: p.id, pgKey });
+    if (!isOpen(pgKey, 0)) continue;
     for (const dl of dls) {
       const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl); const todos = dl.todos.filter(t => !t.done);
-      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: todos.length > 0 && maxDepth > 1, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
-      if (maxDepth < 2 || collapsed.has(dKey)) continue;
+      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: todos.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
+      if (!isOpen(dKey, 1)) continue;
       for (const t of todos) {
         const tKey = `t-${t.id}`; const subs = (t.subtasks ?? []).filter(s => !s.done);
         const ts = t.date || t.deadline, te = t.deadline || t.date;
-        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: subs.length > 0 && maxDepth > 2, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
-        if (maxDepth < 3 || collapsed.has(tKey)) continue;
+        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: subs.length > 0, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
+        if (!isOpen(tKey, 2)) continue;
         for (const s of subs) { const ss = s.date || s.deadline, se = s.deadline || s.date; rows.push({ key: `s-${s.id}`, level: 3, kind: 'subtask', name: s.name, start: ss && se ? (ss > se ? se : ss) : undefined, end: se || ss, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, pgKey }); }
       }
     }
@@ -344,7 +350,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               <div className="flex"><div className="sticky left-0 bg-white" style={{ width: LABEL_W }} /><p className="text-[12px] py-8 px-4" style={{ color: '#9AA39D' }}>항목이 없어요. 오른쪽 위 ‘추가’로 만들어보세요.</p></div>
             ) : rowsDraw.map(r => {
               const placed = !!(r.start && r.end);
-              const isCollapsed = collapsed.has(r.key);
+              const isCollapsed = !isOpen(r.key, r.level);
               const sel = r.key === selectedKey;
               const pgIdx = pgOrder.get(r.pgKey) ?? 0;
               const left = placed ? xOf(r.start!) : 0;
@@ -354,14 +360,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <div key={r.key} data-rm-row={r.key} className="flex" style={{ height: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div
                     onClick={() => enterLevel(r)}
-                    className="group sticky left-0 z-10 flex items-center gap-1 pr-2 border-b cursor-pointer"
+                    className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
                     style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15, borderColor: '#F4F4F0', backgroundColor: sel ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
                     draggable={r.level > 0 && !placed}
                     onDragStart={r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId }, e); } : undefined}
                     title={!placed && r.level > 0 ? '드래그해서 타임라인에 배치' : r.name}
                   >
                     {r.hasChildren ? (
-                      <button onClick={e => { e.stopPropagation(); toggleCollapse(r.key); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0"><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                      <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                     ) : <span className="w-4 flex-shrink-0" />}
                     <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />
                     <span className="truncate flex-1 min-w-0" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
@@ -371,7 +377,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-grab active:cursor-grabbing overflow-visible"
-                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : '14'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 10 : undefined }}
+                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : '14'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 5 : 1 }}
                         title={`${r.name} — 드래그로 이동${r.level > 0 ? ', 양끝을 잡아 기간 조절' : ''}`}>
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none" style={{ fontSize: r.level <= 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
                         {r.level > 0 && <>
