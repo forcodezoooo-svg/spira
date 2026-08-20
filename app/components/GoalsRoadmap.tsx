@@ -255,6 +255,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     : scale === 'week' ? `${new Date(winStartStr).getMonth() + 1}/${new Date(winStartStr).getDate()} – ${new Date(winEndStr).getMonth() + 1}/${new Date(winEndStr).getDate()}`
     : `${aM + 1}월 ${aDate.getDate()}일 (${DOW[aDate.getDay()]})`;
 
+  // 가로 스크롤용 타임라인 콘텐츠 너비(px) — 스케일별로 충분히 넓게
+  const contentWidth = scale === 'year' ? Math.max(1600, totalDays * 5)
+    : scale === 'month' ? Math.max(1100, totalDays * 36)
+    : scale === 'week' ? 1120
+    : scale === 'day' ? 1100
+    : 1920; // hour
+
   const TrackGrid = () => (
     <>
       {workBand && <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: `${workBand.left}%`, width: `${workBand.right - workBand.left}%`, backgroundColor: '#F1FAE6' }} />}
@@ -305,21 +312,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         <div className="mb-3 rounded-xl px-3 py-2 text-[12px] text-center leading-relaxed" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 로드맵에 배치되지 않았어요. 왼쪽 항목을 드래그해 타임라인에 놓아보세요.</div>
       )}
 
-      {/* 헤더 눈금 */}
-      <div className="mb-1.5">
-        <div ref={timelineRef} className="relative h-5">
-          {headerTicks.map((t, i) => (
-            <div key={i} className="absolute top-0 text-[10px] font-medium whitespace-nowrap" style={{ left: `${t.left}%`, color: '#9AA39D', transform: 'translateX(2px)' }}>{t.label}</div>
-          ))}
-        </div>
-      </div>
-
-      {/* 행 */}
-      <div ref={rowsRef} className="relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pr-1" onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
-        {ranges.length === 0 ? (
-          <p className="text-[12px] text-center py-8 leading-relaxed" style={{ color: '#9AA39D' }}>이 기간에 표시할 일정이 없어요.<br />왼쪽 항목을 타임라인으로 드래그해 배치하거나, 네비로 기간을 옮겨보세요.</p>
-        ) : (
-          <div className="space-y-1.5">
+      {/* 헤더 눈금 + 행 (가로/세로 스크롤 · 헤더는 상단 고정) */}
+      <div ref={rowsRef} className="flex-1 min-h-0 overflow-auto overscroll-contain" onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
+        <div className="relative" style={{ width: contentWidth }}>
+          <div ref={timelineRef} className="relative h-6 sticky top-0 z-10 bg-white">
+            {headerTicks.map((t, i) => (
+              <div key={i} className="absolute top-1 text-[10px] font-medium whitespace-nowrap" style={{ left: `${t.left}%`, color: '#9AA39D', transform: 'translateX(2px)' }}>{t.label}</div>
+            ))}
+          </div>
+          {ranges.length === 0 ? (
+            <p className="text-[12px] text-center py-8 leading-relaxed" style={{ color: '#9AA39D' }}>이 기간에 표시할 일정이 없어요.<br />왼쪽 항목을 타임라인으로 드래그해 배치하거나, 네비로 기간을 옮겨보세요.</p>
+          ) : (
+            <div className="space-y-1.5 pt-1 pb-2">
             {ranges.map(r => {
               const left = xStartPct(r.start < winStartStr ? winStartStr : r.start);
               const right = xEndPct(r.end > winEndStr ? winEndStr : r.end);
@@ -360,7 +364,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               );
             })}
           </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
