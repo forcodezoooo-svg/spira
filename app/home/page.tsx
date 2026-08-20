@@ -9,7 +9,6 @@ import { getGoalTasksForDate, GoalTask, workspaceColor } from '../lib/goalTasks'
 import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
 import MusicTimer from '../components/MusicTimer';
-import MemoPanel from '../components/MemoPanel';
 import GoalsCalendar from '../components/GoalsCalendar';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
@@ -104,7 +103,6 @@ export default function Home() {
     if (!t.deadline || t.deadline < tomorrowStr) patch.deadline = tomorrowStr;
     store.updateProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, patch);
   };
-  const fmt = (n: number) => n.toLocaleString('ko-KR');
 
 
   // ── 오늘의 업무 (현재 분기 프로그램만) ────────────────────────────────────────
@@ -235,16 +233,6 @@ export default function Home() {
       draggingKey === key ? 'opacity-50' : ''
     }`,
   });
-
-  // ── 수익/지출 (전체 비즈니스 통합, 이번 달) ────────────────────────────────────
-  // 홈의 수익/지출 박스는 활성 워크스페이스와 무관하게 모든 비즈니스를 합산해 보여준다.
-  const ym = dateStr.slice(0, 7);
-  const allResources = store.allWorkspacesEntries.flatMap(e => e.resources);
-  const monthIncome = allResources.filter(r => r.type === 'income' && r.date.startsWith(ym)).reduce((s, r) => s + r.amount, 0);
-  const monthExpense = allResources.filter(r => r.type === 'expense' && r.date.startsWith(ym)).reduce((s, r) => s + r.amount, 0);
-  // 구독은 시작 월(startMonth)부터 반영 — 이번 달 기준으로 합산
-  const subTotal = store.allWorkspacesEntries.flatMap(e => e.subscriptions ?? []).filter(s => !s.startMonth || s.startMonth <= ym).reduce((s, r) => s + r.amount, 0);
-  const netProfit = monthIncome - monthExpense - subTotal;
 
   // ── 업커밍 데드라인 (전체 워크스페이스) ──────────────────────────────────────
   type Upcoming = { key: string; name: string; date: string; color: string; kind: '데드라인'; wsName: string };
@@ -595,37 +583,6 @@ export default function Home() {
       <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
         {/* 타이머 pill */}
         <MusicTimer compact />
-
-        {/* 메모 (접이식) — 공통 컴포넌트, 플레이바 바로 아래 */}
-        <MemoPanel />
-
-        {/* 이번 달 수익/지출 */}
-        <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-2.5">
-              <span className="w-[26px] h-[26px] rounded-lg flex items-center justify-center" style={{ backgroundColor: '#EEF7E4', color: '#44543C' }}>
-                <svg viewBox="0 0 19 10" className="w-[15px] h-auto" fill="currentColor"><path d="M16.8229 0H2.17708C0.976675 0 0 1.09021 0 2.44091V7.55909C0 8.90497 0.972372 10 2.17708 10H16.8229C18.0233 10 19 8.90979 19 7.55909V2.44091C19 1.09503 18.0276 0 16.8229 0ZM6.55275 4.99759C6.55275 3.50699 7.43047 2.24795 8.63949 1.83309V8.15726C7.43047 7.7424 6.55275 6.48336 6.55275 4.99277V4.99759ZM10.3605 8.16208V1.83792C11.5695 2.25277 12.4472 3.51182 12.4472 5.00241C12.4472 6.49301 11.5695 7.75205 10.3605 8.16691V8.16208Z" /></svg>
-              </span>
-              <span className="text-[16px] font-bold" style={{ color: '#16211E' }}>이번 달 수익/지출</span>
-            </div>
-            <button onClick={() => router.push('/resources')} className="text-[13px] transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>자세히</button>
-          </div>
-          <div className="flex items-center justify-between mb-3.5">
-            <span className="text-[14px]" style={{ color: '#5B6560' }}>수익</span>
-            <span className="font-mono text-[20px] font-semibold tabular-nums" style={{ color: '#16211E' }}>+{fmt(monthIncome)}</span>
-          </div>
-          <div className="flex items-center justify-between mb-5">
-            <span className="text-[14px]" style={{ color: '#5B6560' }}>비용</span>
-            <span className="font-mono text-[20px] font-semibold tabular-nums" style={{ color: '#16211E' }}>-{fmt(monthExpense + subTotal)}</span>
-          </div>
-          <div className="h-px mb-4" style={{ backgroundColor: 'var(--spira-border)' }} />
-          <div className="flex items-baseline justify-between">
-            <span className="text-[15px] font-semibold" style={{ color: '#16211E' }}>순이익</span>
-            <span className="font-mono text-[32px] font-bold tabular-nums tracking-[-0.01em]" style={{ color: netProfit >= 0 ? '#16211E' : '#FF696C' }}>
-              {netProfit >= 0 ? '+' : ''}{fmt(netProfit)}
-            </span>
-          </div>
-        </div>
 
         {/* Goals 캘린더 — 일정 배치·드래그 편집 (Goals 페이지와 동일) */}
         <GoalsCalendar
