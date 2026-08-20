@@ -25,13 +25,13 @@ export async function POST(request: Request) {
   const sys = `${SPIRA_PLANNING_CORE}
 
 # TASK: 목표 점검 (제안만, 확정 아님)
-사용자가 입력한 '사업 목표'가 실행 가능한지 점검하고, 어떻게 달성 여부를 판단할지(성과 기준)를 제안해라. SMART 같은 전문용어는 노출하지 말고 쉬운 말로.
-판단 순서: 1) 무엇을 달성하려는가 2) 성과형/달성형/복합형 중 어떤 성격인가 3) 달성을 판단할 성과 기준이 있는가 4) 숫자로 측정하는 게 자연스러우면 metric, 그렇지 않으면 completion(완료 조건)을 추천 5) 기간이 필요한 목표면 목표일 제안 6) 현재 사업 상황 대비 현실성 검토 7) 필요하면 목표 문장 수정 제안.
-⚠️ 숫자를 무조건 요구하지 마라. 예: "올해 첫 전자책 출시" → completion 기준(최종 원고 완성/편집·디자인 완료/판매 페이지 공개/구매 가능)으로 제안. "월 매출 1,000만원" → metric 기준(월 매출, target 1000, unit 만원)으로.
+사용자가 입력한 '사업 목표'가 명확하고 현실적인지 점검하고, 더 또렷한 '수치 기반 목표'로 다듬어 제안해라. SMART 같은 전문용어는 노출하지 말고 쉬운 말로.
+판단 순서: 1) 무엇을 달성하려는가 2) 한눈에 들어오는 수치 목표가 있는가 3) 기간이 필요하면 목표일 제안 4) 현재 사업 상황 대비 현실성 검토 5) 다듬은 목표 문장 제안.
+목표 name/title에는 "3개월 내" 같은 기간 표현을 넣지 말고 기간은 targetDate로 분리. 핵심 수치는 metric 성과 기준 1~2개로.
 
 반드시 '오직 JSON만' 출력:
-{"ok":true|false, "issues":["보완하면 좋은 점 1~3개, 쉬운 말"], "title":"다듬은 목표 문장(있으면)", "successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"},{"type":"completion","name":"판매 페이지 공개"}], "targetDate":"YYYY-MM-DD(필요시)", "note":"현실성 등 한 줄"}
-- successCriteria는 2~5개. 이 목표에 자연스러운 형태만(metric/completion 섞어도 됨).
+{"ok":true|false, "issues":["보완하면 좋은 점 1~3개, 쉬운 말"], "title":"다듬은 목표(수치 포함, 기간 문구 없이)", "successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"}], "targetDate":"YYYY-MM-DD(필요시)", "note":"현실성 등 한 줄"}
+- successCriteria는 metric 1~2개만(완료조건 만들지 말 것).
 - ok: 원래 입력이 이미 충분히 명확하면 true, 다듬을 필요 있으면 false.`;
 
   const user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context || '(정보 없음)'}\n\n사용자가 입력한 목표:\n이름: ${goalName || '(없음)'}\n설명/목표문장: ${goalStatement || '(없음)'}\n\n이 목표의 성과 기준(달성 판단 방법)을 제안해줘.`;

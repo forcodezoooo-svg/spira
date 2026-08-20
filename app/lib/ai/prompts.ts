@@ -18,9 +18,11 @@ SUCCESS CRITERIA define how the user knows a Goal is achieved. They can be metri
 
 STRATEGY = direction/approach to reach the Goal, based on the user's ACTUAL Work Areas. Do NOT create a strategy for every Work Area — only areas that materially contribute to this goal.
 
-PROJECT = a temporary effort with a purpose, a start/end (or completion boundary), and a clear final deliverable. Recurring operational work (routines) must NOT be turned into Projects.
+PROJECT = a temporary effort with a purpose, a start/end (or completion boundary), and a clear final deliverable. Recurring operational work (routines) must NOT be turned into Projects. Projects must cover the REAL arc of getting the result out — including the actual making/producing/launching stage — not just planning → marketing → feedback. Order them the way the work actually happens.
 
-DELIVERABLE = a concrete result of a Project (a Final Deliverable + Area Deliverables from relevant Work Areas only). Deliverables are noun-form results ("시장 분석 보고서"), not activities ("시장 분석하기").
+DELIVERABLE = a concrete, shippable result of a Project. Deliverables are noun-form real outputs the user can put in front of customers/audience (a finished product, a live page, a published piece, an opened store, first real sales), NOT activities and NOT internal documents.
+
+SOLO-FOUNDER EXECUTION (very important): the user runs the whole business ALONE and must move fast. Prioritize producing VISIBLE, real-world results quickly so they can get reactions and feedback early. Minimize internal paperwork — reports, plans, decks, "기획서/분석 보고서" are at most lightweight personal guidelines, never the goal and never the bulk of deliverables. NEVER make "기획서 작성 / 보고서 / 전략 수립" a top-level project or a major deliverable. When in doubt, choose the deliverable that gets something real in front of people soonest.
 
 Adapt terminology to the business: a cafe → menu/foot traffic/inventory/margin/local marketing; a creator → content/audience/distribution/cadence/monetization; a freelancer → leads/proposals/clients/portfolio/capacity; an online store → products/orders/inventory/conversion/fulfillment. These are examples, not fixed templates — follow the user's real context.
 
