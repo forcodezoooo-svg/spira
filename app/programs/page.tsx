@@ -24,6 +24,7 @@ import { uid } from '../lib/store';
 import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '../lib/ChatContext';
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
+import GoalsRoadmap, { GoalsRoadmapHandle } from '../components/GoalsRoadmap';
 import FlagAward from '../components/FlagAward';
 
 type ProgramWithWs = Program & { wsId: string; wsName: string };
@@ -156,6 +157,7 @@ export default function ProgramsPage() {
     e.dataTransfer.setData('text/plain', JSON.stringify(payload));
     e.dataTransfer.effectAllowed = 'move';
     setHtmlDragging(true);
+    calRef.current?.startListDrag(payload, e); // 로드맵에도 드래그 시작 알림
   };
   useEffect(() => {
     const end = () => { setHtmlDragging(false); setDragOverDate(null); setListDragCtx(null); dragPayloadRef.current = null; dragOverDateRef.current = null; };
@@ -166,6 +168,7 @@ export default function ProgramsPage() {
   // 드래그 중 격자 위/아래로 벗어나면 '한 달씩'만 넘김 (엣지 트리거)
   const weeksRef = useRef<HTMLDivElement>(null);
   const inNavRef = useRef<-1 | 1 | null>(null);
+  const calRef = useRef<GoalsRoadmapHandle>(null); // 우측 간트 로드맵 (리스트 드래그·포커스 브릿지)
   const navMonth = (dir: -1 | 1) => setCalMonth(m => new Date(m.getFullYear(), m.getMonth() + dir, 1));
   const navByPoint = (dir: -1 | 1 | null) => {
     if (dir && inNavRef.current !== dir) { inNavRef.current = dir; navMonth(dir); }
@@ -473,10 +476,8 @@ export default function ProgramsPage() {
 
   // 좌측 항목(목표/데드라인/업무) 클릭 → 해당 탭으로 전환 + 그 달로 이동 + 막대 강조. 미배치면 안내.
   const focusCal = (level: CalLevel, key: string, start?: string, end?: string, name = '') => {
-    setCalLevel(level);
-    setPreviewTask({ start, end, name });
-    if (start || end) { setHighlightKey(key); setNotPlaced(null); }
-    else { setHighlightKey(null); setNotPlaced(name); }
+    setPreviewTask({ start, end, name }); // 리스트 항목 강조용
+    calRef.current?.focus(level, key, start, end, name);
   };
 
   if (!store.ready) return <DashboardSkeleton />;
@@ -2427,7 +2428,11 @@ export default function ProgramsPage() {
         })()}
       </section>
     </div>
-    {CalendarPanel}
+    <aside data-teach="calendar" className="hidden xl:flex flex-col flex-1 min-w-[360px] sticky top-8 gap-4 max-h-[calc(100vh-3rem)]">
+      <div className="flex-shrink-0"><MusicTimer compact /></div>
+      <div className="flex-shrink-0"><MemoPanel /></div>
+      <GoalsRoadmap ref={calRef} programs={quarterPrograms} businessColor={businessColor} resolveProject={resolveProject} />
+    </aside>
     {flagAward && <FlagAward flagSrc={flagAward.flagSrc} heading={flagAward.heading} sub={flagAward.sub} foot={flagAward.foot} onClose={() => setFlagAward(null)} />}
     </div>
   );
