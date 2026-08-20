@@ -7,6 +7,8 @@ import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Del
 
 // AI가 돌려주는 성과 기준(id 없음)
 type AiCriterion = { type: string; name: string; current?: number; target?: number; unit?: string; measurementPeriod?: string };
+// AI 목표 설계 팝업에서 다루는 제안 목표(근거 포함)
+type PlanGoal = { name: string; targetDate?: string; rationale?: string; successCriteria: AiCriterion[] };
 // AI 제안 미리보기(승인 전) — 목표 점검 / Goal 쪼개기 / Project 쪼개기
 type AiPreview =
   | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; title: string; successCriteria: AiCriterion[]; targetDate: string; note: string } };
@@ -1926,6 +1928,123 @@ function AiPreviewModal({ preview, onApply, onClose }: { preview: AiPreview; onA
   );
 }
 
+// AI 목표 설계 팝업 — 5단계 성장 목표 제안 + 근거 + 하단 채팅으로 실시간 조정
+function GoalPlanModal({ context, areas, onApply, onClose }: {
+  context: string; areas: string[];
+  onApply: (goals: PlanGoal[]) => void;
+  onClose: () => void;
+}) {
+  const [goals, setGoals] = useState<PlanGoal[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const startedRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const SEED = '이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.';
+
+  const call = async (log: { role: 'user' | 'assistant'; content: string }[]) => {
+    setLoading(true);
+    try {
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const convo = [{ role: 'user' as const, content: SEED }, ...log];
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context, areas, today, messages: convo, currentGoals: goals.length ? goals : undefined }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { setMessages(m => [...m, { role: 'assistant', content: '앗, 잠시 문제가 생겼어요. 다시 시도해 주세요.' }]); return; }
+      if (Array.isArray(data.goals) && data.goals.length) setGoals(data.goals as PlanGoal[]);
+      if (data.reply) setMessages(m => [...m, { role: 'assistant', content: String(data.reply) }]);
+    } catch { setMessages(m => [...m, { role: 'assistant', content: '네트워크 오류가 발생했어요.' }]); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (startedRef.current) return; startedRef.current = true; void call([]); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [messages, goals, loading]);
+
+  const send = () => { const t = input.trim(); if (!t || loading) return; const log = [...messages, { role: 'user' as const, content: t }]; setMessages(log); setInput(''); void call(log); };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,41,41,0.45)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-2 flex-shrink-0">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+              <h3 className="text-[15px] font-black text-neutral-900">AI 목표 설계</h3>
+            </div>
+            <p className="text-[12px] text-neutral-400 mt-0.5">달성 가능한 5단계 성장 목표예요. 아래 대화로 수치를 함께 맞춰보세요.</p>
+          </div>
+          <button onClick={onClose} className="text-neutral-300 hover:text-neutral-600 text-lg leading-none flex-shrink-0">×</button>
+        </div>
+
+        {/* 스크롤: 목표 카드 + 대화 */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 space-y-3 min-h-[120px]">
+          {/* 제안 목표 */}
+          {goals.length === 0 && loading ? (
+            <div className="py-8 flex flex-col items-center gap-2 text-neutral-400">
+              <span className="w-6 h-6 rounded-full border-2 border-neutral-200 border-t-violet-400 animate-spin" />
+              <p className="text-[13px]">성장 목표를 설계하는 중…</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {goals.map((g, i) => (
+                <div key={i} className="border border-neutral-200 rounded-xl px-3.5 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: '#EEF7E2', color: '#3E7A2E' }}>{i + 1}</span>
+                    <b className="text-[14px] text-neutral-900">{g.name}</b>
+                    {g.targetDate && <span className="text-[11px] text-neutral-400 flex-shrink-0">~{g.targetDate.slice(2).replace(/-/g, '.')}</span>}
+                  </div>
+                  {g.rationale && <p className="text-[12px] text-neutral-500 mt-1 ml-7">{g.rationale}</p>}
+                  {g.successCriteria.length > 0 && (
+                    <div className="mt-1.5 ml-7 flex flex-wrap gap-1">
+                      {g.successCriteria.map((c, j) => (
+                        <span key={j} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: '#EAF0FB', color: '#4E7CF5' }}>
+                          {c.name}{c.target !== undefined ? ` ${c.target.toLocaleString('ko-KR')}${c.unit ?? ''}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 대화 */}
+          {messages.length > 0 && (
+            <div className="space-y-2 pt-1">
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[85%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={m.role === 'user' ? { backgroundColor: '#DFF9C4', color: '#16211E' } : { backgroundColor: '#F1F1EB', color: '#3E4A44' }}>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {loading && goals.length > 0 && (
+            <div className="flex justify-start"><div className="rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB' }}><span className="inline-block w-4 h-4 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" /></div></div>
+          )}
+        </div>
+
+        {/* 입력 + 적용 */}
+        <div className="px-5 pt-3 pb-4 flex-shrink-0 border-t border-neutral-100">
+          <div className="flex items-end gap-2 mb-2.5">
+            <textarea value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
+              rows={1} placeholder="예: 첫 목표는 더 작게 / 카페라 월 매출 기준으로 / 6개월 더 여유있게"
+              className="flex-1 resize-none bg-neutral-50 border border-neutral-200 rounded-2xl px-3.5 py-2.5 text-[13px] outline-none focus:border-violet-400 max-h-24" />
+            <button onClick={send} disabled={!input.trim() || loading} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-6 16-2.5-6L4 12z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>
+            </button>
+          </div>
+          <button onClick={() => onApply(goals)} disabled={!goals.length || loading} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>
+            이 목표로 만들기{goals.length ? ` (${goals.length})` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 기존(옛 구조) 데이터를 새 레이아웃으로 매핑 — 데이터 유실 없이 그대로 보여주기 위한 폴백.
 // 새 필드(overview/bizGoals)가 아직 없을 때만 옛 필드에서 끌어온다. 사용자가 새로 편집하면 새 필드로 '흡수'된다.
 function deriveOverview(plan: PlanData): BusinessOverview {
@@ -1965,6 +2084,7 @@ export default function PlanPage() {
   const [analyzingDoc, setAnalyzingDoc] = useState(false);
   const [aiBusyId, setAiBusyId] = useState<string | null>(null); // AI 처리 중인 Goal/Project id
   const [preview, setPreview] = useState<AiPreview | null>(null); // AI 제안 미리보기(승인 전)
+  const [goalPlanOpen, setGoalPlanOpen] = useState(false); // AI 목표 설계 팝업(대화형)
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
   const migratedRef = useRef<Set<string>>(new Set()); // bizGoals→goals 마이그레이션 1회 가드
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string } | null>(null); // 성장 단계 달성 깃발 오버레이
@@ -2346,37 +2466,26 @@ export default function PlanPage() {
   const updateProject = (id: string, patch: Partial<Project>) => update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
   const removeProject = (id: string) => update({ projects: (plan.projects ?? []).filter(p => p.id !== id) });
 
-  // ── AI: 목표 추천 / 점검 / 쪼개기 → 모두 Preview(setPreview) 후 사용자 승인(applyPreview) ──
-  const suggestGoals = async () => {
-    if (!aiGate()) return;
-    setAiBusyId('__goals__');
-    try {
-      const areas = (plan.workAreas ?? []).map(a => a.name);
-      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context: buildContext(), areas, today }) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) { toast('목표 추천에 실패했어요. 잠시 후 다시 시도해 주세요.', 'error'); return; }
-      const gs = (data.goals ?? []) as { name: string; targetDate?: string; successCriteria: AiCriterion[] }[];
-      if (!gs.length) { toast('추천할 목표를 찾지 못했어요.', 'info'); return; }
-      // 미리보기 없이 바로 목표에 추가 (기존 목표는 유지)
-      setPlan(prev => {
-        if (!prev) return prev;
-        const base = prev.goals ?? [];
-        const newGoals: Goal[] = gs.map((g, i) => ({
-          id: uid(), name: g.name, targetDate: g.targetDate,
-          // 첫 목표만 진행 중, 나머지는 보류 (기존 목표가 있으면 추가분은 전부 보류)
-          status: (base.length === 0 && i === 0) ? 'active' : 'onhold',
-          order: base.length + i, strategies: [],
-          successCriteria: g.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod })),
-        }));
-        const next = { ...prev, goals: [...base, ...newGoals] };
-        const wsId = selectedWsIdRef.current;
-        if (wsId) store.updatePlanInWs(wsId, next);
-        return next;
-      });
-      toast(`목표 ${gs.length}개를 추가했어요. 🌿`, 'success');
-    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
-    finally { setAiBusyId(null); }
+  // ── AI: 목표 설계 팝업 열기 / 점검 / 쪼개기 ──
+  const suggestGoals = () => { if (aiGate()) setGoalPlanOpen(true); };
+  // 팝업에서 확정한 목표들을 실제 반영 (첫 목표만 진행중, 나머지 보류)
+  const applyPlannedGoals = (planned: PlanGoal[]) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const base = prev.goals ?? [];
+      const newGoals: Goal[] = planned.map((g, i) => ({
+        id: uid(), name: g.name, targetDate: g.targetDate,
+        status: (base.length === 0 && i === 0) ? 'active' : 'onhold',
+        order: base.length + i, strategies: [],
+        successCriteria: g.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod })),
+      }));
+      const next = { ...prev, goals: [...base, ...newGoals] };
+      const wsId = selectedWsIdRef.current;
+      if (wsId) store.updatePlanInWs(wsId, next);
+      return next;
+    });
+    setGoalPlanOpen(false);
+    toast(`목표 ${planned.length}개를 추가했어요. 🌿`, 'success');
   };
   const reviewGoal = async (goalId: string) => {
     if (!aiGate()) return;
@@ -2596,6 +2705,7 @@ export default function PlanPage() {
 
     {/* AI 제안 미리보기(승인 전) 모달 */}
     {preview && <AiPreviewModal preview={preview} onApply={applyPreview} onClose={() => setPreview(null)} />}
+    {goalPlanOpen && <GoalPlanModal context={buildContext()} areas={(plan.workAreas ?? []).map(a => a.name)} onApply={applyPlannedGoals} onClose={() => setGoalPlanOpen(false)} />}
 
     {/* ── 오른쪽: 플레이바 + 공용 메모 ── */}
     <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">

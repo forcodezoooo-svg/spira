@@ -26,26 +26,26 @@ export async function POST(request: Request) {
   const access = await checkAiAccess();
   if ('error' in access) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  let body: { mode?: string; context?: string; goalName?: string; goalDesc?: string; deliverableName?: string; projectName?: string; areas?: string[]; today?: string } = {};
+  type ChatMsg = { role: 'user' | 'assistant'; content: string };
+  let body: { mode?: string; context?: string; goalName?: string; goalDesc?: string; deliverableName?: string; projectName?: string; areas?: string[]; today?: string; messages?: ChatMsg[]; currentGoals?: unknown } = {};
   try { body = await request.json(); } catch { /* ignore */ }
-  const { mode, context = '', goalName = '', goalDesc = '', deliverableName = '', projectName = '', areas = [], today = '' } = body;
+  const { mode, context = '', goalName = '', goalDesc = '', deliverableName = '', projectName = '', areas = [], today = '', messages = [], currentGoals } = body;
   const areaHint = Array.isArray(areas) && areas.length ? `\n참고: 이 사업의 업무 영역 목록: ${areas.join(', ')} (가능하면 이 중에서 고르되 필요하면 추가 가능)` : '';
 
   let sys = '';
   let user = '';
   if (mode === 'goal-suggest') {
-    // Business 맥락 → 구체적·수치 기반 성장 목표 추천 (기한은 targetDate로 분리)
+    // Business 맥락 → 5단계 성장 목표(근거 포함) 추천 + 대화로 조정
     sys = `${SPIRA_PLANNING_CORE}
 
-# TASK: 사업 목표 추천 (제안만)
-이 사업에 맞는 '구체적이고 현실적인 수치 기반 성장 목표' 2~4개를 성장 순서대로 제안해라.
-⚠️ 사업 목표는 '사업 전체의 성장·확장' 수준이어야 한다. 예: 목표 고객/유저 수 확보, 월/연 순이익 목표, 총 순이익 X% 성장, 새 시장·지역·B2B 확장(그 방향), 새 수익모델 도입과 그로 인한 총 이익 기여. ❌ "기능 개선", "피드백 반영", "OO 기능 출시/추가" 같은 제품·운영·기능 단위는 사업 목표가 아니다(프로젝트 이하 단계). 사업 목표에 절대 넣지 마라.
-⚠️ "런칭/성장/성장과 확장/성숙" 같은 막연한 단계 라벨 금지. 각 목표 name에는 한눈에 들어오는 '수치'를 담되 "3개월 내/6개월 내" 같은 기간 표현은 name에 넣지 마라 — 기간은 targetDate로 분리한다.
-단계마다 숫자가 커지게(예: 유료 고객 500명 → 2,000명, 월 순이익 300만원 → 1,000만원). 이 업종·규모에 현실적인 숫자로.
-각 목표: name(예: "월 매출 1,000만원", 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적 기한), successCriteria.
-⚠️ successCriteria에는 이 목표의 달성을 판단할 수 있는 '관련 지표를 모두' 넣어라(2~5개, 사업 성격에 맞게). 예: 카페 → 월 매출·객단가·일평균 방문객·재방문율 / 유튜브 → 구독자 수·월 조회수·평균 시청시간 / 쇼핑몰 → 월 매출·주문 건수·전환율·재구매율. 1개만 넣지 말고 그 목표에 의미 있는 지표들을 함께 채워라. (current는 모르면 0)
-반드시 '오직 JSON만': {"goals":[{"name":"월 매출 1,000만원","targetDate":"YYYY-MM-DD","successCriteria":[{"type":"metric","name":"월 매출","target":1000,"current":0,"unit":"만원","measurementPeriod":"월"},{"type":"metric","name":"객단가","target":8000,"current":0,"unit":"원"},{"type":"metric","name":"일평균 방문객","target":80,"current":0,"unit":"명"}]}]}`;
-    user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}${areaHint}\n\n이 사업에 맞는 현실적인 수치 기반 성장 목표를 추천해줘(기간은 targetDate로).`;
+# TASK: 사업 목표 5단계 추천 + 대화로 조정 (제안만)
+이 사업에 맞는 '사업 전체의 성장 목표' 5개를 성장 순서대로 제안해라. (위 GOAL 규칙 준수 — 고객/순이익/확장/새 수익모델 수준. "기능 개선/피드백/기능 출시" 같은 프로젝트 이하 단위 금지)
+⚠️ 1인 창업자가 '충분히 달성 가능하다'고 느끼게 하라. 처음부터 거창한 큰 숫자로 시작하지 마라. 1단계는 아주 작고 현실적으로(예: 첫 유료 고객 10명 / 월 매출 첫 100만원 / 구독자 첫 100명). 이후 단계는 '이전 단계 달성치에서 비례해 성장'하도록 촘촘하게(예: 월 매출 100 → 300 → 700 → 1,500 → 3,000만원처럼 배수로 서서히). 큰 그림은 마지막 5단계에만.
+각 목표: name(수치, "3개월 내" 같은 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적으로 단계마다 점점 뒤로), rationale(왜 이 수치를 목표로 삼았는지 1문장, 사업 맥락·직전 단계 대비 근거), successCriteria(관련 지표 2~4개 metric, current는 모르면 0).
+reply: 사용자에게 건네는 짧고 따뜻한 설명/답변 1~2문장(전반적으로 왜 이렇게 잡았는지, 또는 사용자의 요청을 어떻게 반영했는지).
+반드시 '오직 JSON만': {"reply":"...","goals":[{"name":"","targetDate":"","rationale":"","successCriteria":[{"type":"metric","name":"","target":0,"current":0,"unit":"","measurementPeriod":""}]}]}
+사용자가 대화로 수치·개수·방향 조정을 요청하면, 그 요청을 반영해 goals '전체'를 다시 제시하고 reply로 무엇을 바꿨는지 설명해라.${currentGoals ? `\n\n[현재 제안된 목표(조정 대상)]\n${JSON.stringify(currentGoals)}` : ''}`;
+    user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}${areaHint}\n\n이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.`;
   } else if (mode === 'goal-breakdown') {
     // Goal → 필요한 Projects(+finalDeliverable) — 전략 없이 실행 프로젝트만
     sys = `${SPIRA_PLANNING_CORE}
@@ -89,13 +89,17 @@ ${DELIVERABLE_RULE}
     return NextResponse.json({ error: 'bad-mode' }, { status: 400 });
   }
 
+  // goal-suggest는 대화(messages)로 조정 가능 — 있으면 대화를, 없으면 초기 user 프롬프트를 사용
+  const convo: ChatMsg[] = (mode === 'goal-suggest' && Array.isArray(messages) && messages.length)
+    ? messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').slice(-12)
+    : [{ role: 'user', content: user }];
   try {
     const completion = await getClient().chat.completions.create({
       model: 'gpt-4o',
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: sys },
-        { role: 'user', content: user },
+        ...convo,
       ],
     });
     const parsed = JSON.parse(completion.choices[0]?.message?.content ?? '{}') as Record<string, unknown>;
@@ -107,9 +111,9 @@ ${DELIVERABLE_RULE}
       : [];
     if (mode === 'goal-suggest') {
       const goals = Array.isArray(parsed.goals)
-        ? parsed.goals.map(g => { const gg = g as Record<string, unknown>; return { name: String(gg.name ?? '').trim(), targetDate: String(gg.targetDate ?? '').trim(), successCriteria: parseCriteria(gg.successCriteria).filter(c => c.type === 'metric') }; }).filter(g => g.name).slice(0, 5)
+        ? parsed.goals.map(g => { const gg = g as Record<string, unknown>; return { name: String(gg.name ?? '').trim(), targetDate: String(gg.targetDate ?? '').trim(), rationale: String(gg.rationale ?? '').trim(), successCriteria: parseCriteria(gg.successCriteria).filter(c => c.type === 'metric') }; }).filter(g => g.name).slice(0, 6)
         : [];
-      return NextResponse.json({ goals });
+      return NextResponse.json({ goals, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'goal-breakdown') {
       const projects = Array.isArray(parsed.projects)
         ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim() }; }).filter(p => p.name).slice(0, 6)
