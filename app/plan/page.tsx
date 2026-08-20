@@ -1764,10 +1764,10 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
         <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
       </div>
       <div className="flex items-center gap-1 flex-wrap text-[11px]">
-        <span className="text-neutral-400">목표</span>
-        <input type="number" value={c.targetValue ?? ''} onChange={e => onPatch({ targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`w-14 ${inputCls}`} />
-        <input value={c.unit ?? ''} onChange={e => onPatch({ unit: e.target.value })} placeholder="단위" className={`w-11 ${inputCls}`} />
-        <select value={period} onChange={e => onPatch({ measurementPeriod: e.target.value })} className={inputCls}>{PERIOD_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select>
+        <span className="text-neutral-400 flex-shrink-0">목표</span>
+        <input type="number" value={c.targetValue ?? ''} onChange={e => onPatch({ targetValue: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="목표" className={`flex-1 min-w-[3rem] ${inputCls}`} />
+        <input value={c.unit ?? ''} onChange={e => onPatch({ unit: e.target.value })} placeholder="단위" className={`w-12 flex-shrink-0 ${inputCls}`} />
+        <select value={period} onChange={e => onPatch({ measurementPeriod: e.target.value })} className={`flex-shrink-0 ${inputCls}`}>{PERIOD_OPTS.map(p => <option key={p} value={p}>{p}</option>)}</select>
       </div>
       <div className="text-[11px] text-neutral-500">현재 <b className="text-neutral-800 tabular-nums">{c.currentValue !== undefined ? c.currentValue.toLocaleString('ko-KR') : '—'}</b>{c.unit ?? ''}{hist.length > 0 && <span className="text-neutral-400"> · {hist.length}회</span>}</div>
       <div className="flex items-center gap-1">
@@ -1898,8 +1898,7 @@ function GoalsSection({
                         title="상태" className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 border-0 outline-none cursor-pointer appearance-none" style={{ backgroundColor: st.bg, color: st.color }}>
                         <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
                       </select>
-                      {aiEnabled && <AiBtn id={g.id} icon="check" label="목표 점검" onClick={() => onReviewGoal(g.id)} />}
-                      {aiEnabled && <AiBtn id={g.id} icon="split" label="쪼개기" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
+                      {aiEnabled && <AiBtn id={g.id} icon="split" label="프로젝트 생성" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
                       <button onClick={() => startEdit(g.id, g.name)} className="text-neutral-300 hover:text-neutral-700 text-xs transition-colors flex-shrink-0">이름 수정</button>
                       <button onClick={() => onRemoveGoal(g.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
                     </>
@@ -1980,7 +1979,6 @@ function GoalsSection({
                                 {editId !== p.id && (
                                   <>
                                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: pst.bg, color: pst.color }}>{pst.label}</span>
-                                    {aiEnabled && <AiBtn id={p.id} icon="split" label="쪼개기" onClick={() => { onBreakdownProject(g.id, p.id); setOpenProjects(prev => new Set(prev).add(p.id)); }} />}
                                     <button onClick={() => startEdit(p.id, p.name)} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
                                     <button onClick={() => onRemoveProject(p.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
                                   </>
