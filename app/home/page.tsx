@@ -260,9 +260,9 @@ export default function Home() {
   const journey = journeyGroups.slice(0, 5); // 다가오는 목표 5개 고정
 
 
-  // ── Goals 캘린더용 데이터 (모든 사업의 프로그램 → 데드라인/할일 일정) ──
+  // ── Goals 캘린더용 데이터 — Plan에서 가져온 항목만 (기존 데이터는 가림, Goals와 동일) ──
   const calPrograms = store.allWorkspacesEntries.flatMap(e =>
-    e.programs.map(p => ({ ...p, wsId: e.workspace.id, wsName: e.workspace.name })));
+    e.programs.filter(p => p.fromPlan).map(p => ({ ...p, wsId: e.workspace.id, wsName: e.workspace.name })));
   const calBusinessColor = (id: string) => workspaceColor(store.allWorkspacesEntries, id);
   const calResolveProject = (wsId: string, id?: string) =>
     id ? ((store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.plan.projects ?? []).find(p => p.id === id) ?? null) : null;
