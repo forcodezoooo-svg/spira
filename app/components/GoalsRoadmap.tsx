@@ -426,9 +426,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         ) : (
         <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
           {kbCols.map(col => {
-            const ci = col.name.indexOf(':');
-            const areaTitle = ci >= 0 ? col.name.slice(0, ci).trim() : col.name;
-            const goalSub = ci >= 0 ? col.name.slice(ci + 1).trim() : '';
+            const m = col.name.match(/^(.*?)\s*[:：]\s*(.*)$/); // 반각/전각 콜론 모두 분리
+            const areaTitle = (m ? m[1] : col.name).trim();
+            const goalSub = m ? m[2].trim() : '';
             return (
             <div key={col.todoId} className="flex flex-col min-h-0 w-[240px] flex-shrink-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) e.preventDefault(); }}
@@ -436,10 +436,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
-                  <span className="text-[13px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{areaTitle}</span>
+                  <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{areaTitle}</span>
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
                 </div>
-                {goalSub && <p className="text-[11px] mt-0.5 ml-3.5 truncate" style={{ color: '#9AA39D' }}>🎯 {goalSub}</p>}
+                {goalSub && <p className="text-[11px] mt-0.5 ml-3.5 leading-snug" style={{ color: '#9AA39D' }}>{goalSub}</p>}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                 {col.subtasks.length === 0 && <p className="text-[11px] text-center py-4" style={{ color: '#C4CCC4' }}>task가 없어요</p>}
