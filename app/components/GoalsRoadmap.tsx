@@ -59,7 +59,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offEnd, setOffEnd] = useState('');
   const [kbDrag, setKbDrag] = useState<string | null>(null); // 칸반 드래그 중인 task key
   const [kbAiBusy, setKbAiBusy] = useState<string | null>(null); // AI task 생성 중인 산출물(todoId)
-  const [kbForm, setKbForm] = useState<null | { mode: 'task' | 'subtask'; col: KbCol; s?: Sub }>(null); // task/세부작업 추가 팝업
+  const [kbForm, setKbForm] = useState<null | { mode: 'task' | 'subtask'; col: KbCol; s?: Sub; editUnitId?: string }>(null); // task/세부작업 추가·수정 팝업
   const [formName, setFormName] = useState('');
   const [formDue, setFormDue] = useState('');
   const [formDur, setFormDur] = useState(''); // 세부작업 소요 시간(분)
@@ -350,7 +350,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
   const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDue(''); setFormDur(''); };
-  const kbSubmitForm = () => { const n = formName.trim(); if (!n || !kbForm) return; if (kbForm.mode === 'task') kbCreateTask(kbForm.col, n, formDue); else if (kbForm.s) { const d = Number(formDur); kbCreateUnit(kbForm.col, kbForm.s, n, Number.isFinite(d) && d > 0 ? d : undefined); } setKbForm(null); };
+  const kbSubmitForm = () => {
+    const n = formName.trim(); if (!n || !kbForm) return;
+    if (kbForm.mode === 'task') kbCreateTask(kbForm.col, n, formDue);
+    else if (kbForm.s) { const d = Number(formDur); const dur = Number.isFinite(d) && d > 0 ? d : undefined; if (kbForm.editUnitId) kbUpdateUnit(kbForm.col, kbForm.s, kbForm.editUnitId, n, dur); else kbCreateUnit(kbForm.col, kbForm.s, n, dur); }
+    setKbForm(null);
+  };
   const fmtDur = (min?: number) => { if (!min) return ''; return min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`; };
   // AI로 이 산출물의 task들을 생성해 추가
   const kbAiTasks = async (col: KbCol) => {
@@ -373,6 +378,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   };
   const kbToggleDone = (col: KbCol, s: Sub) => updateSub(col, s.id, { done: !s.done, status: !s.done ? 'done' : 'todo' });
   const kbAddUnit = (col: KbCol, s: Sub) => { setKbForm({ mode: 'subtask', col, s }); setFormName(''); setFormDue(''); setFormDur(''); };
+  const kbEditUnit = (col: KbCol, s: Sub, u: NonNullable<Sub['units']>[number]) => { setKbForm({ mode: 'subtask', col, s, editUnitId: u.id }); setFormName(u.name); setFormDur(u.durationMin ? String(u.durationMin) : ''); setFormDue(''); };
+  const kbUpdateUnit = (col: KbCol, s: Sub, uId: string, name: string, durMin?: number) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, name, durationMin: durMin } : u) });
   const kbToggleUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) });
   // 다른 산출물 칸으로 task 이동 (드래그)
   const kbMoveTask = (sId: string, from: KbCol, to: KbCol) => {
@@ -501,10 +508,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         <div className="mt-1.5 ml-5 space-y-0.5">
                           {units.map(u => (
                             <div key={u.id} className="group/u flex items-center gap-1.5">
-                              <button onClick={() => kbToggleUnit(col, s, u.id)} className="flex items-center gap-1.5 text-left flex-1 min-w-0">
-                                <span className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>
-                                <span className="text-[11px] truncate" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</span>
-                              </button>
+                              <button onClick={() => kbToggleUnit(col, s, u.id)} className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
+                              <button onClick={() => kbEditUnit(col, s, u)} title="수정" className="text-[11px] truncate flex-1 min-w-0 text-left" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</button>
                               {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
                               <button onClick={() => kbDelUnit(col, s, u.id)} className="text-neutral-300 hover:text-red-500 text-[11px] flex-shrink-0 opacity-0 group-hover/u:opacity-100 transition-opacity" title="삭제">×</button>
                             </div>
@@ -616,7 +621,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setKbForm(null)}>
           <div className="bg-white rounded-2xl w-full max-w-[360px] p-5" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>{kbForm.mode === 'task' ? 'task 추가' : '세부 작업 추가'}</h3>
+              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>{kbForm.mode === 'task' ? 'task 추가' : kbForm.editUnitId ? '세부 작업 수정' : '세부 작업 추가'}</h3>
               <button onClick={() => setKbForm(null)} className="text-neutral-300 hover:text-neutral-700 text-lg leading-none">×</button>
             </div>
             <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>이름</label>
@@ -641,7 +646,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             )}
             <div className="flex gap-2">
               <button onClick={() => setKbForm(null)} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>취소</button>
-              <button onClick={kbSubmitForm} disabled={!formName.trim()} className="flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
+              <button onClick={kbSubmitForm} disabled={!formName.trim()} className="flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>{kbForm.editUnitId ? '수정' : '추가'}</button>
             </div>
           </div>
         </div>
