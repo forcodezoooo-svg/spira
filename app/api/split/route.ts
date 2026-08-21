@@ -95,6 +95,13 @@ ${DELIVERABLE_RULE}
 Task(세부 할일)는 만들지 마라.
 반드시 '오직 JSON만'(예시는 형식일 뿐): {"finalDeliverable":"최종 결과물","areaDeliverables":[{"area":"업무영역","content":"이 영역의 결과물"}]}`;
     user = `사업 정보:\n${context}${areaHint}\n\nProject: ${projectName || deliverableName}${goalName ? `\n상위 Goal: ${goalName}` : ''}\n\n이 프로젝트의 최종 결과물과 업무 영역별 산출물을 이 업종에 맞게 제안해줘(빠르게 내놓는 실제 결과 중심).`;
+  } else if (mode === 'todo-tasks') {
+    // 업무 영역별 산출물 하나 → 실제 실행 task(할 일)들로 쪼개기 (카테고리 보드용)
+    sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '업무 영역별 산출물'을 완성하기 위해 실제로 해야 할 '구체적 실행 task(할 일)'들로 쪼개.
+- 각 task는 바로 실행할 수 있는 단위로(예: 디자인 산출물이면 "와이어프레임 3종 작성", "메인 화면 시안 디자인", "디자인 QA 및 수정").
+- 4~7개, 진행 순서대로. 이 산출물의 업무 영역 성격에 맞게.
+반드시 '오직 JSON만': {"tasks":["task1","task2","task3"]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\n${goalName ? `상위 목표/프로젝트: ${goalName}\n` : ''}완성할 산출물: ${deliverableName}\n\n이 산출물을 완성하기 위한 구체적 실행 task들을 진행 순서대로 쪼개줘.`;
   } else if (mode === 'deliverables') {
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '사업 목표(단계)'를 이루기 위한 '큰 단위의 산출물(마일스톤/프로젝트)'로 쪼개서 나열해.
 ${DELIVERABLE_RULE}
@@ -152,6 +159,9 @@ ${DELIVERABLE_RULE}
       return NextResponse.json({ projects, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'project-breakdown') {
       return NextResponse.json({ finalDeliverable: String(parsed.finalDeliverable ?? '').trim(), areaDeliverables: parseAreas(parsed.areaDeliverables) });
+    } else if (mode === 'todo-tasks') {
+      const tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map(t => String(t).trim()).filter(Boolean).slice(0, 10) : [];
+      return NextResponse.json({ tasks });
     } else if (mode === 'deliverables') {
       const deliverables = Array.isArray(parsed.deliverables)
         ? parsed.deliverables.map(d => String(d).trim()).filter(Boolean).slice(0, 8)

@@ -58,6 +58,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offStart, setOffStart] = useState('');
   const [offEnd, setOffEnd] = useState('');
   const [kbDrag, setKbDrag] = useState<string | null>(null); // 칸반 드래그 중인 task key
+  const [kbAiBusy, setKbAiBusy] = useState<string | null>(null); // AI task 생성 중인 산출물(todoId)
   const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
   const toggleOpen = (key: string, level: number) => setOpenMap(prev => { const n = new Map(prev); n.set(key, !(prev.has(key) ? prev.get(key)! : level < maxDepth)); return n; });
@@ -331,6 +332,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] }) }) });
   };
+  // AI로 이 산출물의 task들을 생성해 추가
+  const kbAiTasks = async (col: KbCol) => {
+    if (kbAiBusy) return;
+    setKbAiBusy(col.todoId);
+    try {
+      const context = `사업: ${col.p.wsName ?? ''} / 사업목표: ${col.p.name}${col.p.goal ? ` (${col.p.goal})` : ''} / 프로젝트: ${col.dlName}`;
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'todo-tasks', context, goalName: `${col.p.name} · ${col.dlName}`, deliverableName: col.name }) });
+      const data = await res.json().catch(() => ({}));
+      const tasks = (Array.isArray(data.tasks) ? data.tasks : []) as string[];
+      if (!tasks.length) return;
+      const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map(name => ({ id: uid(), name, done: false }))] }) }) });
+    } catch { /* ignore */ }
+    finally { setKbAiBusy(null); }
+  };
   const kbDel = (col: KbCol, sId: string) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) }) }) });
@@ -467,7 +483,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     </div>
                   );
                 })}
-                <button onClick={() => kbAddTask(col)} className="w-full py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task 추가</button>
+                <div className="flex gap-1.5">
+                  <button onClick={() => kbAddTask(col)} className="flex-1 py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task</button>
+                  <button onClick={() => kbAiTasks(col)} disabled={!!kbAiBusy} title="AI로 이 산출물의 task 생성" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+                    {kbAiBusy === col.todoId
+                      ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                      : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+                    AI
+                  </button>
+                </div>
               </div>
             </div>
             );
