@@ -31,6 +31,9 @@ export async function POST(request: Request) {
   try { body = await request.json(); } catch { /* ignore */ }
   const { mode, context = '', goalName = '', goalDesc = '', deliverableName = '', projectName = '', areas = [], today = '', messages = [], currentGoals } = body;
   const goalTargetDate = (body as { goalTargetDate?: string }).goalTargetDate ?? '';
+  const situation = (body as { situation?: string }).situation ?? '';
+  const strategies = (body as { strategies?: { area: string; content: string }[] }).strategies ?? [];
+  const currentProjects = (body as { currentProjects?: { name: string; finalDeliverable?: string; areaDeliverables?: { area: string; content: string }[] }[] }).currentProjects ?? [];
   const areaHint = Array.isArray(areas) && areas.length ? `\n참고: 이 사업의 업무 영역 목록: ${areas.join(', ')} (가능하면 이 중에서 고르되 필요하면 추가 가능)` : '';
 
   let sys = '';
@@ -67,6 +70,18 @@ reply: 짧고 따뜻한 설명/답변 1~2문장. 정보가 부족해 가정을 �
 ${DELIVERABLE_RULE}
 반드시 '오직 JSON만'(예시는 형식일 뿐): {"projects":[{"name":"MVP 개발 및 런칭","finalDeliverable":"실제 사용자가 가입·사용할 수 있는 서비스 출시","startDate":"2026-01-05","endDate":"2026-03-15","areaDeliverables":[{"area":"개발","content":"배포된 서비스"},{"area":"디자인","content":"기본 UI 완성본"}]}]}`;
     user = `${today ? `오늘 날짜: ${today}\n` : ''}${goalTargetDate ? `이 Goal의 기한: ${goalTargetDate}\n` : ''}사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n이 목표를 이루기 위한 '큰 마일스톤' 단위 프로젝트를 1~3개, 순서대로 제안해줘. 각 프로젝트에 진행 기간(startDate/endDate)과 업무 영역별 산출물도 함께 넣어줘.`;
+  } else if (mode === 'project-revise') {
+    // 상황 변화(목표 달성 불가·전략 수정·일정 지연 등)에 맞춰 이 Goal의 프로젝트 구성을 수정 제안
+    sys = `${SPIRA_PLANNING_CORE}
+
+# TASK: 상황 변화에 맞춰 이 목표의 '프로젝트'를 수정 제안 (제안만, 전체 목록을 새로 반환 = 이걸로 교체됨)
+주어진 Goal과 '현재 프로젝트들', '업무 영역별 전략', 그리고 '변화된 상황/변수'를 보고 프로젝트 구성을 현실적으로 수정해라.
+- 상황(예: 목표 달성이 어려워짐, 전략 변경, 일정 지연, 리소스 부족)을 반영해 프로젝트를 추가/삭제/병합/재배치하고, 이름·최종 결과물·기간·산출물을 조정.
+- 살릴 건 살리고(가능하면 기존 이름 유지), 필요 없어진 건 빼고, 전략에 맞게 방향을 바꿔라. 큰 마일스톤 단위 유지(보통 1~3개), 진행 순서대로.
+- 각 project: name, finalDeliverable(최종 결과물), startDate/endDate("YYYY-MM-DD", 오늘 이후·Goal 기한 이내로 순서대로), areaDeliverables 3~5개 [{area, content}].
+${DELIVERABLE_RULE}
+반드시 '오직 JSON만'(전체 프로젝트 목록): {"projects":[{"name":"","finalDeliverable":"","startDate":"","endDate":"","areaDeliverables":[{"area":"","content":""}]}]}`;
+    user = `${today ? `오늘 날짜: ${today}\n` : ''}${goalTargetDate ? `이 Goal의 기한: ${goalTargetDate}\n` : ''}사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n업무 영역별 전략:\n${strategies.length ? strategies.map(s => `- ${s.area}: ${s.content}`).join('\n') : '(없음)'}\n\n현재 프로젝트들:\n${currentProjects.length ? currentProjects.map(p => `- ${p.name}${p.finalDeliverable ? ` (최종 결과물: ${p.finalDeliverable})` : ''}${(p.areaDeliverables ?? []).length ? ` / 산출물: ${(p.areaDeliverables ?? []).map(a => `${a.area}:${a.content}`).join(', ')}` : ''}`).join('\n') : '(없음)'}\n\n변화된 상황/변수: ${situation || '(설명 없음)'}\n\n이 상황과 전략을 반영해 프로젝트 구성을 수정한 '전체 목록'을 제안해줘.`;
   } else if (mode === 'project-breakdown') {
     // Project → Final Deliverable → Area Deliverables
     sys = `${SPIRA_PLANNING_CORE}
@@ -126,7 +141,7 @@ ${DELIVERABLE_RULE}
         ? parsed.goals.map(g => { const gg = g as Record<string, unknown>; return { name: String(gg.name ?? '').trim(), targetDate: String(gg.targetDate ?? '').trim(), rationale: String(gg.rationale ?? '').trim(), successCriteria: parseCriteria(gg.successCriteria).filter(c => c.type === 'metric') }; }).filter(g => g.name).slice(0, 6)
         : [];
       return NextResponse.json({ goals, reply: String(parsed.reply ?? '').trim() });
-    } else if (mode === 'goal-breakdown') {
+    } else if (mode === 'goal-breakdown' || mode === 'project-revise') {
       const projects = Array.isArray(parsed.projects)
         ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim(), startDate: String(pp.startDate ?? '').trim(), endDate: String(pp.endDate ?? '').trim(), areaDeliverables: parseAreas(pp.areaDeliverables) }; }).filter(p => p.name).slice(0, 6)
         : [];

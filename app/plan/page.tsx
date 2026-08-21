@@ -1783,7 +1783,7 @@ function GoalsSection({
   goals, projectsOfGoal, workAreas,
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
-  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal,
+  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects,
   aiBusyId, aiEnabled,
 }: {
   goals: Goal[];
@@ -1800,6 +1800,7 @@ function GoalsSection({
   onBreakdownProject: (goalId: string, projectId: string) => void;
   onSuggestGoals?: () => void;
   onImportGoal?: (goalId: string) => void;
+  onReviseProjects?: (goalId: string) => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -1825,7 +1826,7 @@ function GoalsSection({
       className="flex-1 bg-neutral-50 border border-violet-300 rounded-lg px-2 py-1 text-sm outline-none" />
   );
   // AI 버튼 (점검/쪼개기). busy면 스피너
-  const AiBtn = ({ id, onClick, label, icon }: { id: string; onClick: () => void; label: string; icon: 'check' | 'split' }) => {
+  const AiBtn = ({ id, onClick, label, icon }: { id: string; onClick: () => void; label: string; icon: 'check' | 'split' | 'revise' }) => {
     const busy = aiBusyId === id;
     return (
       <button onClick={onClick} disabled={!!aiBusyId} title={label}
@@ -1834,7 +1835,9 @@ function GoalsSection({
         {busy ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
           : icon === 'check'
             ? <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M2.5 8.5l3 3 8-8.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+            : icon === 'revise'
+              ? <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M13 3.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /><path d="M13 1.5V4h-2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
         {label}
       </button>
     );
@@ -1900,6 +1903,7 @@ function GoalsSection({
                         <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
                       </select>
                       {aiEnabled && <AiBtn id={g.id} icon="split" label="프로젝트 생성" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
+                      {aiEnabled && onReviseProjects && projects.length > 0 && <AiBtn id={g.id} icon="revise" label="프로젝트 수정" onClick={() => { onReviseProjects(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
                       {onImportGoal && projects.length > 0 && (
                         <button onClick={() => onImportGoal(g.id)} title="이 목표·프로젝트·산출물을 Goals 로드맵으로 가져가 날짜대로 배치"
                           className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>
@@ -1962,6 +1966,24 @@ function GoalsSection({
                         </div>
                       );
                     })()}
+                  </div>
+
+                  {/* 업무 영역별 전략 */}
+                  <div className="bg-neutral-50 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <p className="text-[11px] font-semibold text-neutral-400">업무 영역별 전략</p>
+                      <Hint text="이 목표를 이루기 위한 업무 영역별 핵심 전략 방향을 적어두세요. 아래 프로젝트의 방향이 됩니다. (AI '프로젝트 수정'이 이 전략을 참고해요)" />
+                    </div>
+                    <div className="space-y-1.5">
+                      {(g.strategies ?? []).map(s => areaRow(
+                        s.area, s.content,
+                        v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, area: v } : x) }),
+                        v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: v } : x) }),
+                        () => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).filter(x => x.id !== s.id) }),
+                        '업무 영역', '이 영역의 전략 방향',
+                      ))}
+                      <button onClick={() => onUpdateGoal(g.id, { strategies: [...(g.strategies ?? []), { id: uid(), area: '', content: '' }] })} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 전략 추가</button>
+                    </div>
                   </div>
 
                   {/* Projects (진행 순서 → 화살표) */}
@@ -2755,6 +2777,45 @@ export default function PlanPage() {
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };
+  // 상황 변화(목표 달성 불가·전략 수정 등)에 맞춰 이 목표의 프로젝트를 AI가 수정 → 교체
+  const reviseProjects = async (goalId: string) => {
+    if (!aiGate()) return;
+    const goal = (plan.goals ?? []).find(g => g.id === goalId);
+    if (!goal) return;
+    const situation = window.prompt('어떤 변화·변수를 반영할까요?\n예) 목표 달성이 어려워짐 / 전략을 OO로 변경 / 일정 지연 / 리소스 부족')?.trim();
+    if (!situation) return;
+    if (!window.confirm('AI 제안으로 이 목표의 프로젝트를 수정·교체할까요? (현재 프로젝트는 대체됩니다)')) return;
+    setAiBusyId(goalId);
+    try {
+      const areas = (plan.workAreas ?? []).map(a => a.name);
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const cur = projectsOfGoal(goalId);
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        mode: 'project-revise', context: buildContext(), goalName: goal.name, goalDesc: goal.statement ?? '', goalTargetDate: goal.targetDate ?? '', today, areas, situation,
+        strategies: (goal.strategies ?? []).map(s => ({ area: s.area, content: s.content })),
+        currentProjects: cur.map(p => ({ name: p.name, finalDeliverable: p.finalDeliverable ?? '', areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ area: a.area, content: a.content })) })),
+      }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { toast('AI 수정에 실패했어요.', 'error'); return; }
+      const projs = (data.projects ?? []) as { name: string; finalDeliverable: string; startDate?: string; endDate?: string; areaDeliverables?: { area: string; content: string }[] }[];
+      if (!projs.length) { toast('수정안을 찾지 못했어요.', 'info'); return; }
+      setPlan(prev => {
+        if (!prev) return prev;
+        const others = (prev.projects ?? []).filter(x => x.goalId !== goalId);
+        const newProjects: Project[] = projs.map((p, i) => ({
+          id: uid(), name: p.name, goalId, order: i, finalDeliverable: p.finalDeliverable,
+          startDate: p.startDate || undefined, endDate: p.endDate || undefined, status: 'planned',
+          areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
+        }));
+        const next = { ...prev, projects: [...others, ...newProjects] };
+        const wsId = selectedWsIdRef.current;
+        if (wsId) store.updatePlanInWs(wsId, next);
+        return next;
+      });
+      toast(`상황을 반영해 프로젝트를 ${projs.length}개로 수정했어요. 🌿`, 'success');
+    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
+    finally { setAiBusyId(null); }
+  };
   // 프로젝트 → 최종 결과물·산출물 쪼개기: 미리보기 없이 바로 채움
   const breakdownProject = async (goalId: string, projectId: string) => {
     if (!aiGate()) return;
@@ -2925,6 +2986,7 @@ export default function PlanPage() {
           onBreakdownProject={breakdownProject}
           onSuggestGoals={suggestGoals}
           onImportGoal={importGoalToGoals}
+          onReviseProjects={reviseProjects}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
         />
