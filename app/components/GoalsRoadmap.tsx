@@ -374,7 +374,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
       {/* 최상위 페이지 전환: 로드맵 / 칸반 */}
       <div className="flex gap-1 rounded-full p-1 mb-3" style={{ backgroundColor: '#EDEDE7' }}>
-        {([[false, '로드맵'], [true, '칸반']] as [boolean, string][]).map(([kb, label]) => (
+        {([[false, '로드맵'], [true, '카테고리 보드']] as [boolean, string][]).map(([kb, label]) => (
           <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
         ))}
       </div>
@@ -425,13 +425,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
         ) : (
         <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
-          {kbCols.map(col => (
+          {kbCols.map(col => {
+            const ci = col.name.indexOf(':');
+            const areaTitle = ci >= 0 ? col.name.slice(0, ci).trim() : col.name;
+            const goalSub = ci >= 0 ? col.name.slice(ci + 1).trim() : '';
+            return (
             <div key={col.todoId} className="flex flex-col min-h-0 w-[240px] flex-shrink-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) e.preventDefault(); }}
               onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
-              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                <span className="flex items-center gap-1.5 text-[13px] font-bold min-w-0" style={{ color: '#16211E' }}><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} /><span className="truncate">{col.name}</span></span>
-                <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
+              <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
+                  <span className="text-[13px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{areaTitle}</span>
+                  <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
+                </div>
+                {goalSub && <p className="text-[11px] mt-0.5 ml-3.5 truncate" style={{ color: '#9AA39D' }}>🎯 {goalSub}</p>}
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                 {col.subtasks.length === 0 && <p className="text-[11px] text-center py-4" style={{ color: '#C4CCC4' }}>task가 없어요</p>}
@@ -462,7 +470,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <button onClick={() => kbAddTask(col)} className="w-full py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task 추가</button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         )
       ) : (
