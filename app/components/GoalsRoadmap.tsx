@@ -25,11 +25,6 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주']];
 const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물' };
 const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
-const KANBAN_COLS: { key: 'todo' | 'doing' | 'done'; label: string; color: string }[] = [
-  { key: 'todo', label: '할 일', color: '#9AA39D' },
-  { key: 'doing', label: '진행 중', color: '#5EA63A' },
-  { key: 'done', label: '완료', color: '#7C3AED' },
-];
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
   year: { pxPerDay: 4, buffer: 400, minSpan: 3660 },   // ±5년
@@ -311,41 +306,53 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     }) });
   };
 
-  // ── 칸반: 3단계(산출물) 이후의 task를 상태 컬럼으로 관리 ──
+  // ── 칸반: 업무 영역별 산출물(todo)을 '칸'으로, 그 하위 task를 카드로 관리 ──
   type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
-  type KbCard = { p: CalProgram; dlId: string; todoId: string; todoName: string; s: Sub };
+  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; subtasks: Sub[] };
   const kbScope = resolveChain(selectedKey);
-  const kbCards: KbCard[] = [];
+  const kbCols: KbCol[] = [];
   for (const p of programs) {
     if (kbScope.program && kbScope.program.id !== p.id) continue;
     for (const dl of (p.deadlines ?? [])) {
       if (kbScope.deadlineId && kbScope.deadlineId !== dl.id) continue;
       for (const t of dl.todos) {
         if (kbScope.todoId && kbScope.todoId !== t.id) continue;
-        for (const s of (t.subtasks ?? [])) kbCards.push({ p, dlId: dl.id, todoId: t.id, todoName: t.name, s });
+        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, subtasks: (t.subtasks ?? []) });
       }
     }
   }
-  const kbStatusOf = (s: Sub): 'todo' | 'doing' | 'done' => s.status ?? (s.done ? 'done' : 'todo');
-  const kbAddTodo = kbScope.todoId ? { p: kbScope.program!, dlId: kbScope.deadlineId!, todoId: kbScope.todoId } : null;
-  const kbScopeName = kbScope.todoId ? (kbCards[0]?.todoName || '선택 산출물') : kbScope.deadlineId ? '선택 프로젝트' : kbScope.program ? kbScope.program.name : '전체';
-  const updateSub = (p: CalProgram, dlId: string, todoId: string, sId: string, patch: Partial<Sub>) => {
-    const prog = findProg(p.wsId, p.id); if (!prog) return;
-    store.updateProgramInWs(p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
+  const kbScopeName = kbScope.todoId ? (kbCols[0]?.name || '선택 산출물') : kbScope.deadlineId ? (kbCols[0]?.dlName || '선택 프로젝트') : kbScope.program ? kbScope.program.name : '전체';
+  const updateSub = (col: KbCol, sId: string, patch: Partial<Sub>) => {
+    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
   };
-  const kbMove = (c: KbCard, status: 'todo' | 'doing' | 'done') => { if (kbStatusOf(c.s) === status) return; updateSub(c.p, c.dlId, c.todoId, c.s.id, { status, done: status === 'done' }); };
-  const kbAdd = (status: 'todo' | 'doing' | 'done') => {
-    if (!kbAddTodo) { window.alert('먼저 로드맵에서 산출물을 선택하세요.'); return; }
+  const kbAddTask = (col: KbCol) => {
     const name = window.prompt('task 이름')?.trim(); if (!name) return;
-    const prog = findProg(kbAddTodo.p.wsId, kbAddTodo.p.id); if (!prog) return;
-    store.updateProgramInWs(kbAddTodo.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== kbAddTodo.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== kbAddTodo.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: status === 'done', status }] }) }) });
+    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] }) }) });
   };
-  const kbDel = (c: KbCard) => {
-    const prog = findProg(c.p.wsId, c.p.id); if (!prog) return;
-    store.updateProgramInWs(c.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== c.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== c.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== c.s.id) }) }) });
+  const kbDel = (col: KbCol, sId: string) => {
+    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) }) }) });
   };
-  const kbAddUnit = (c: KbCard) => { const name = window.prompt('세부 작업 이름')?.trim(); if (!name) return; updateSub(c.p, c.dlId, c.todoId, c.s.id, { units: [...(c.s.units ?? []), { id: uid(), name, done: false }] }); };
-  const kbToggleUnit = (c: KbCard, uId: string) => updateSub(c.p, c.dlId, c.todoId, c.s.id, { units: (c.s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) });
+  const kbToggleDone = (col: KbCol, s: Sub) => updateSub(col, s.id, { done: !s.done, status: !s.done ? 'done' : 'todo' });
+  const kbAddUnit = (col: KbCol, s: Sub) => { const name = window.prompt('세부 작업 이름')?.trim(); if (!name) return; updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false }] }); };
+  const kbToggleUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) });
+  // 다른 산출물 칸으로 task 이동 (드래그)
+  const kbMoveTask = (sId: string, from: KbCol, to: KbCol) => {
+    if (from.todoId === to.todoId) return;
+    const prog = findProg(from.p.wsId, from.p.id); if (!prog) return;
+    const moving = from.subtasks.find(s => s.id === sId); if (!moving) return;
+    store.updateProgramInWs(from.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => {
+      const isFrom = dl.id === from.dlId, isTo = dl.id === to.dlId;
+      if (!isFrom && !isTo) return dl;
+      return { ...dl, todos: dl.todos.map(t => {
+        if (isFrom && t.id === from.todoId) return { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) };
+        if (isTo && t.id === to.todoId) return { ...t, subtasks: [...(t.subtasks ?? []), moving] };
+        return t;
+      }) };
+    }) });
+  };
 
   // ── 그리드/눈금/오늘 (px, 범위 전체) ──
   const dayLines: number[] = []; const strongLines: number[] = []; const labels: { x: number; text: string }[] = [];
@@ -365,92 +372,99 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   return (
     <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-      {/* 상단: 이동/현재위치(로드맵) 또는 칸반 범위 + 추가 */}
-      <div className="flex items-center justify-between mb-2.5 gap-2">
-        {!kanban ? (
-          <div className="flex items-center gap-1 min-w-0">
-            <button onClick={() => scrollByScreen(-1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="이전"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-            <button onClick={scrollToToday} className="text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>오늘</button>
-            <button onClick={() => scrollByScreen(1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="다음"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-            <span className="text-[15px] font-bold ml-1 truncate" style={{ color: '#16211E' }}>{visLabel}</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[15px] font-bold" style={{ color: '#16211E' }}>칸반</span>
-            <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
-          </div>
-        )}
-        <button onClick={() => (kanban ? kbAdd('todo') : addAtScale())} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={kanban ? 'task 추가 (선택 산출물)' : `${DEPTH_NAME[scale]} 추가${selectedKey ? ' (선택 항목 계보에)' : ''}`}>
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>{kanban ? 'task 추가' : `${DEPTH_NAME[scale]} 추가`}
-        </button>
+      {/* 최상위 페이지 전환: 로드맵 / 칸반 */}
+      <div className="flex gap-1 rounded-full p-1 mb-3" style={{ backgroundColor: '#EDEDE7' }}>
+        {([[false, '로드맵'], [true, '칸반']] as [boolean, string][]).map(([kb, label]) => (
+          <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
+        ))}
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#F1F1EB' }}>
-          {SCALES.map(([s, label]) => (<button key={s} onClick={() => { setScale(s); setKanban(false); }} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={!kanban && scale === s ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>))}
-          <button onClick={() => setKanban(true)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={kanban ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>칸반</button>
-        </div>
-        {!kanban && <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>}
-      </div>
-      {!kanban && offOpen && (
-        <div className="rounded-2xl p-3 mb-3" style={{ backgroundColor: '#FCF6EC', border: '1px solid #F2E2C4' }}>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <input type="date" value={offStart} onChange={e => setOffStart(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
-            <span className="text-xs" style={{ color: '#C9A662' }}>~</span>
-            <input type="date" value={offEnd} min={offStart || undefined} onChange={e => setOffEnd(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
-            <button onClick={applyOffPeriod} disabled={!offStart || !offEnd || offEnd < offStart} className="px-2.5 py-1 disabled:opacity-30 text-white text-xs rounded-lg transition-colors" style={{ backgroundColor: '#E0A73C' }}>적용</button>
-            <span className="text-[11px]" style={{ color: '#96631A' }}>이 기간 이후 모든 일정이 그만큼 밀려요</span>
+      {!kanban ? (
+        <>
+          {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
+          <div className="flex items-center justify-between mb-2.5 gap-2">
+            <div className="flex items-center gap-1 min-w-0">
+              <button onClick={() => scrollByScreen(-1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="이전"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              <button onClick={scrollToToday} className="text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>오늘</button>
+              <button onClick={() => scrollByScreen(1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="다음"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+              <span className="text-[15px] font-bold ml-1 truncate" style={{ color: '#16211E' }}>{visLabel}</span>
+            </div>
+            <button onClick={addAtScale} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={`${DEPTH_NAME[scale]} 추가${selectedKey ? ' (선택 항목 계보에)' : ''}`}>
+              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>{DEPTH_NAME[scale]} 추가
+            </button>
           </div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#F1F1EB' }}>
+              {SCALES.map(([s, label]) => (<button key={s} onClick={() => setScale(s)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={scale === s ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>))}
+            </div>
+            <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>
+          </div>
+          {offOpen && (
+            <div className="rounded-2xl p-3 mb-3" style={{ backgroundColor: '#FCF6EC', border: '1px solid #F2E2C4' }}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <input type="date" value={offStart} onChange={e => setOffStart(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
+                <span className="text-xs" style={{ color: '#C9A662' }}>~</span>
+                <input type="date" value={offEnd} min={offStart || undefined} onChange={e => setOffEnd(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
+                <button onClick={applyOffPeriod} disabled={!offStart || !offEnd || offEnd < offStart} className="px-2.5 py-1 disabled:opacity-30 text-white text-xs rounded-lg transition-colors" style={{ backgroundColor: '#E0A73C' }}>적용</button>
+                <span className="text-[11px]" style={{ color: '#96631A' }}>이 기간 이후 모든 일정이 그만큼 밀려요</span>
+              </div>
+            </div>
+          )}
+          {notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
+        </>
+      ) : (
+        <div className="flex items-center gap-1.5 mb-3 min-w-0">
+          <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>업무 영역별 task</span>
+          <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
         </div>
       )}
-      {!kanban && notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
 
       {kanban ? (
-        /* 칸반: 3단계(산출물) 이후 task를 상태 컬럼으로 */
-        <div className="flex-1 min-h-0 grid grid-cols-3 gap-3">
-          {KANBAN_COLS.map(col => {
-            const cards = kbCards.filter(c => kbStatusOf(c.s) === col.key);
-            return (
-              <div key={col.key} className="flex flex-col min-h-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
-                onDragOver={e => { if (kbDrag) e.preventDefault(); }}
-                onDrop={() => { const c = kbCards.find(x => x.s.id === kbDrag); if (c) kbMove(c, col.key); setKbDrag(null); }}>
-                <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                  <span className="flex items-center gap-1.5 text-[13px] font-bold" style={{ color: '#16211E' }}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color }} />{col.label}</span>
-                  <span className="text-[11px] tabular-nums" style={{ color: '#9AA39D' }}>{cards.length}</span>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
-                  {cards.length === 0 && <p className="text-[11px] text-center py-6" style={{ color: '#C4CCC4' }}>비어 있어요</p>}
-                  {cards.map(c => {
-                    const units = c.s.units ?? [];
-                    return (
-                      <div key={c.s.id} draggable onDragStart={() => setKbDrag(c.s.id)} onDragEnd={() => setKbDrag(null)}
-                        className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === c.s.id ? 0.5 : 1 }}>
-                        <div className="flex items-start gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: businessColor(c.p.wsId) }} />
-                          <span className="text-[13px] font-semibold flex-1 min-w-0 break-words" style={{ color: '#16211E' }}>{c.s.name}</span>
-                          <button onClick={() => kbDel(c)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
-                        </div>
-                        {!kbScope.todoId && <p className="text-[10px] mt-0.5 ml-3 truncate" style={{ color: '#9AA39D' }}>{c.todoName}</p>}
-                        {units.length > 0 && (
-                          <div className="mt-1.5 ml-3 space-y-0.5">
-                            {units.map(u => (
-                              <button key={u.id} onClick={() => kbToggleUnit(c, u.id)} className="flex items-center gap-1.5 text-left w-full">
-                                <span className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>
-                                <span className="text-[11px] truncate" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        <button onClick={() => kbAddUnit(c)} className="mt-1 ml-3 text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#9AA39D' }}>+ 세부 작업</button>
-                      </div>
-                    );
-                  })}
-                  <button onClick={() => kbAdd(col.key)} className="w-full py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task 추가</button>
-                </div>
+        /* 칸반: 영역별 산출물(칸) 안에 task 카드 — 산출물끼리 드래그로 이동 */
+        kbCols.length === 0 ? (
+          <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
+        ) : (
+        <div className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
+          {kbCols.map(col => (
+            <div key={col.todoId} className="flex flex-col min-h-0 w-[240px] flex-shrink-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
+              onDragOver={e => { if (kbDrag) e.preventDefault(); }}
+              onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                <span className="flex items-center gap-1.5 text-[13px] font-bold min-w-0" style={{ color: '#16211E' }}><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} /><span className="truncate">{col.name}</span></span>
+                <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
               </div>
-            );
-          })}
+              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                {col.subtasks.length === 0 && <p className="text-[11px] text-center py-4" style={{ color: '#C4CCC4' }}>task가 없어요</p>}
+                {col.subtasks.map(s => {
+                  const units = s.units ?? [];
+                  return (
+                    <div key={s.id} draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
+                      className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.5 : 1 }}>
+                      <div className="flex items-start gap-1.5">
+                        <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: s.done ? '#5EA63A' : '#C7CEC7', backgroundColor: s.done ? '#5EA63A' : 'transparent' }}>{s.done && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
+                        <span className="text-[13px] font-semibold flex-1 min-w-0 break-words" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</span>
+                        <button onClick={() => kbDel(col, s.id)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
+                      </div>
+                      {units.length > 0 && (
+                        <div className="mt-1.5 ml-5 space-y-0.5">
+                          {units.map(u => (
+                            <button key={u.id} onClick={() => kbToggleUnit(col, s, u.id)} className="flex items-center gap-1.5 text-left w-full">
+                              <span className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>
+                              <span className="text-[11px] truncate" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => kbAddUnit(col, s)} className="mt-1 ml-5 text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#9AA39D' }}>+ 세부 작업</button>
+                    </div>
+                  );
+                })}
+                <button onClick={() => kbAddTask(col)} className="w-full py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task 추가</button>
+              </div>
+            </div>
+          ))}
         </div>
+        )
       ) : (
       /* 간트: 좌측 트리(고정) + 우측 타임라인(연속 가로/세로 스크롤) */
       <div ref={scrollRef} onScroll={e => updateVisLabel(e.currentTarget)} className="flex-1 min-h-0 overflow-auto overscroll-contain border rounded-xl" style={{ borderColor: 'var(--spira-border-subtle)' }} onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
