@@ -402,7 +402,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const tasks = (Array.isArray(data.tasks) ? data.tasks : []) as string[];
       if (!tasks.length) return;
       const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map(name => ({ id: uid(), name, done: false }))] }) }) });
+      // 날짜 자동 지정: 오늘부터 하루 간격으로 순서대로 배치 → Home 캘린더에 자동 반영
+      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((name, i) => { const d = addDaysStr(todayStr, i); return { id: uid(), name, done: false, date: d, deadline: d }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
   };
