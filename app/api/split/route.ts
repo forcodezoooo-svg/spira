@@ -34,6 +34,7 @@ export async function POST(request: Request) {
   const situation = (body as { situation?: string }).situation ?? '';
   const strategies = (body as { strategies?: { area: string; content: string }[] }).strategies ?? [];
   const currentProjects = (body as { currentProjects?: { name: string; finalDeliverable?: string; areaDeliverables?: { area: string; content: string }[] }[] }).currentProjects ?? [];
+  const bulkItems = (body as { items?: { id: string; kind: string; name: string; durationMin?: number; deadline?: string }[] }).items ?? [];
   const areaHint = Array.isArray(areas) && areas.length ? `\n참고: 이 사업의 업무 영역 목록: ${areas.join(', ')} (가능하면 이 중에서 고르되 필요하면 추가 가능)` : '';
 
   let sys = '';
@@ -102,6 +103,14 @@ Task(세부 할일)는 만들지 마라.
 - 4~7개, 진행 순서대로. 이 산출물의 업무 영역 성격에 맞게.
 반드시 '오직 JSON만': {"tasks":["task1","task2","task3"]}`;
     user = `사업 정보:\n${context}${areaHint}\n\n${goalName ? `상위 목표/프로젝트: ${goalName}\n` : ''}완성할 산출물: ${deliverableName}\n\n이 산출물을 완성하기 위한 구체적 실행 task들을 진행 순서대로 쪼개줘.`;
+  } else if (mode === 'bulk-edit') {
+    // 선택한 여러 항목을 대화로 일괄 수정 (이름 + 소요시간/기한)
+    sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 사용자가 여러 '항목'을 선택하고 대화로 '일괄 수정'을 요청한다.
+- 대화 지시대로 각 항목의 name을 다듬어라(더 구체적으로/말투 통일/접두어 등). 요청과 무관하면 원래 name 유지.
+- 요청에 소요시간·기한 변경이 있으면 durationMin(분, 세부작업 kind에만)·deadline("YYYY-MM-DD", 일정 항목에만)도 제안. 없으면 생략.
+- id는 입력 그대로 반드시 유지. 선택된 항목 '전체'를 반환.
+반드시 '오직 JSON만': {"reply":"무엇을 어떻게 바꿨는지 1~2문장","items":[{"id":"입력id","name":"...","durationMin":30,"deadline":"2026-01-10"}]}`;
+    user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}\n\n선택한 항목들 (id | 종류 | 이름${'' /* + 소요시간/기한 */}):\n${bulkItems.map(it => `- ${it.id} | ${it.kind} | ${it.name}${it.durationMin ? ` | ${it.durationMin}분` : ''}${it.deadline ? ` | 기한 ${it.deadline}` : ''}`).join('\n')}\n\n이 항목들을 어떻게 바꿀지 대화로 알려줄게. 요청을 반영해 항목 전체를 다시 제시해줘.`;
   } else if (mode === 'deliverables') {
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '사업 목표(단계)'를 이루기 위한 '큰 단위의 산출물(마일스톤/프로젝트)'로 쪼개서 나열해.
 ${DELIVERABLE_RULE}
@@ -128,7 +137,7 @@ ${DELIVERABLE_RULE}
   const chatMsgs = Array.isArray(messages) ? messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') : [];
   const convo: ChatMsg[] = (mode === 'goal-suggest' && chatMsgs.length)
     ? chatMsgs.slice(-12)
-    : (mode === 'project-revise' && chatMsgs.length)
+    : ((mode === 'project-revise' || mode === 'bulk-edit') && chatMsgs.length)
       ? [{ role: 'user', content: user }, ...chatMsgs.slice(-10)] // 컨텍스트(user) + 대화
       : [{ role: 'user', content: user }];
   try {
@@ -162,6 +171,12 @@ ${DELIVERABLE_RULE}
     } else if (mode === 'todo-tasks') {
       const tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map(t => String(t).trim()).filter(Boolean).slice(0, 10) : [];
       return NextResponse.json({ tasks });
+    } else if (mode === 'bulk-edit') {
+      const nn = (x: unknown) => { const n = Number(x); return Number.isFinite(n) && n > 0 ? n : undefined; };
+      const items = Array.isArray(parsed.items)
+        ? parsed.items.map(it => { const o = it as Record<string, unknown>; return { id: String(o.id ?? '').trim(), name: String(o.name ?? '').trim(), durationMin: nn(o.durationMin), deadline: String(o.deadline ?? '').trim() || undefined }; }).filter(it => it.id && it.name).slice(0, 60)
+        : [];
+      return NextResponse.json({ items, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'deliverables') {
       const deliverables = Array.isArray(parsed.deliverables)
         ? parsed.deliverables.map(d => String(d).trim()).filter(Boolean).slice(0, 8)

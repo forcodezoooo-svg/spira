@@ -14,6 +14,8 @@ type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
 type Payload = { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string };
 type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string; isAdd?: boolean; addKind?: Lvl };
+type SelItem = { key: string; kind: Lvl; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; deadline?: string; durationMin?: number };
+type BulkPatch = { name?: string; deadline?: string; durationMin?: number };
 
 export interface GoalsRoadmapHandle { focus: (level: Lvl, key: string, start?: string, end?: string, name?: string) => void; startListDrag: (payload: Payload, e: React.DragEvent) => void; }
 interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string } | null; cardClassName?: string; }
@@ -59,6 +61,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offEnd, setOffEnd] = useState('');
   const [kbDrag, setKbDrag] = useState<string | null>(null); // 칸반 드래그 중인 task key
   const [kbAiBusy, setKbAiBusy] = useState<string | null>(null); // AI task 생성 중인 산출물(todoId)
+  const [selMode, setSelMode] = useState(false); // 다중 선택 모드
+  const [sel, setSel] = useState<Map<string, SelItem>>(new Map());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const toggleSel = (it: SelItem) => setSel(prev => { const n = new Map(prev); n.has(it.key) ? n.delete(it.key) : n.set(it.key, it); return n; });
   const [kbForm, setKbForm] = useState<null | { mode: 'task' | 'subtask'; col: KbCol; s?: Sub; editUnitId?: string }>(null); // task/세부작업 추가·수정 팝업
   const [formName, setFormName] = useState('');
   const [formDue, setFormDue] = useState('');
@@ -196,8 +202,35 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calDrag?.key, calDrag?.mode]);
   useEffect(() => { if (!notPlaced) return; const t = setTimeout(() => setNotPlaced(null), 2800); return () => clearTimeout(t); }, [notPlaced]);
-  // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로
-  useEffect(() => { if (kanban && boardRef.current) boardRef.current.scrollLeft = 0; }, [kanban]);
+  // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
+  useEffect(() => { if (kanban && boardRef.current) boardRef.current.scrollLeft = 0; setSel(new Map()); setSelMode(false); }, [kanban]);
+
+  // 선택 항목들에 일괄 패치 적용 (레벨별로 올바른 필드에)
+  const applyBulkPatches = (upList: { key: string; patch: BulkPatch }[]) => {
+    const groups = new Map<string, { wsId: string; programId: string; ups: Map<string, BulkPatch> }>();
+    for (const { key, patch } of upList) { const it = sel.get(key); if (!it) continue; const gk = `${it.wsId}|${it.programId}`; let g = groups.get(gk); if (!g) { g = { wsId: it.wsId, programId: it.programId, ups: new Map() }; groups.set(gk, g); } g.ups.set(key, patch); }
+    for (const g of groups.values()) {
+      const prog = findProg(g.wsId, g.programId); if (!prog) continue;
+      const ups = g.ups;
+      let np = prog;
+      const pp = ups.get(`p-${prog.id}`);
+      if (pp) np = { ...np, ...(pp.name !== undefined ? { name: pp.name } : {}), ...(pp.deadline !== undefined ? { deadline: pp.deadline } : {}) };
+      np = { ...np, deadlines: (np.deadlines ?? []).map(dl => {
+        let d = dl; const dp = ups.get(`d-${dl.id}`);
+        if (dp) d = { ...d, ...(dp.name !== undefined ? { name: dp.name } : {}), ...(dp.deadline !== undefined ? { date: dp.deadline } : {}) };
+        return { ...d, todos: d.todos.map(t => {
+          let tt = t; const tp = ups.get(`t-${t.id}`);
+          if (tp) tt = { ...tt, ...(tp.name !== undefined ? { name: tp.name } : {}), ...(tp.deadline !== undefined ? { deadline: tp.deadline } : {}) };
+          return { ...tt, subtasks: (tt.subtasks ?? []).map(s => {
+            let ss = s; const sp = ups.get(`s-${s.id}`);
+            if (sp) ss = { ...ss, ...(sp.name !== undefined ? { name: sp.name } : {}), ...(sp.deadline !== undefined ? { deadline: sp.deadline } : {}) };
+            return { ...ss, units: (ss.units ?? []).map(u => { const up = ups.get(`u-${u.id}`); return up ? { ...u, ...(up.name !== undefined ? { name: up.name } : {}), ...(up.durationMin !== undefined ? { durationMin: up.durationMin } : {}) } : u; }) };
+          }) };
+        }) };
+      }) };
+      store.updateProgramInWs(g.wsId, np);
+    }
+  };
 
   // 초기/스케일 변경 시: enterLevel 목표가 있으면 그곳으로, 없으면 오늘로 스크롤
   useEffect(() => {
@@ -412,14 +445,23 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const barH = (lvl: number) => lvl === 0 ? 24 : lvl === 1 ? 24 : lvl === 2 ? 20 : lvl === 3 ? 17 : 15;
   const pgOrder = new Map<string, number>(); programs.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
+  // 선택 아이템 빌더 + 체크 표시
+  const rowSel = (r: Row): SelItem => ({ key: r.key, kind: r.kind, name: r.name, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, deadline: r.end });
+  const subSel = (col: KbCol, s: Sub): SelItem => ({ key: `s-${s.id}`, kind: 'subtask', name: s.name, wsId: col.p.wsId, programId: col.p.id, deadlineId: col.dlId, todoId: col.todoId, subtaskId: s.id, deadline: s.deadline });
+  const unitSel = (col: KbCol, s: Sub, u: NonNullable<Sub['units']>[number]): SelItem => ({ key: `u-${u.id}`, kind: 'unit', name: u.name, wsId: col.p.wsId, programId: col.p.id, deadlineId: col.dlId, todoId: col.todoId, subtaskId: s.id, unitId: u.id, durationMin: u.durationMin });
+  const SelCheck = ({ on }: { on: boolean }) => (<span className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: on ? '#7C3AED' : '#C7CEC7', backgroundColor: on ? '#7C3AED' : '#fff' }}>{on && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>);
 
   return (
     <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-      {/* 최상위 페이지 전환: 로드맵 / 칸반 */}
-      <div className="flex gap-1 rounded-full p-1 mb-3" style={{ backgroundColor: '#EDEDE7' }}>
-        {([[false, '로드맵'], [true, '카테고리 보드']] as [boolean, string][]).map(([kb, label]) => (
-          <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
-        ))}
+      {/* 최상위 페이지 전환: 로드맵 / 카테고리 보드 + 선택/일괄수정 */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#EDEDE7' }}>
+          {([[false, '로드맵'], [true, '카테고리 보드']] as [boolean, string][]).map(([kb, label]) => (
+            <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
+          ))}
+        </div>
+        {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
+        <button onClick={() => { setSelMode(m => !m); setSel(new Map()); }} className="rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-colors" style={selMode ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="여러 항목 선택해 일괄 수정">{selMode ? '선택 완료' : '선택'}</button>
       </div>
 
       {!kanban ? (
@@ -496,6 +538,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     <div key={s.id} draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
                       className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.5 : 1 }}>
                       <div className="flex items-start gap-1.5">
+                        {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
                         <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: s.done ? '#5EA63A' : '#C7CEC7', backgroundColor: s.done ? '#5EA63A' : 'transparent' }}>{s.done && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
                         <span className="text-[13px] font-semibold flex-1 min-w-0 break-words" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</span>
                         {!s.done && <DdayBadge d={s.deadline} />}
@@ -508,6 +551,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         <div className="mt-1.5 ml-5 space-y-0.5">
                           {units.map(u => (
                             <div key={u.id} className="group/u flex items-center gap-1.5">
+                              {selMode && <button onClick={() => toggleSel(unitSel(col, s, u))} className="flex-shrink-0"><SelCheck on={sel.has(`u-${u.id}`)} /></button>}
                               <button onClick={() => kbToggleUnit(col, s, u.id)} className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
                               <button onClick={() => kbEditUnit(col, s, u)} title="수정" className="text-[11px] truncate flex-1 min-w-0 text-left" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</button>
                               {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
@@ -570,7 +614,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               );
               const placed = !!(r.start && r.end);
               const isCollapsed = !isOpen(r.key, r.level);
-              const sel = r.key === selectedKey;
+              const hl = r.key === selectedKey;
+              const checked = sel.has(r.key);
               const pgIdx = pgIdx0;
               const left = placed ? xOf(r.start!) : 0;
               const width = placed ? wOf(r.start!, r.end!) : 0;
@@ -578,13 +623,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               return (
                 <div key={r.key} data-rm-row={r.key} className="flex" style={{ height: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div
-                    onClick={() => enterLevel(r)}
+                    onClick={() => (selMode ? toggleSel(rowSel(r)) : enterLevel(r))}
                     className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
-                    style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15, borderColor: '#F4F4F0', backgroundColor: sel ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
-                    draggable={r.level > 0 && !placed}
-                    onDragStart={r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, e); } : undefined}
+                    style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15, borderColor: '#F4F4F0', backgroundColor: checked ? '#F3F0FF' : hl ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
+                    draggable={!selMode && r.level > 0 && !placed}
+                    onDragStart={!selMode && r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, e); } : undefined}
                     title={!placed && r.level > 0 ? '드래그해서 타임라인에 배치' : r.name}
                   >
+                    {selMode && <SelCheck on={checked} />}
                     {r.hasChildren ? (
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                     ) : <span className="w-4 flex-shrink-0" />}
@@ -597,7 +643,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-pointer overflow-hidden"
-                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : r.level === 3 ? '16' : '12'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: sel ? 5 : 1 }}
+                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : r.level === 3 ? '16' : '12'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: hl ? 5 : 1 }}
                         title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동${r.level > 0 ? ' · 양끝: 기간 조절' : ''}`}>
                         <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level <= 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
                         {r.level > 0 && <>
@@ -614,6 +660,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       </div>
+      )}
+
+      {/* 일괄 수정 팝업 */}
+      {bulkOpen && sel.size > 0 && (
+        <BulkEditModal items={[...sel.values()]} context={programs.filter(p => [...sel.values()].some(i => i.programId === p.id)).map(p => `${p.name}${p.goal ? ` (${p.goal})` : ''}`).join(' / ')} onApply={applyBulkPatches} onClose={() => setBulkOpen(false)} />
       )}
 
       {/* task / 세부작업 추가 팝업 */}
@@ -654,5 +705,101 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     </div>
   );
 });
+
+// 선택 항목 일괄 수정 — 기한/소요시간 직접 지정 + AI 대화로 이름·시간 변경
+function BulkEditModal({ items, context, onApply, onClose }: {
+  items: SelItem[]; context: string;
+  onApply: (ups: { key: string; patch: BulkPatch }[]) => void;
+  onClose: () => void;
+}) {
+  type Msg = { role: 'user' | 'assistant'; content: string; items?: { id: string; name: string; durationMin?: number; deadline?: string }[] };
+  const [due, setDue] = useState('');
+  const [dur, setDur] = useState<number | null>(null);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fmtDur = (min?: number) => !min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`;
+  const hasSched = items.some(i => i.kind !== 'unit');
+  const hasUnit = items.some(i => i.kind === 'unit');
+  const applyDue = () => { if (!due) return; onApply(items.filter(i => i.kind !== 'unit').map(i => ({ key: i.key, patch: { deadline: due } }))); };
+  const applyDur = () => { if (!dur) return; onApply(items.filter(i => i.kind === 'unit').map(i => ({ key: i.key, patch: { durationMin: dur } }))); };
+
+  const call = async (log: Msg[]) => {
+    setLoading(true);
+    try {
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'bulk-edit', context, today, items: items.map(i => ({ id: i.key, kind: i.kind, name: i.name, durationMin: i.durationMin, deadline: i.deadline })), messages: log.map(m => ({ role: m.role, content: m.content })) }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { setMessages(m => [...m, { role: 'assistant', content: '앗, 잠시 문제가 생겼어요.' }]); return; }
+      setMessages(m => [...m, { role: 'assistant', content: String(data.reply ?? ''), items: Array.isArray(data.items) ? data.items : [] }]);
+    } catch { setMessages(m => [...m, { role: 'assistant', content: '네트워크 오류가 발생했어요.' }]); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [messages, loading]);
+  const send = () => { const t = input.trim(); if (!t || loading) return; const log = [...messages, { role: 'user' as const, content: t }]; setMessages(log); setInput(''); void call(log); };
+  const latest = [...messages].reverse().find(m => m.items && m.items.length)?.items;
+  const applyAi = () => { if (!latest) return; onApply(latest.map(it => ({ key: it.id, patch: { name: it.name, deadline: it.deadline, durationMin: it.durationMin } }))); };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,41,41,0.45)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-2 flex-shrink-0">
+          <div><h3 className="text-[15px] font-black text-neutral-900">일괄 수정 · {items.length}개</h3><p className="text-[12px] text-neutral-400 mt-0.5">기한·소요시간을 한 번에 바꾸거나, 아래에서 AI와 대화로 바꿔보세요.</p></div>
+          <button onClick={onClose} className="text-neutral-300 hover:text-neutral-600 text-lg leading-none flex-shrink-0">×</button>
+        </div>
+        {/* 직접 수정 */}
+        <div className="px-5 pb-2 flex-shrink-0 space-y-2">
+          {hasSched && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold w-14 flex-shrink-0" style={{ color: '#5B6560' }}>기한</span>
+              <input type="date" value={due} onChange={e => setDue(e.target.value)} className="text-[13px] tabular-nums bg-neutral-50 border rounded-lg px-2 py-1 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+              <button onClick={applyDue} disabled={!due} className="text-[12px] font-bold rounded-lg px-3 py-1.5 disabled:opacity-40" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>기한 적용</button>
+            </div>
+          )}
+          {hasUnit && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold w-14 flex-shrink-0" style={{ color: '#5B6560' }}>소요시간</span>
+              {[15, 30, 60, 90, 120, 240].map(min => <button key={min} onClick={() => setDur(dur === min ? null : min)} className="text-[12px] font-semibold rounded-full px-2 py-1 border" style={dur === min ? { backgroundColor: '#DFF9C4', borderColor: '#BCE89A', color: '#3E6B1F' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#5B6560' }}>{fmtDur(min)}</button>)}
+              <button onClick={applyDur} disabled={!dur} className="text-[12px] font-bold rounded-lg px-3 py-1.5 disabled:opacity-40" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>적용</button>
+            </div>
+          )}
+        </div>
+        {/* AI 대화 */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-2 space-y-2.5 border-t border-neutral-100 min-h-[120px]">
+          {messages.length === 0 && <p className="text-[12px] text-center py-6" style={{ color: '#9AA39D' }}>예: “이름을 더 구체적으로” · “각각 30분으로” · “기한을 이번 주 안으로”</p>}
+          {messages.map((m, mi) => (
+            m.role === 'user' ? (
+              <div key={mi} className="flex justify-end"><div className="max-w-[85%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={{ backgroundColor: '#DFF9C4', color: '#16211E' }}>{m.content}</div></div>
+            ) : (
+              <div key={mi} className="space-y-2">
+                {m.content && <div className="flex justify-start"><div className="max-w-[90%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB', color: '#3E4A44' }}>{m.content}</div></div>}
+                {m.items && m.items.length > 0 && (
+                  <div className="space-y-1">
+                    {m.items.map((it, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[12px] border border-neutral-200 rounded-lg px-2.5 py-1.5">
+                        <span className="flex-1 min-w-0 truncate font-semibold" style={{ color: '#16211E' }}>{it.name}</span>
+                        {it.durationMin ? <span className="flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(it.durationMin)}</span> : null}
+                        {it.deadline ? <span className="flex-shrink-0" style={{ color: '#7A9463' }}>~{it.deadline.slice(2).replace(/-/g, '.')}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ))}
+          {loading && <div className="flex justify-start"><div className="rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB' }}><span className="inline-block w-4 h-4 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" /></div></div>}
+        </div>
+        <div className="px-5 pt-3 pb-4 flex-shrink-0 border-t border-neutral-100">
+          <div className="flex items-end gap-2 mb-2.5">
+            <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} rows={1} placeholder="AI에게 일괄 변경을 요청…" className="flex-1 resize-none bg-neutral-50 border border-neutral-200 rounded-2xl px-3.5 py-2.5 text-[13px] outline-none focus:border-violet-400 max-h-24" />
+            <button onClick={send} disabled={!input.trim() || loading} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-40" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}><svg className="w-4 h-4" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-6 16-2.5-6L4 12z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg></button>
+          </div>
+          <button onClick={applyAi} disabled={!latest || loading} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>AI 제안 적용{latest ? ` (${latest.length})` : ''}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default GoalsRoadmap;
