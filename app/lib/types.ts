@@ -183,10 +183,11 @@ export interface TodoRecord {
 }
 
 // 데드라인 내 할일 (depth 3)
-export interface ProgramUnit {      // 5단계: task 하위 세부 작업 (시간 단위)
+export interface ProgramUnit {      // 세부 작업 — 카테고리 보드 task 하위 (소요 시간 기준)
   id: string;
   name: string;
   done: boolean;
+  durationMin?: number; // 예상 소요 시간(분)
   date?: string;
   deadline?: string;
 }
