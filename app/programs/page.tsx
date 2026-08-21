@@ -25,7 +25,6 @@ import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '
 import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
 import GoalsRoadmap, { GoalsRoadmapHandle } from '../components/GoalsRoadmap';
-import WorkHoursPanel from '../components/WorkHoursPanel';
 import FlagAward from '../components/FlagAward';
 
 type ProgramWithWs = Program & { wsId: string; wsName: string };
@@ -1480,9 +1479,6 @@ export default function ProgramsPage() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] min-h-0">
-      {/* 상단: 주간 업무시간 타임테이블 */}
-      <div className="flex-shrink-0"><WorkHoursPanel /></div>
-
       <div className="flex-1 min-h-0">
         {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
           /* 비어 있을 때: Plan 사업목표 가져오기 추천 */

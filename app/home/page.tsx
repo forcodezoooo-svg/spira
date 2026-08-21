@@ -10,6 +10,7 @@ import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
 import MusicTimer from '../components/MusicTimer';
 import GoalsCalendar from '../components/GoalsCalendar';
+import WorkHoursPanel from '../components/WorkHoursPanel';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
 
@@ -581,6 +582,9 @@ export default function Home() {
 
       {/* ── 오른쪽: 대시보드 (모바일에서는 숨김) ── */}
       <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
+        {/* 주간 업무시간 타임테이블 */}
+        <WorkHoursPanel />
+
         {/* 타이머 pill */}
         <MusicTimer compact />
 
