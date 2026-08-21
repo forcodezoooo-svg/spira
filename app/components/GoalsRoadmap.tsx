@@ -630,8 +630,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </>
             ) : (
               <>
-                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>소요 시간 (분, 선택)</label>
-                <input type="number" min={0} value={formDur} onChange={e => setFormDur(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') kbSubmitForm(); }} placeholder="예: 30" className="w-full mt-1 mb-4 bg-neutral-50 border rounded-xl px-3 py-2 text-[14px] tabular-nums outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>소요 시간 (선택)</label>
+                <div className="flex flex-wrap gap-1.5 mt-1 mb-4">
+                  {[15, 30, 60, 90, 120, 180, 240, 480].map(min => {
+                    const on = formDur === String(min);
+                    return <button key={min} onClick={() => setFormDur(on ? '' : String(min))} className="text-[12px] font-semibold rounded-full px-2.5 py-1 border transition-colors" style={on ? { backgroundColor: '#DFF9C4', borderColor: '#BCE89A', color: '#3E6B1F' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#5B6560' }}>{fmtDur(min)}</button>;
+                  })}
+                </div>
               </>
             )}
             <div className="flex gap-2">
