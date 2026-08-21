@@ -373,11 +373,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // task/세부작업 추가는 팝업 폼으로 (이름 + 기한)
   const kbCreateTask = (col: KbCol, name: string, due: string) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, deadline: due || undefined }] }) }) });
+    const d = due || col.due || todayStr; // 날짜 자동 지정 (지정 안 하면 산출물 기한, 없으면 오늘)
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, date: d, deadline: d }] }) }) });
   };
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
-  const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, { deadline: due || undefined });
+  const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, { date: due || undefined, deadline: due || undefined });
   const kbSetTodoDue = (col: KbCol, due: string) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });

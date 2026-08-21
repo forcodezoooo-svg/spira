@@ -8,11 +8,11 @@ import type { Program } from '../lib/types';
 // Goals 페이지와 Home 페이지에서 공유한다. (Home은 리스트 브릿지 없이 캘린더 내부 상호작용만 사용)
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-type CalLevel = 'program' | 'deadline' | 'todo';
+type CalLevel = 'program' | 'deadline' | 'todo' | 'subtask';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
-type Payload = { level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string };
-type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; ghost?: boolean; readOnly?: boolean };
+type Payload = { level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string };
+type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; ghost?: boolean; readOnly?: boolean };
 
 export interface GoalsCalendarHandle {
   focus: (level: CalLevel, key: string, start?: string, end?: string, name?: string) => void;
@@ -34,7 +34,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   const [calMonth, setCalMonth] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
-  const [calLevel, setCalLevel] = useState<CalLevel>('todo');
+  const [calLevel, setCalLevel] = useState<CalLevel>('subtask');
   const [previewTask, setPreviewTask] = useState<{ start?: string; end?: string; name: string } | null>(null);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [notPlaced, setNotPlaced] = useState<string | null>(null);
@@ -42,7 +42,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   const [offStart, setOffStart] = useState('');
   const [offEnd, setOffEnd] = useState('');
 
-  type CalDragTarget = { key: string; level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string; start: string; end: string };
+  type CalDragTarget = { key: string; level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; start: string; end: string };
   const [calDrag, setCalDrag] = useState<
     (CalDragTarget & { mode: 'move' | 'resize-start' | 'resize-end'; grabDate: string; origStart: string; origEnd: string }) | null
   >(null);
@@ -145,9 +145,18 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
         ...dl,
         todos: dl.todos.map(t => {
           if (t.id !== d.todoId) return t;
-          if (d.mode === 'move') return { ...t, date: d.start, deadline: d.end };
-          if (d.mode === 'resize-end') return { ...t, deadline: d.end };
-          return { ...t, date: d.start };
+          if (d.level === 'todo') {
+            if (d.mode === 'move') return { ...t, date: d.start, deadline: d.end };
+            if (d.mode === 'resize-end') return { ...t, deadline: d.end };
+            return { ...t, date: d.start };
+          }
+          // subtask (task)
+          return { ...t, subtasks: (t.subtasks ?? []).map(s => {
+            if (s.id !== d.subtaskId) return s;
+            if (d.mode === 'move') return { ...s, date: d.start, deadline: d.end };
+            if (d.mode === 'resize-end') return { ...s, deadline: d.end };
+            return { ...s, date: d.start };
+          }) };
         }),
       };
     });
@@ -156,7 +165,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   const startCalDrag = (r: CalRange, mode: 'move' | 'resize-start' | 'resize-end', e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     const grab = dateFromPoint(e.clientX, e.clientY) || r.start;
-    setCalDrag({ key: r.key, level: r.level, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, start: r.start, end: r.end, mode, grabDate: grab, origStart: r.start, origEnd: r.end });
+    setCalDrag({ key: r.key, level: r.level, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, start: r.start, end: r.end, mode, grabDate: grab, origStart: r.start, origEnd: r.end });
   };
 
   const dropOnDate = (payload: Payload, date: string) => {
@@ -297,49 +306,26 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
     if (start > dl.date) start = dl.date;
     return { start, end: dl.date };
   };
+  // Home 캘린더: 카테고리 없이 '생성된 task(세부 산출물 하위 task)'만 날짜대로 배치
   const buildCalRanges = (): CalRange[] => {
     const real: CalRange[] = [];
-    const ghosts: CalRange[] = [];
-    if (calLevel === 'program') {
-      const map = new Map<string, { wsId: string; name: string; programId: string; start: string; end: string }>();
-      for (const p of programs) {
-        for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false)) {
-          if (!dl.projectId || !dl.date) continue;
-          const proj = resolveProject(p.wsId, dl.projectId);
-          if (!proj) continue;
-          const dp = dlPeriod(p, dl);
-          if (!dp) continue;
-          const key = `proj-${p.wsId}-${dl.projectId}`;
-          const cur = map.get(key);
-          if (!cur) map.set(key, { wsId: p.wsId, name: proj.name, programId: p.id, start: dp.start, end: dp.end });
-          else { if (dp.start < cur.start) cur.start = dp.start; if (dp.end > cur.end) cur.end = dp.end; }
-        }
-      }
-      map.forEach((v, key) => real.push({ key, level: 'program', start: v.start, end: v.end, name: v.name, wsId: v.wsId, programId: v.programId, color: businessColor(v.wsId), readOnly: true }));
-      return [...ghosts, ...real];
-    }
+    void dlPeriod; void resolveProject; void calLevel;
     for (const p of programs) {
-      const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
       const pColor = businessColor(p.wsId);
-      if (calLevel === 'deadline') {
-        for (const dl of dls) {
-          const dp = dlPeriod(p, dl);
-          if (dp) real.push({ key: `d-${dl.id}`, level: 'deadline', ...dp, name: `${p.name} · ${dl.name}`, wsId: p.wsId, programId: p.id, deadlineId: dl.id, color: pColor });
-        }
-      } else {
-        for (const dl of dls) {
-          for (const t of dl.todos) {
-            if (t.done) continue;
-            if (!t.date && !t.deadline) continue;
-            let start = t.date || t.deadline!;
-            const end = t.deadline || t.date!;
+      for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false)) {
+        for (const t of dl.todos) {
+          for (const s of (t.subtasks ?? [])) {
+            if (s.done) continue;
+            if (!s.date && !s.deadline) continue;
+            let start = s.date || s.deadline!;
+            const end = s.deadline || s.date!;
             if (start > end) start = end;
-            real.push({ key: `t-${t.id}`, level: 'todo', start, end, name: t.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, color: pColor });
+            real.push({ key: `s-${s.id}`, level: 'subtask', start, end, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: pColor });
           }
         }
       }
     }
-    return [...ghosts, ...real];
+    return real;
   };
   const calRanges: CalRange[] = buildCalRanges().map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
   const realRanges = calRanges.filter(r => !r.ghost);
@@ -409,13 +395,6 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
           </div>
         </div>
       )}
-
-      {/* 3단계 보기 탭 */}
-      <div className="flex gap-1 mb-5 rounded-full p-1" style={{ backgroundColor: '#F1F1EB' }}>
-        {([['program', '프로젝트'], ['deadline', '데드라인'], ['todo', '업무']] as [CalLevel, string][]).map(([lv, label]) => (
-          <button key={lv} onClick={() => setCalLevel(lv)} className="flex-1 py-2 rounded-full text-[13px] font-semibold transition-colors" style={calLevel === lv ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>
-        ))}
-      </div>
 
       {notPlaced && (
         <div className="mb-3 rounded-xl px-3 py-2 text-[12px] text-center leading-relaxed" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>
