@@ -101,8 +101,9 @@ Task(세부 할일)는 만들지 마라.
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '업무 영역별 산출물'을 완성하기 위해 실제로 해야 할 '구체적 실행 task(할 일)'들로 쪼개.
 - 각 task는 바로 실행할 수 있는 단위로(예: 디자인 산출물이면 "와이어프레임 3종 작성", "메인 화면 시안 디자인", "디자인 QA 및 수정").
 - 4~7개, 진행 순서대로. 이 산출물의 업무 영역 성격에 맞게.
-반드시 '오직 JSON만': {"tasks":["task1","task2","task3"]}`;
-    user = `사업 정보:\n${context}${areaHint}\n\n${goalName ? `상위 목표/프로젝트: ${goalName}\n` : ''}완성할 산출물: ${deliverableName}\n\n이 산출물을 완성하기 위한 구체적 실행 task들을 진행 순서대로 쪼개줘.`;
+- 각 task마다 예상 '소요 시간(분)' durationMin을 현실적으로 추정해서 넣어라(1인 작업 기준, 15/30/60/90/120/180/240 중에서).
+반드시 '오직 JSON만': {"tasks":[{"name":"메인 화면 시안 디자인","durationMin":120},{"name":"디자인 QA 및 수정","durationMin":60}]}`;
+    user = `사업 정보:\n${context}${areaHint}\n\n${goalName ? `상위 목표/프로젝트: ${goalName}\n` : ''}완성할 산출물: ${deliverableName}\n\n이 산출물을 완성하기 위한 구체적 실행 task들을 진행 순서대로 쪼개고, 각 task의 예상 소요 시간(분)도 함께 넣어줘.`;
   } else if (mode === 'bulk-edit') {
     // 선택한 여러 항목을 대화로 일괄 수정 (이름 + 소요시간/기한)
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 사용자가 여러 '항목'을 선택하고 대화로 '일괄 수정'을 요청한다.
@@ -169,7 +170,10 @@ ${DELIVERABLE_RULE}
     } else if (mode === 'project-breakdown') {
       return NextResponse.json({ finalDeliverable: String(parsed.finalDeliverable ?? '').trim(), areaDeliverables: parseAreas(parsed.areaDeliverables) });
     } else if (mode === 'todo-tasks') {
-      const tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map(t => String(t).trim()).filter(Boolean).slice(0, 10) : [];
+      const nn = (x: unknown) => { const n = Number(x); return Number.isFinite(n) && n > 0 ? n : undefined; };
+      const tasks = Array.isArray(parsed.tasks)
+        ? parsed.tasks.map(t => typeof t === 'string' ? { name: t.trim(), durationMin: undefined } : (() => { const o = t as Record<string, unknown>; return { name: String(o.name ?? '').trim(), durationMin: nn(o.durationMin) }; })()).filter(t => t.name).slice(0, 10)
+        : [];
       return NextResponse.json({ tasks });
     } else if (mode === 'bulk-edit') {
       const nn = (x: unknown) => { const n = Number(x); return Number.isFinite(n) && n > 0 ? n : undefined; };
