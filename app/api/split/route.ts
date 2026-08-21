@@ -49,9 +49,9 @@ export async function POST(request: Request) {
 업종에 맞게 KPI 선택: 콘텐츠/크리에이터=구독자·조회수·시청시간·전환율 / 오프라인 매장=일방문객·재방문율·객단가·월매출 / 앱·서비스=가입자·DAU/MAU·유료 전환율·MRR.
 ⚠️ 정보가 부족해도, 사업계획서·사업 개요를 근거로 '합리적으로 추측해서' 반드시 '구체적 수치 목표'를 만들어라. name은 언제나 구체적 수치여야 한다(예: "유료 구독자 300명", "월 매출 500만원", "월 순이익 200만원"). ❌ "첫번째 목표 / 1단계 / 초기 목표" 같은 placeholder 이름 절대 금지 — 수치를 비우지 마라.
 ⚠️ 목표는 '단위 경제(가격·단가)'에 일관돼야 한다. 예: 구독 서비스면 (구독가 × 유료 고객 수 = 매출)이 서로 맞아야 한다(고객 100명·매출 500만원처럼 안 맞는 숫자 금지). 가격/단가 정보가 없으면 '합리적 가정'을 세워 수치를 채우되(예: 구독가 1만원 가정), 그 가정을 rationale에 밝히고 reply에서 "가격을 알려주시면 더 정확히 맞춰드릴게요"라고 물어라. 사용자가 가격을 알려주면 그 기반으로 고객 수·매출을 일관되게 다시 계산해라. — 어떤 경우에도 목표 name과 수치는 비워두지 말고 항상 구체적으로 채워라.
-각 목표: name(구체적 수치, "3개월 내" 같은 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적으로 단계마다 점점 뒤로), rationale(왜 이 수치인지 1문장 — 가격/단가·직전 단계 대비 근거, 가정을 세웠다면 명시), successCriteria(관련 지표 2~4개 metric, current는 모르면 0. 서로 수치가 일관되게).
+각 목표: name(구체적 수치, "3개월 내" 같은 기간 문구 없이), targetDate("YYYY-MM-DD", 오늘 기준 현실적으로 단계마다 점점 뒤로), rationale(왜 이 수치인지 1문장 — 가격/단가·직전 단계 대비 근거, 가정을 세웠다면 명시), successCriteria(관련 지표 2~4개 metric, current는 모르면 0. 서로 수치가 일관되게), strategies(이 목표를 이루기 위한 '업무 영역별 핵심 전략 방향' 2~4개 [{area, content}] — 이 사업 업무 영역에 맞게, content는 실행 방향 한 문장).
 reply: 짧고 따뜻한 설명/답변 1~2문장. 정보가 부족해 가정을 세웠다면 그걸 밝히고 무엇을 알려주면 더 정확해지는지(예: 가격) 물어봐라.
-반드시 '오직 JSON만'(name은 반드시 구체적 수치, 초기 단계는 이용자 지표부터): {"reply":"...","goals":[{"name":"누적 가입자 1,000명","targetDate":"2026-02-28","rationale":"초기엔 매출보다 사용자 기반 확보가 먼저. 유입 대비 현실적인 초기 목표","successCriteria":[{"type":"metric","name":"누적 가입자","target":1000,"current":0,"unit":"명"},{"type":"metric","name":"DAU","target":100,"current":0,"unit":"명","measurementPeriod":"일"}]},{"name":"유료 전환율 5% 달성","targetDate":"2026-05-31","rationale":"가입자 기반이 생긴 뒤 유료 전환에 집중","successCriteria":[{"type":"metric","name":"유료 전환율","target":5,"current":0,"unit":"%"},{"type":"metric","name":"유료 고객","target":50,"current":0,"unit":"명"}]}]}
+반드시 '오직 JSON만'(name은 반드시 구체적 수치, 초기 단계는 이용자 지표부터): {"reply":"...","goals":[{"name":"누적 가입자 1,000명","targetDate":"2026-02-28","rationale":"초기엔 매출보다 사용자 기반 확보가 먼저. 유입 대비 현실적인 초기 목표","successCriteria":[{"type":"metric","name":"누적 가입자","target":1000,"current":0,"unit":"명"},{"type":"metric","name":"DAU","target":100,"current":0,"unit":"명","measurementPeriod":"일"}],"strategies":[{"area":"마케팅","content":"콘텐츠·SNS로 초기 유입 채널 확보"},{"area":"제품","content":"온보딩 단순화로 가입 전환율 높이기"}]}]}
 사용자가 대화로 수치·개수·방향 조정을 요청하면, 그 요청을 반영해 goals '전체'를 다시 제시하고 reply로 무엇을 바꿨는지 설명해라.${currentGoals ? `\n\n[현재 제안된 목표(조정 대상)]\n${JSON.stringify(currentGoals)}` : ''}`;
     user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}${areaHint}\n\n이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.`;
   } else if (mode === 'goal-breakdown') {
@@ -79,9 +79,10 @@ ${DELIVERABLE_RULE}
 - 상황(예: 목표 달성이 어려워짐, 전략 변경, 일정 지연, 리소스 부족)을 반영해 프로젝트를 추가/삭제/병합/재배치하고, 이름·최종 결과물·기간·산출물을 조정.
 - 살릴 건 살리고(가능하면 기존 이름 유지), 필요 없어진 건 빼고, 전략에 맞게 방향을 바꿔라. 큰 마일스톤 단위 유지(보통 1~3개), 진행 순서대로.
 - 각 project: name, finalDeliverable(최종 결과물), startDate/endDate("YYYY-MM-DD", 오늘 이후·Goal 기한 이내로 순서대로), areaDeliverables 3~5개 [{area, content}].
+- reply: 무엇을·왜 바꿨는지(또는 유지했는지) 짧고 따뜻하게 1~2문장. 사용자가 대화로 방향을 조정하면 그 요청을 반영해 projects '전체'를 다시 제시하고 reply로 설명해라.
 ${DELIVERABLE_RULE}
-반드시 '오직 JSON만'(전체 프로젝트 목록): {"projects":[{"name":"","finalDeliverable":"","startDate":"","endDate":"","areaDeliverables":[{"area":"","content":""}]}]}`;
-    user = `${today ? `오늘 날짜: ${today}\n` : ''}${goalTargetDate ? `이 Goal의 기한: ${goalTargetDate}\n` : ''}사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n업무 영역별 전략:\n${strategies.length ? strategies.map(s => `- ${s.area}: ${s.content}`).join('\n') : '(없음)'}\n\n현재 프로젝트들:\n${currentProjects.length ? currentProjects.map(p => `- ${p.name}${p.finalDeliverable ? ` (최종 결과물: ${p.finalDeliverable})` : ''}${(p.areaDeliverables ?? []).length ? ` / 산출물: ${(p.areaDeliverables ?? []).map(a => `${a.area}:${a.content}`).join(', ')}` : ''}`).join('\n') : '(없음)'}\n\n변화된 상황/변수: ${situation || '(설명 없음)'}\n\n이 상황과 전략을 반영해 프로젝트 구성을 수정한 '전체 목록'을 제안해줘.`;
+반드시 '오직 JSON만'(reply + 전체 프로젝트 목록): {"reply":"...","projects":[{"name":"","finalDeliverable":"","startDate":"","endDate":"","areaDeliverables":[{"area":"","content":""}]}]}`;
+    user = `${today ? `오늘 날짜: ${today}\n` : ''}${goalTargetDate ? `이 Goal의 기한: ${goalTargetDate}\n` : ''}사업 정보:\n${context}${areaHint}\n\nGoal: ${goalName}${goalDesc ? `\n목표/성과 기준: ${goalDesc}` : ''}\n\n업무 영역별 전략:\n${strategies.length ? strategies.map(s => `- ${s.area}: ${s.content}`).join('\n') : '(없음)'}\n\n현재 프로젝트들:\n${currentProjects.length ? currentProjects.map(p => `- ${p.name}${p.finalDeliverable ? ` (최종 결과물: ${p.finalDeliverable})` : ''}${(p.areaDeliverables ?? []).length ? ` / 산출물: ${(p.areaDeliverables ?? []).map(a => `${a.area}:${a.content}`).join(', ')}` : ''}`).join('\n') : '(없음)'}${situation ? `\n\n변화된 상황/변수: ${situation}` : ''}\n\n대화로 수정 방향을 함께 정하자. 먼저 현재 프로젝트를 점검하고, 바꿀 부분이 보이면 반영한 프로젝트 '전체 목록'과 짧은 설명(reply)을 제시해줘.`;
   } else if (mode === 'project-breakdown') {
     // Project → Final Deliverable → Area Deliverables
     sys = `${SPIRA_PLANNING_CORE}
@@ -117,9 +118,12 @@ ${DELIVERABLE_RULE}
   const todayKST = today || new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const dateNote = `오늘 날짜는 ${todayKST}입니다. 모든 날짜(targetDate 등)는 반드시 오늘 이후(오늘부터 시작하는 미래)로만 잡고, 과거 연도(2024 등)는 절대 쓰지 마세요.`;
   // goal-suggest는 대화(messages)로 조정 가능 — 있으면 대화를, 없으면 초기 user 프롬프트를 사용
-  const convo: ChatMsg[] = (mode === 'goal-suggest' && Array.isArray(messages) && messages.length)
-    ? messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').slice(-12)
-    : [{ role: 'user', content: user }];
+  const chatMsgs = Array.isArray(messages) ? messages.filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string') : [];
+  const convo: ChatMsg[] = (mode === 'goal-suggest' && chatMsgs.length)
+    ? chatMsgs.slice(-12)
+    : (mode === 'project-revise' && chatMsgs.length)
+      ? [{ role: 'user', content: user }, ...chatMsgs.slice(-10)] // 컨텍스트(user) + 대화
+      : [{ role: 'user', content: user }];
   try {
     const completion = await getClient().chat.completions.create({
       model: 'gpt-4o',
@@ -138,14 +142,14 @@ ${DELIVERABLE_RULE}
       : [];
     if (mode === 'goal-suggest') {
       const goals = Array.isArray(parsed.goals)
-        ? parsed.goals.map(g => { const gg = g as Record<string, unknown>; return { name: String(gg.name ?? '').trim(), targetDate: String(gg.targetDate ?? '').trim(), rationale: String(gg.rationale ?? '').trim(), successCriteria: parseCriteria(gg.successCriteria).filter(c => c.type === 'metric') }; }).filter(g => g.name).slice(0, 6)
+        ? parsed.goals.map(g => { const gg = g as Record<string, unknown>; return { name: String(gg.name ?? '').trim(), targetDate: String(gg.targetDate ?? '').trim(), rationale: String(gg.rationale ?? '').trim(), successCriteria: parseCriteria(gg.successCriteria).filter(c => c.type === 'metric'), strategies: parseAreas(gg.strategies) }; }).filter(g => g.name).slice(0, 6)
         : [];
       return NextResponse.json({ goals, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'goal-breakdown' || mode === 'project-revise') {
       const projects = Array.isArray(parsed.projects)
         ? parsed.projects.map(p => { const pp = p as Record<string, unknown>; return { name: String(pp.name ?? '').trim(), finalDeliverable: String(pp.finalDeliverable ?? '').trim(), startDate: String(pp.startDate ?? '').trim(), endDate: String(pp.endDate ?? '').trim(), areaDeliverables: parseAreas(pp.areaDeliverables) }; }).filter(p => p.name).slice(0, 6)
         : [];
-      return NextResponse.json({ projects });
+      return NextResponse.json({ projects, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'project-breakdown') {
       return NextResponse.json({ finalDeliverable: String(parsed.finalDeliverable ?? '').trim(), areaDeliverables: parseAreas(parsed.areaDeliverables) });
     } else if (mode === 'deliverables') {

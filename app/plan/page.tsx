@@ -8,7 +8,8 @@ import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Del
 // AI가 돌려주는 성과 기준(id 없음)
 type AiCriterion = { type: string; name: string; current?: number; target?: number; unit?: string; measurementPeriod?: string };
 // AI 목표 설계 팝업에서 다루는 제안 목표(근거 포함)
-type PlanGoal = { name: string; targetDate?: string; rationale?: string; successCriteria: AiCriterion[] };
+type PlanGoal = { name: string; targetDate?: string; rationale?: string; successCriteria: AiCriterion[]; strategies?: { area: string; content: string }[] };
+type PlanProject = { name: string; finalDeliverable?: string; startDate?: string; endDate?: string; areaDeliverables?: { area: string; content: string }[] };
 // AI 제안 미리보기(승인 전) — 목표 점검 / Goal 쪼개기 / Project 쪼개기
 type AiPreview =
   | { kind: 'goal-review'; goalId: string; goalName: string; data: { ok: boolean; issues: string[]; title: string; successCriteria: AiCriterion[]; targetDate: string; note: string } };
@@ -1930,6 +1931,24 @@ function GoalsSection({
               {/* 펼침: Goal 상세 + Strategy + Projects */}
               {gOpen && (
                 <div className="px-4 pb-4 pl-9 space-y-4 border-t border-neutral-100 pt-3">
+                  {/* 업무 영역별 전략 (제일 상단) */}
+                  <div className="bg-neutral-50 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <p className="text-[11px] font-semibold text-neutral-400">업무 영역별 전략</p>
+                      <Hint text="이 목표를 이루기 위한 업무 영역별 핵심 전략 방향을 적어두세요. 아래 프로젝트의 방향이 됩니다. (AI '프로젝트 수정'이 이 전략을 참고해요)" />
+                    </div>
+                    <div className="space-y-1.5">
+                      {(g.strategies ?? []).map(s => areaRow(
+                        s.area, s.content,
+                        v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, area: v } : x) }),
+                        v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: v } : x) }),
+                        () => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).filter(x => x.id !== s.id) }),
+                        '업무 영역', '이 영역의 전략 방향',
+                      ))}
+                      <button onClick={() => onUpdateGoal(g.id, { strategies: [...(g.strategies ?? []), { id: uid(), area: '', content: '' }] })} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 전략 추가</button>
+                    </div>
+                  </div>
+
                   {/* 성과 지표 — [지표] 편집 / [그래프] 추이 두 탭. 진행도는 아래 프로젝트 완료로 계산됨 */}
                   <div className="bg-neutral-50 rounded-xl p-3">
                     {(() => {
@@ -1966,24 +1985,6 @@ function GoalsSection({
                         </div>
                       );
                     })()}
-                  </div>
-
-                  {/* 업무 영역별 전략 */}
-                  <div className="bg-neutral-50 rounded-xl p-3">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <p className="text-[11px] font-semibold text-neutral-400">업무 영역별 전략</p>
-                      <Hint text="이 목표를 이루기 위한 업무 영역별 핵심 전략 방향을 적어두세요. 아래 프로젝트의 방향이 됩니다. (AI '프로젝트 수정'이 이 전략을 참고해요)" />
-                    </div>
-                    <div className="space-y-1.5">
-                      {(g.strategies ?? []).map(s => areaRow(
-                        s.area, s.content,
-                        v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, area: v } : x) }),
-                        v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: v } : x) }),
-                        () => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).filter(x => x.id !== s.id) }),
-                        '업무 영역', '이 영역의 전략 방향',
-                      ))}
-                      <button onClick={() => onUpdateGoal(g.id, { strategies: [...(g.strategies ?? []), { id: uid(), area: '', content: '' }] })} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 전략 추가</button>
-                    </div>
                   </div>
 
                   {/* Projects (진행 순서 → 화살표) */}
@@ -2210,6 +2211,13 @@ function GoalPlanModal({ context, areas, onApply, onClose }: {
                             ))}
                           </div>
                         )}
+                        {(g.strategies?.length ?? 0) > 0 && (
+                          <div className="mt-1.5 ml-7 flex flex-wrap gap-1">
+                            {g.strategies!.map((s, k) => (
+                              <span key={k} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>🎯 {s.area}: {s.content}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2235,6 +2243,115 @@ function GoalPlanModal({ context, areas, onApply, onClose }: {
           </div>
           <button onClick={() => onApply(latestGoals)} disabled={!latestGoals.length || loading} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>
             이 목표로 만들기{latestGoals.length ? ` (${latestGoals.length})` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// AI 프로젝트 수정 — 대화형 팝업. 상황·전략을 대화로 맞춰가며 프로젝트 '전체'를 다시 제안 → 적용 시 교체
+function ProjectReviseModal({ context, areas, goalName, goalDesc, goalTargetDate, strategies, currentProjects, onApply, onClose }: {
+  context: string; areas: string[]; goalName: string; goalDesc: string; goalTargetDate: string;
+  strategies: { area: string; content: string }[];
+  currentProjects: PlanProject[];
+  onApply: (projects: PlanProject[]) => void;
+  onClose: () => void;
+}) {
+  type Msg = { role: 'user' | 'assistant'; content: string; projects?: PlanProject[] };
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const startedRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const latestProjects = [...messages].reverse().find(m => m.projects && m.projects.length)?.projects ?? [];
+  const shortD = (d?: string) => (d ? d.slice(2).replace(/-/g, '.') : '');
+
+  const call = async (log: Msg[]) => {
+    setLoading(true);
+    try {
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        mode: 'project-revise', context, areas, today, goalName, goalDesc, goalTargetDate, strategies, currentProjects,
+        messages: log.map(m => ({ role: m.role, content: m.content })),
+      }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) { setMessages(m => [...m, { role: 'assistant', content: '앗, 잠시 문제가 생겼어요. 다시 시도해 주세요.' }]); return; }
+      const ps = (Array.isArray(data.projects) ? data.projects : []) as PlanProject[];
+      setMessages(m => [...m, { role: 'assistant', content: String(data.reply ?? ''), projects: ps }]);
+    } catch { setMessages(m => [...m, { role: 'assistant', content: '네트워크 오류가 발생했어요.' }]); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { if (startedRef.current) return; startedRef.current = true; void call([]); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [messages, loading]);
+  const send = () => { const t = input.trim(); if (!t || loading) return; const log = [...messages, { role: 'user' as const, content: t }]; setMessages(log); setInput(''); void call(log); };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,41,41,0.45)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col" style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-5 pb-3 flex items-start justify-between gap-2 flex-shrink-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-violet-500" viewBox="0 0 16 16" fill="none"><path d="M13 3.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /><path d="M13 1.5V4h-2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <h3 className="text-[15px] font-black text-neutral-900 truncate">AI 프로젝트 수정</h3>
+            </div>
+            <p className="text-[12px] text-neutral-400 mt-0.5 truncate">‘{goalName}’ · 상황·전략을 대화로 맞춰 프로젝트를 다시 짜요.</p>
+          </div>
+          <button onClick={onClose} className="text-neutral-300 hover:text-neutral-600 text-lg leading-none flex-shrink-0">×</button>
+        </div>
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 space-y-2.5 min-h-[140px] pb-1">
+          {messages.length === 0 && loading && (
+            <div className="py-8 flex flex-col items-center gap-2 text-neutral-400">
+              <span className="w-6 h-6 rounded-full border-2 border-neutral-200 border-t-violet-400 animate-spin" />
+              <p className="text-[13px]">프로젝트를 점검하는 중…</p>
+            </div>
+          )}
+          {messages.map((m, mi) => (
+            m.role === 'user' ? (
+              <div key={mi} className="flex justify-end"><div className="max-w-[85%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={{ backgroundColor: '#DFF9C4', color: '#16211E' }}>{m.content}</div></div>
+            ) : (
+              <div key={mi} className="space-y-2">
+                {m.content && <div className="flex justify-start"><div className="max-w-[90%] text-[13px] leading-relaxed rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB', color: '#3E4A44' }}>{m.content}</div></div>}
+                {m.projects && m.projects.length > 0 && (
+                  <div className="space-y-2">
+                    {m.projects.map((p, i) => (
+                      <div key={i} className="border border-neutral-200 rounded-xl px-3.5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: '#EEF7E2', color: '#3E7A2E' }}>{i + 1}</span>
+                          <b className="text-[14px] text-neutral-900 flex-1 min-w-0 truncate">{p.name}</b>
+                          {p.startDate && p.endDate && <span className="text-[11px] text-neutral-400 flex-shrink-0">{shortD(p.startDate)}~{shortD(p.endDate)}</span>}
+                        </div>
+                        {p.finalDeliverable && <p className="text-[12px] text-neutral-500 mt-1 ml-7">🎯 {p.finalDeliverable}</p>}
+                        {(p.areaDeliverables?.length ?? 0) > 0 && (
+                          <div className="mt-1.5 ml-7 flex flex-wrap gap-1">
+                            {p.areaDeliverables!.map((a, j) => <span key={j} className="text-[11px] px-2 py-0.5 rounded-full" style={{ backgroundColor: '#EAF0FB', color: '#4E7CF5' }}>{a.area}: {a.content}</span>)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          ))}
+          {loading && messages.length > 0 && (
+            <div className="flex justify-start"><div className="rounded-2xl px-3 py-2" style={{ backgroundColor: '#F1F1EB' }}><span className="inline-block w-4 h-4 rounded-full border-2 border-neutral-300 border-t-transparent animate-spin" /></div></div>
+          )}
+        </div>
+
+        <div className="px-5 pt-3 pb-4 flex-shrink-0 border-t border-neutral-100">
+          <div className="flex items-end gap-2 mb-2.5">
+            <textarea value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
+              rows={1} placeholder="예: 목표 달성이 어려워졌어 / 마케팅 전략을 인플루언서로 바꿔줘 / 일정을 2개월 미뤄줘"
+              className="flex-1 resize-none bg-neutral-50 border border-neutral-200 rounded-2xl px-3.5 py-2.5 text-[13px] outline-none focus:border-violet-400 max-h-24" />
+            <button onClick={send} disabled={!input.trim() || loading} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none"><path d="M4 12l16-8-6 16-2.5-6L4 12z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" /></svg>
+            </button>
+          </div>
+          <button onClick={() => onApply(latestProjects)} disabled={!latestProjects.length || loading} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>
+            이 프로젝트로 수정{latestProjects.length ? ` (${latestProjects.length})` : ''}
           </button>
         </div>
       </div>
@@ -2282,6 +2399,7 @@ export default function PlanPage() {
   const [aiBusyId, setAiBusyId] = useState<string | null>(null); // AI 처리 중인 Goal/Project id
   const [preview, setPreview] = useState<AiPreview | null>(null); // AI 제안 미리보기(승인 전)
   const [goalPlanOpen, setGoalPlanOpen] = useState(false); // AI 목표 설계 팝업(대화형)
+  const [reviseGoalId, setReviseGoalId] = useState<string | null>(null); // AI 프로젝트 수정 팝업(대화형)
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
   const migratedRef = useRef<Set<string>>(new Set()); // bizGoals→goals 마이그레이션 1회 가드
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string } | null>(null); // 성장 단계 달성 깃발 오버레이
@@ -2721,7 +2839,8 @@ export default function PlanPage() {
       const newGoals: Goal[] = planned.map((g, i) => ({
         id: uid(), name: g.name, targetDate: g.targetDate,
         status: (base.length === 0 && i === 0) ? 'active' : 'onhold',
-        order: base.length + i, strategies: [],
+        order: base.length + i,
+        strategies: (g.strategies ?? []).map(s => ({ id: uid(), area: s.area, content: s.content })),
         successCriteria: g.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod })),
       }));
       const next = { ...prev, goals: [...base, ...newGoals] };
@@ -2777,44 +2896,24 @@ export default function PlanPage() {
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };
-  // 상황 변화(목표 달성 불가·전략 수정 등)에 맞춰 이 목표의 프로젝트를 AI가 수정 → 교체
-  const reviseProjects = async (goalId: string) => {
-    if (!aiGate()) return;
-    const goal = (plan.goals ?? []).find(g => g.id === goalId);
-    if (!goal) return;
-    const situation = window.prompt('어떤 변화·변수를 반영할까요?\n예) 목표 달성이 어려워짐 / 전략을 OO로 변경 / 일정 지연 / 리소스 부족')?.trim();
-    if (!situation) return;
-    if (!window.confirm('AI 제안으로 이 목표의 프로젝트를 수정·교체할까요? (현재 프로젝트는 대체됩니다)')) return;
-    setAiBusyId(goalId);
-    try {
-      const areas = (plan.workAreas ?? []).map(a => a.name);
-      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-      const cur = projectsOfGoal(goalId);
-      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        mode: 'project-revise', context: buildContext(), goalName: goal.name, goalDesc: goal.statement ?? '', goalTargetDate: goal.targetDate ?? '', today, areas, situation,
-        strategies: (goal.strategies ?? []).map(s => ({ area: s.area, content: s.content })),
-        currentProjects: cur.map(p => ({ name: p.name, finalDeliverable: p.finalDeliverable ?? '', areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ area: a.area, content: a.content })) })),
-      }) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) { toast('AI 수정에 실패했어요.', 'error'); return; }
-      const projs = (data.projects ?? []) as { name: string; finalDeliverable: string; startDate?: string; endDate?: string; areaDeliverables?: { area: string; content: string }[] }[];
-      if (!projs.length) { toast('수정안을 찾지 못했어요.', 'info'); return; }
-      setPlan(prev => {
-        if (!prev) return prev;
-        const others = (prev.projects ?? []).filter(x => x.goalId !== goalId);
-        const newProjects: Project[] = projs.map((p, i) => ({
-          id: uid(), name: p.name, goalId, order: i, finalDeliverable: p.finalDeliverable,
-          startDate: p.startDate || undefined, endDate: p.endDate || undefined, status: 'planned',
-          areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
-        }));
-        const next = { ...prev, projects: [...others, ...newProjects] };
-        const wsId = selectedWsIdRef.current;
-        if (wsId) store.updatePlanInWs(wsId, next);
-        return next;
-      });
-      toast(`상황을 반영해 프로젝트를 ${projs.length}개로 수정했어요. 🌿`, 'success');
-    } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
-    finally { setAiBusyId(null); }
+  // 상황 변화(목표 달성 불가·전략 수정 등) → AI와 대화하며 프로젝트 수정 (채팅 팝업)
+  const reviseProjects = (goalId: string) => { if (aiGate()) setReviseGoalId(goalId); };
+  const applyRevisedProjects = (goalId: string, projs: PlanProject[]) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const others = (prev.projects ?? []).filter(x => x.goalId !== goalId);
+      const newProjects: Project[] = projs.map((p, i) => ({
+        id: uid(), name: p.name, goalId, order: i, finalDeliverable: p.finalDeliverable,
+        startDate: p.startDate || undefined, endDate: p.endDate || undefined, status: 'planned',
+        areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
+      }));
+      const next = { ...prev, projects: [...others, ...newProjects] };
+      const wsId = selectedWsIdRef.current;
+      if (wsId) store.updatePlanInWs(wsId, next);
+      return next;
+    });
+    setReviseGoalId(null);
+    toast(`프로젝트를 ${projs.length}개로 수정했어요. 🌿`, 'success');
   };
   // 프로젝트 → 최종 결과물·산출물 쪼개기: 미리보기 없이 바로 채움
   const breakdownProject = async (goalId: string, projectId: string) => {
@@ -2997,6 +3096,16 @@ export default function PlanPage() {
     {/* AI 제안 미리보기(승인 전) 모달 */}
     {preview && <AiPreviewModal preview={preview} onApply={applyPreview} onClose={() => setPreview(null)} />}
     {goalPlanOpen && <GoalPlanModal context={buildContext()} areas={(plan.workAreas ?? []).map(a => a.name)} onApply={applyPlannedGoals} onClose={() => setGoalPlanOpen(false)} />}
+    {reviseGoalId && (() => {
+      const g = (plan.goals ?? []).find(x => x.id === reviseGoalId);
+      if (!g) return null;
+      return <ProjectReviseModal
+        context={buildContext()} areas={(plan.workAreas ?? []).map(a => a.name)}
+        goalName={g.name} goalDesc={g.statement ?? ''} goalTargetDate={g.targetDate ?? ''}
+        strategies={(g.strategies ?? []).map(s => ({ area: s.area, content: s.content }))}
+        currentProjects={projectsOfGoal(reviseGoalId).map(p => ({ name: p.name, finalDeliverable: p.finalDeliverable ?? '', areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ area: a.area, content: a.content })) }))}
+        onApply={projs => applyRevisedProjects(reviseGoalId, projs)} onClose={() => setReviseGoalId(null)} />;
+    })()}
 
     {/* ── 오른쪽: 플레이바 + 공용 메모 ── */}
     <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
