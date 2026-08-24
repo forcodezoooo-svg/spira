@@ -1784,7 +1784,7 @@ function GoalsSection({
   goals, projectsOfGoal, workAreas,
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
-  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects,
+  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects,
   aiBusyId, aiEnabled, focusGoal, onFocusHandled,
 }: {
   goals: Goal[];
@@ -1804,6 +1804,7 @@ function GoalsSection({
   onSuggestGoals?: () => void;
   onImportGoal?: (goalId: string) => void;
   onReviseProjects?: (goalId: string) => void;
+  onResequenceProjects?: (goalId: string) => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -1919,6 +1920,13 @@ function GoalsSection({
                       </select>
                       {aiEnabled && <AiBtn id={g.id} icon="split" label="프로젝트 생성" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
                       {aiEnabled && onReviseProjects && projects.length > 0 && <AiBtn id={g.id} icon="revise" label="프로젝트 수정" onClick={() => { onReviseProjects(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
+                      {onResequenceProjects && projects.length > 0 && (
+                        <button onClick={() => { onResequenceProjects(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} title="프로젝트들을 오늘부터 순서대로(기간 유지) 겹치지 않게 날짜 재조정"
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0" style={{ backgroundColor: '#EAF3FF', color: '#2B62C4' }}>
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M13 3.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M13 1.5V4h-2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          날짜 재조정
+                        </button>
+                      )}
                       {onImportGoal && projects.length > 0 && (
                         <button onClick={() => onImportGoal(g.id)} title="이 목표·프로젝트·산출물을 Goals 로드맵으로 가져가 날짜대로 배치"
                           className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>
@@ -2855,6 +2863,30 @@ export default function PlanPage() {
     toast(`‘${goal.name}’을(를) Goals 로드맵으로 가져왔어요. 🌿`, 'success');
   };
   const updateProject = (id: string, patch: Partial<Project>) => update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
+  // 프로젝트 날짜 재조정 — 오늘(또는 목표 시작일)부터 순서대로 기간 유지하며 겹치지 않게 배치
+  const resequenceProjects = (goalId: string) => {
+    const goal = (plan.goals ?? []).find(g => g.id === goalId);
+    const projs = projectsOfGoal(goalId);
+    if (!projs.length) { toast('재조정할 프로젝트가 없어요.', 'info'); return; }
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const addDaysS = (ds: string, n: number) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const daysBtw = (a: string, b: string) => Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+    // 각 프로젝트 기간(일): 기존 start~end 유지, 없으면 영역별 산출물 수 기반(1개당 ~1주, 최소 7일)
+    const durOf = (p: Project) => {
+      if (p.startDate && p.endDate) { const d = daysBtw(p.startDate, p.endDate); if (d >= 0) return d; }
+      return Math.max(6, (p.areaDeliverables?.length ?? 1) * 6 - 1);
+    };
+    let cursor = goal?.startDate && goal.startDate > today ? goal.startDate : today;
+    const patchById = new Map<string, { startDate: string; endDate: string; deadline: string }>();
+    for (const p of projs) {
+      const end = addDaysS(cursor, durOf(p));
+      patchById.set(p.id, { startDate: cursor, endDate: end, deadline: end });
+      cursor = addDaysS(end, 1);
+    }
+    update({ projects: (plan.projects ?? []).map(p => patchById.has(p.id) ? { ...p, ...patchById.get(p.id)! } : p) });
+    toast(`${projs.length}개 프로젝트 날짜를 순서대로 재조정했어요.`, 'success');
+  };
   const removeProject = (id: string) => update({ projects: (plan.projects ?? []).filter(p => p.id !== id) });
 
   // ── AI: 목표 설계 팝업 열기 / 점검 / 쪼개기 ──
@@ -3114,6 +3146,7 @@ export default function PlanPage() {
           onSuggestGoals={suggestGoals}
           onImportGoal={importGoalToGoals}
           onReviseProjects={reviseProjects}
+          onResequenceProjects={resequenceProjects}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
           focusGoal={focusGoal}
