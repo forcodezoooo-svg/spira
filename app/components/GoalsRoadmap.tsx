@@ -294,6 +294,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const dlVisible = (wsId: string, dl: Deadline) => dl.enabled !== false && !dl.done && !(dl.projectId && resolveProject(wsId, dl.projectId)?.status === 'done');
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl)); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
   const dlPeriod = (p: CalProgram, dl: Deadline) => { if (!dl.date) { const ts = dl.todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = dl.todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
+  void progPeriod; // 사업목표 행 숨김으로 미사용
   // 로드맵 정렬: 디데이순(가까운 마감 먼저) / 비즈니스별(같은 사업끼리)
   const progNearestDue = (p: CalProgram) => { const ds = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl) && dl.date).map(dl => dl.date); return ds.length ? [...ds].sort()[0] : '9999-99-99'; };
   const roadmapPrograms = sortMode === 'dday'
@@ -304,9 +305,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
     const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl));
     if (sortMode === 'dday') dls.sort((a, b) => (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99')); // 프로젝트 디데이 가까운 순
-    const pp = progPeriod(p);
-    rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, pgKey });
-    if (!isOpen(pgKey, 0)) continue;
+    // 사업목표(program, level 0) 행은 로드맵에 표시하지 않고, 프로젝트(deadline)를 최상위로 보여준다.
     if (dls.length === 0) rows.push({ key: `add-${pgKey}`, level: 1, kind: 'deadline', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, pgKey, isAdd: true, addKind: 'deadline' });
     for (const dl of dls) {
       const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl); const todos = dl.todos.filter(t => !t.done);
@@ -350,6 +349,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
     const name = window.prompt('영역별 산출물 이름 (예: 디자인: 최종 UI 시안)')?.trim(); if (!name) return;
     store.updateProgramInWs(r.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== r.deadlineId ? dl : { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] }) });
+  };
+  // 프로젝트(데드라인) 바로 추가 — 선택한 목표(계보) 또는 첫 목표 아래에 오늘부터 1주짜리 기본 일정으로
+  const addProjectInline = () => {
+    const target = resolveChain(selectedKey).program ?? programs[0];
+    if (!target) { window.alert('먼저 Plan에서 사업목표를 만들어 Goals로 가져오세요.'); return; }
+    const prog = findProg(target.wsId, target.id); if (!prog) return;
+    const name = window.prompt('새 프로젝트 이름')?.trim(); if (!name) return;
+    store.updateProgramInWs(target.wsId, { ...prog, deadlines: [...(prog.deadlines ?? []), { id: uid(), name, startDate: todayStr, date: addDaysStr(todayStr, 7), todos: [], enabled: true }] });
   };
   const delRow = (r: Row) => {
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
@@ -615,7 +622,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
-  const barH = (lvl: number) => lvl === 0 ? 28 : lvl === 1 ? 21 : lvl === 2 ? 15 : lvl === 3 ? 13 : 12; // 위계별 높이 차이
+  const barH = (lvl: number) => lvl === 1 ? 26 : lvl === 2 ? 17 : 13; // 프로젝트=큰 막대, 산출물=작은 막대
   const pgOrder = new Map<string, number>(); roadmapPrograms.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
   // 선택 아이템 빌더 + 체크 표시
   const rowSel = (r: Row): SelItem => ({ key: r.key, kind: r.kind, name: r.name, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, deadline: r.end });
@@ -645,9 +652,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               <button onClick={() => scrollByScreen(1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="다음"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
               <span className="text-[15px] font-bold ml-1 truncate" style={{ color: '#16211E' }}>{visLabel}</span>
             </div>
-            <button onClick={() => { const c = resolveChain(selectedKey); openInPlan(c.program?.wsId, c.program?.id); }} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={selectedKey ? '선택한 목표를 Plan에서 수정' : 'Plan에서 목표·프로젝트·산출물 수정'}>
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>내용 수정
-            </button>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button onClick={addProjectInline} className="flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#EAF3FF', color: '#2B62C4' }} title="선택한 목표(또는 첫 목표) 아래에 새 프로젝트 추가">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>프로젝트 추가
+              </button>
+              <button onClick={() => { const c = resolveChain(selectedKey); openInPlan(c.program?.wsId, c.program?.id); }} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={selectedKey ? '선택한 목표를 Plan에서 수정' : 'Plan에서 목표·프로젝트·산출물 수정'}>
+                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>내용 수정
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 mb-3">
             {/* 줌 인/아웃 — 날짜 간격 조절 (연/월/주 구분 없이 연속) */}
@@ -793,7 +805,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         <div className="relative" style={{ width: LABEL_W + contentWidth }}>
           {/* 헤더 */}
           <div className="flex sticky top-0 z-20" style={{ height: HEAD_H }}>
-            <div className="sticky left-0 z-30 bg-white flex items-center px-3 border-r border-b" style={{ width: LABEL_W, borderColor: '#F0F0EA' }}><span className="text-[11px] font-bold" style={{ color: '#9AA39D' }}>목표 · 프로젝트 · 산출물 · task</span></div>
+            <div className="sticky left-0 z-30 bg-white flex items-center px-3 border-r border-b" style={{ width: LABEL_W, borderColor: '#F0F0EA' }}><span className="text-[11px] font-bold" style={{ color: '#9AA39D' }}>프로젝트 · 산출물</span></div>
             <div ref={timelineRef} className="relative bg-white border-b" style={{ width: contentWidth, borderColor: '#F0F0EA' }}>
               {labels.map((t, i) => <div key={i} className="absolute top-2 text-[10px] font-medium whitespace-nowrap" style={{ left: t.x, color: '#9AA39D', transform: 'translateX(3px)' }}>{t.text}</div>)}
             </div>
@@ -812,7 +824,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const pgIdx0 = pgOrder.get(r.pgKey) ?? 0;
               if (r.isAdd) return (
                 <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
-                  <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
+                  <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 8 + (r.level - 1) * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
                     {r.addKind === 'todo' && (
                       <button onClick={() => addTodoInline(r)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#3E7A2E' }} title="여기서 산출물 바로 추가">
                         <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>여기서 추가
@@ -838,7 +850,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <div
                     onClick={() => (selMode ? toggleSel(rowSel(r)) : enterLevel(r))}
                     className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
-                    style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15, borderColor: '#F4F4F0', backgroundColor: checked ? '#F3F0FF' : hl ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
+                    style={{ width: LABEL_W, paddingLeft: 8 + (r.level - 1) * 15, borderColor: '#F4F4F0', backgroundColor: checked ? '#F3F0FF' : hl ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
                     draggable={!selMode && r.level > 0 && !placed}
                     onDragStart={!selMode && r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, e); } : undefined}
                     title={!placed && r.level > 0 ? '드래그해서 타임라인에 배치' : r.name}
@@ -857,18 +869,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer overflow-hidden"
                         style={{
-                          left, width: Math.max(width, r.level === 0 ? 14 : 6), height: barH(r.level),
-                          // 위계: 사업목표=진한 단색, 프로젝트=반투명 채움+테두리, 산출물 이하=흰 배경+점선 테두리
-                          backgroundColor: r.level === 0 ? r.color : r.level === 1 ? `${r.color}59` : '#ffffff',
-                          border: r.level === 0 ? `1px solid ${r.color}` : `1.5px ${r.level >= 2 ? 'dashed' : 'solid'} ${r.color}`,
-                          borderRadius: r.level === 0 ? 8 : r.level === 1 ? 6 : 5,
+                          left, width: Math.max(width, r.level === 1 ? 14 : 6), height: barH(r.level),
+                          // 위계: 프로젝트=진한 단색(흰 글씨), 산출물=연한 채움+테두리
+                          backgroundColor: r.level === 1 ? r.color : `${r.color}33`,
+                          border: r.level === 1 ? `1px solid ${r.color}` : `1.5px solid ${r.color}`,
+                          borderRadius: r.level === 1 ? 8 : 6,
                           opacity: dragging ? 0.95 : 1,
-                          boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : (r.level === 0 ? '0 2px 5px rgba(0,0,0,0.15)' : r.level === 1 ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'),
-                          zIndex: hl ? 6 : r.level === 0 ? 4 : r.level === 1 ? 2 : 1,
+                          boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : (r.level === 1 ? '0 2px 5px rgba(0,0,0,0.15)' : 'none'),
+                          zIndex: hl ? 6 : r.level === 1 ? 4 : 1,
                         }}
-                        title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동${r.level > 0 ? ' · 양끝: 기간 조절' : ''}`}>
+                        title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동 · 양끝: 기간 조절`}>
                         {r.level >= 2 && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: r.color }} />}
-                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level === 0 ? 12 : r.level === 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: r.level === 0 ? '#fff' : '#16211E', textShadow: r.level === 0 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
+                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level === 1 ? 12 : 10, fontWeight: r.level === 1 ? 800 : 600, color: r.level === 1 ? '#fff' : '#16211E', textShadow: r.level === 1 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
                         {r.level > 0 && <>
                           <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                           <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
