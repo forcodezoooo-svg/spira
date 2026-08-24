@@ -133,6 +133,9 @@ export default function Home() {
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
     if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };
+  // 다른 날짜의 task를 오늘로 옮기기
+  const moveSubtaskToToday = (t: SubtaskTask) =>
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: dateStr, deadline: dateStr });
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
   // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
@@ -865,6 +868,9 @@ export default function Home() {
                         <span className="text-[13px] font-semibold flex-1 min-w-0 truncate" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>{t.name}</span>
                         {t.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(t.durationMin)}</span> : null}
                         {dday && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{dday.label}</span>}
+                        {!t.done && selectedCalDate !== dateStr && (
+                          <button onClick={() => moveSubtaskToToday(t)} className="text-[10px] font-bold rounded-full px-2 py-0.5 flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="이 업무를 오늘로 가져오기">오늘 하기</button>
+                        )}
                       </li>
                     );
                   })}
