@@ -50,8 +50,11 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       let server: AppData | null = null;
       let pullOk = true;
       try { server = await pullAppData(supabase, uid); }
-      catch { pullOk = false; toastOnce('sync-fail', ERR.sync, 'error'); }
+      catch (e) { pullOk = false; console.warn('[spira-sync] pull FAILED', e); toastOnce('sync-fail', ERR.sync, 'error'); }
       if (cancelled) return;
+
+      const _lc = load();
+      console.log('[spira-sync] pull', { uid, pullOk, prevUid: localStorage.getItem(UID_KEY), serverWs: server?.workspaces?.length ?? 0, serverScore: server ? contentScore(server) : -1, serverUpdatedAt: server?.updatedAt ?? 0, localWs: _lc.workspaces?.length ?? 0, localScore: contentScore(_lc), localUpdatedAt: _lc.updatedAt ?? 0 });
 
       if (server && Array.isArray(server.workspaces) && server.workspaces.length > 0) {
         // 서버에 데이터 있음. 단, 같은 사용자의 로컬이 더 최신(아직 서버에 못 올린 변경)이거나
@@ -62,6 +65,7 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
         const localHas = (local.workspaces?.length ?? 0) > 0;
         const localNewer = sameUser && localHas
           && ((local.updatedAt ?? 0) >= (server.updatedAt ?? 0) || contentScore(local) > contentScore(server));
+        console.log('[spira-sync] decision', { localNewer, sameUser, localHas, localScore: contentScore(local), serverScore: contentScore(server) });
         if (localNewer) {
           try { await upsertAppData(supabase, uid, local); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);
@@ -93,8 +97,10 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       const save = async (d: AppData, attempt = 0) => {
         try {
           await upsertAppData(supabase, uid, d);
+          console.log('[spira-sync] server save OK', { score: contentScore(d), updatedAt: d.updatedAt, bytes: JSON.stringify(d).length });
           dismiss('save-fail');
-        } catch {
+        } catch (e) {
+          console.error('[spira-sync] server save FAILED', { attempt, bytes: JSON.stringify(d).length }, e);
           toastOnce('save-fail', ERR.save, 'error');
           if (attempt < 6 && !cancelled) {
             if (retryTimer.current) clearTimeout(retryTimer.current);

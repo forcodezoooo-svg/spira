@@ -172,8 +172,10 @@ export function save(data: AppData): void {
   let err: unknown = null;
   try {
     writeLocalRaw(data);
+    if (typeof window !== 'undefined') { const progs = (data.workspaces ?? []).reduce((n, e) => n + (e.programs?.length ?? 0), 0); console.log('[spira-store] local save OK', { workspaces: data.workspaces?.length ?? 0, programs: progs, updatedAt: data.updatedAt, bytes: JSON.stringify(data).length, hasServerPusher: !!serverPusher }); }
   } catch (e) {
     err = e; // 로컬 저장 실패해도 서버 저장은 시도
+    console.error('[spira-store] local save FAILED (quota?)', e);
   }
   serverPusher?.(data); // 로그인 상태면 서버에도 저장(디바운스)
   if (err) throw err;
