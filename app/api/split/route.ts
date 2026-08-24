@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { checkAiAccess } from '../../lib/aiUsage';
-import { SPIRA_PLANNING_CORE } from '../../lib/ai/prompts';
+import { SPIRA_PLANNING_CORE, SPIRA_TIME_PLANNING_CORE } from '../../lib/ai/prompts';
 
 // 사업 목표 → 산출물, 산출물 → 업무 영역별 산출물로 AI가 쪼개준다.
 // 핵심: '산출물(deliverable)'은 눈에 보이는 결과물/납품물이다. (예: "플레이스토어에 앱 업로드", "랜딩페이지 제작 완료")
@@ -112,6 +112,19 @@ Task(세부 할일)는 만들지 마라.
 - id는 입력 그대로 반드시 유지. 선택된 항목 '전체'를 반환.
 반드시 '오직 JSON만': {"reply":"무엇을 어떻게 바꿨는지 1~2문장","items":[{"id":"입력id","name":"...","durationMin":30,"deadline":"2026-01-10"}]}`;
     user = `${today ? `오늘 날짜: ${today}\n` : ''}사업 정보:\n${context}\n\n선택한 항목들 (id | 종류 | 이름${'' /* + 소요시간/기한 */}):\n${bulkItems.map(it => `- ${it.id} | ${it.kind} | ${it.name}${it.durationMin ? ` | ${it.durationMin}분` : ''}${it.deadline ? ` | 기한 ${it.deadline}` : ''}`).join('\n')}\n\n이 항목들을 어떻게 바꿀지 대화로 알려줄게. 요청을 반영해 항목 전체를 다시 제시해줘.`;
+  } else if (mode === 'replan') {
+    // 오늘 Capacity 초과 → 어떤 flexible/저우선 Task를 어느 날로 옮길지 AI가 제안 (승인식)
+    const rc = (body as { replan?: { date?: string; availableMin?: number; plannedMin?: number; overMin?: number; tasks?: { id: string; name: string; durationMin?: number; deadline?: string; priority?: number; schedulingType?: string }[]; upcoming?: { date: string; freeMin: number }[] } }).replan ?? {};
+    sys = `${SPIRA_TIME_PLANNING_CORE}
+
+너는 사용자의 오늘 일정이 가용시간을 초과했을 때, 어떤 Task를 어느 날짜로 옮길지 '제안'한다.
+- fixed(고정) Task는 절대 옮기지 마라(입력에 포함되지 않음).
+- 우선순위 낮고 기한 여유가 있는 flexible 작업부터 옮겨라.
+- 각 이동은 그 Task의 기한(deadline) 이내가 되도록, 여유 있는(upcoming freeMin이 큰) 날로.
+- 초과분(overMin)이 해소될 만큼만 옮기고, 불필요하게 많이 옮기지 마라.
+- 옮겨도 기한을 못 지키면 그 사실을 reply에 알려라.
+반드시 '오직 JSON만': {"reply":"무엇을 왜 옮겼는지 1~2문장(한국어)","moves":[{"id":"taskId","toDate":"YYYY-MM-DD"}]}`;
+    user = `오늘: ${rc.date ?? today}\n가용(분): ${rc.availableMin ?? 0} / 계획(분): ${rc.plannedMin ?? 0} / 초과(분): ${rc.overMin ?? 0}\n\n오늘 배치된 옮길 수 있는 Task (id | 이름 | 소요분 | 기한 | 우선순위):\n${(rc.tasks ?? []).map(t => `- ${t.id} | ${t.name} | ${t.durationMin ?? '?'} | ${t.deadline ?? '없음'} | ${t.priority ?? 0}`).join('\n') || '(없음)'}\n\n앞으로 14일 날짜별 남은 여유(분):\n${(rc.upcoming ?? []).map(u => `- ${u.date}: ${u.freeMin}`).join('\n')}\n\n초과분을 해소하도록 옮길 Task와 목적지 날짜를 제안해줘.`;
   } else if (mode === 'deliverables') {
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 '사업 목표(단계)'를 이루기 위한 '큰 단위의 산출물(마일스톤/프로젝트)'로 쪼개서 나열해.
 ${DELIVERABLE_RULE}
@@ -181,6 +194,11 @@ ${DELIVERABLE_RULE}
         ? parsed.items.map(it => { const o = it as Record<string, unknown>; return { id: String(o.id ?? '').trim(), name: String(o.name ?? '').trim(), durationMin: nn(o.durationMin), deadline: String(o.deadline ?? '').trim() || undefined }; }).filter(it => it.id && it.name).slice(0, 60)
         : [];
       return NextResponse.json({ items, reply: String(parsed.reply ?? '').trim() });
+    } else if (mode === 'replan') {
+      const moves = Array.isArray(parsed.moves)
+        ? parsed.moves.map(m => { const o = m as Record<string, unknown>; return { id: String(o.id ?? '').trim(), toDate: String(o.toDate ?? '').trim() }; }).filter(m => m.id && /^\d{4}-\d{2}-\d{2}$/.test(m.toDate)).slice(0, 30)
+        : [];
+      return NextResponse.json({ moves, reply: String(parsed.reply ?? '').trim() });
     } else if (mode === 'deliverables') {
       const deliverables = Array.isArray(parsed.deliverables)
         ? parsed.deliverables.map(d => String(d).trim()).filter(Boolean).slice(0, 8)

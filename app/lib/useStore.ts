@@ -184,6 +184,12 @@ export function useStore() {
   const setWorkspaceColor = (wsId: string, color: string) =>
     updateWorkspace(wsId, e => ({ ...e, workspace: { ...e.workspace, color } }));
 
+  // Operating Mode & 주간 Capacity 배분 (비즈니스별)
+  const setOperatingMode = (wsId: string, mode: import('./types').OperatingMode) =>
+    updateWorkspace(wsId, e => ({ ...e, operatingMode: mode }));
+  const setWeeklyCapacityHours = (wsId: string, hours: number | null) =>
+    updateWorkspace(wsId, e => ({ ...e, weeklyCapacityHours: hours === null ? undefined : Math.max(0, hours) }));
+
   // Goals의 프로그램 → 데드라인 → 할일 완료 토글 (완료일 기록 → 완료일 이후 숨김)
   const toggleProgramTodo = (wsId: string, programId: string, deadlineId: string, todoId: string, dateStr?: string) =>
     updateWorkspace(wsId, e => ({
@@ -628,6 +634,20 @@ export function useStore() {
       quickTasks: [...(e.quickTasks ?? []), { id: uid(), name, date, completed: false }],
     }));
 
+  // 긴급/ad-hoc 업무 추가 (프로젝트 비종속) — 소요시간/기한/우선순위 포함 (§11)
+  const addUrgentTask = (name: string, opts?: { date?: string; durationMin?: number; deadline?: string; priority?: number }) =>
+    updateActive(e => ({
+      ...e,
+      quickTasks: [...(e.quickTasks ?? []), {
+        id: uid(), name, completed: false,
+        date: opts?.date ?? todayStr(),
+        durationMin: opts?.durationMin,
+        deadline: opts?.deadline,
+        priority: opts?.priority ?? 3,
+        schedulingType: 'flexible' as const,
+      }],
+    }));
+
   const toggleQuickTask = (id: string) =>
     updateActive(e => ({
       ...e,
@@ -696,6 +716,7 @@ export function useStore() {
     offDays, isOffDay, toggleOffDay,
     workSchedule, setWorkDay,
     capacity, setBufferPercent, setDateCapacityOverride,
+    setOperatingMode, setWeeklyCapacityHours,
     areaOrder, moveArea, setAreaOrder,
     calendarMemos, setCalendarMemo,
     homeHiddenToday, hideTodoFromHome, unhideTodoFromHome,
@@ -708,7 +729,7 @@ export function useStore() {
     addSubscription, deleteSubscription, updateSubscription, deleteSubscriptionInWs, updateSubscriptionInWs,
     setRevenueTarget, addRevenueSource, deleteRevenueSource, setRevenueSourceBiz,
     setRevenueSourceTarget, addExpenseCategory, deleteExpenseCategory, setExpenseCategoryTarget,
-    addQuickTask, toggleQuickTask, toggleQuickTaskStar, toggleQuickTaskLight, setQuickTaskTime, deleteQuickTask, getQuickTasksForDate,
+    addQuickTask, addUrgentTask, toggleQuickTask, toggleQuickTaskStar, toggleQuickTaskLight, setQuickTaskTime, deleteQuickTask, getQuickTasksForDate,
     addEvent, deleteEvent, getEventsForDate,
     addProof, removeProof, getAllProofs,
     skipTask, isTaskSkipped, moveQuickTask,

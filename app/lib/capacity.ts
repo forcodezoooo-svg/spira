@@ -1,4 +1,4 @@
-import { WorkspaceEntry, WorkSchedule, CapacitySettings } from './types';
+import { WorkspaceEntry, WorkSchedule, CapacitySettings, OperatingMode } from './types';
 import { getSubtaskTasksForDate, SubtaskTask } from './goalTasks';
 
 // Time Management — 가용시간(Capacity) 계산 레이어.
@@ -125,6 +125,72 @@ export function computeWeekCapacity(
     bufferMin: sum(d => d.bufferMin),
     availableProjectMin, plannedProjectMin, status,
   };
+}
+
+// ── Operating Mode: 주간 Capacity 배분 추천 ──
+// 모드별 '상대 가중치'(하드코딩 비율 아님 — 추천 시작값일 뿐, 사용자가 시간으로 덮어씀)
+export const MODE_WEIGHT: Record<OperatingMode, number> = { development: 3, update: 3, management: 1 };
+export const MODE_META: Record<OperatingMode, { label: string; bg: string; fg: string }> = {
+  development: { label: '개발', bg: '#E7F0FF', fg: '#2B62C4' },
+  update: { label: '업데이트', bg: '#F3F0FF', fg: '#7C3AED' },
+  management: { label: '운영', bg: '#F0F0EA', fg: '#5B6560' },
+};
+
+// 그 날짜에 배치된 특정 비즈니스의 프로젝트 작업(분)
+export function plannedProjectMinForDateWs(entries: WorkspaceEntry[], date: string, wsId: string): number {
+  let sum = 0;
+  for (const t of getSubtaskTasksForDate(entries, date, { onlyFromPlan: true })) {
+    if (t.wsId !== wsId || t.done || t.schedulingType === 'fixed') continue;
+    sum += t.durationMin ?? 0;
+  }
+  const e = entries.find(x => x.workspace.id === wsId);
+  for (const q of e?.quickTasks ?? []) {
+    if (q.date === date && !q.completed && q.schedulingType !== 'fixed') sum += q.durationMin ?? 0;
+  }
+  return sum;
+}
+
+// 한 주(월~일) 특정 비즈니스의 계획된 프로젝트 작업(분)
+export function plannedWeekMinForWs(entries: WorkspaceEntry[], weekStart: string, wsId: string): number {
+  let sum = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart + 'T00:00:00'); d.setDate(d.getDate() + i);
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    sum += plannedProjectMinForDateWs(entries, ds, wsId);
+  }
+  return sum;
+}
+
+export interface BusinessAllocation {
+  wsId: string;
+  wsName: string;
+  color: string;
+  mode: OperatingMode;
+  allocatedMin: number;   // 사용자가 배분한 시간(없으면 추천값)
+  recommendedMin: number; // 모드 가중치 기반 추천
+  plannedMin: number;     // 이번 주 실제 계획된 작업량
+  isUserSet: boolean;     // 사용자가 직접 배분했는지
+}
+
+// 비즈니스별 배분 현황 — weeklyAvailableMin(주간 총 가용 프로젝트 시간)을 모드 가중치로 추천 분배
+export function businessAllocations(
+  entries: WorkspaceEntry[], weeklyAvailableMin: number, weekStart: string, colorOf: (wsId: string) => string,
+): BusinessAllocation[] {
+  const active = entries.filter(e => (e.programs ?? []).some(p => p.fromPlan));
+  const list = active.length ? active : entries;
+  const totalWeight = list.reduce((s, e) => s + MODE_WEIGHT[e.operatingMode ?? 'development'], 0) || 1;
+  return list.map(e => {
+    const mode = e.operatingMode ?? 'development';
+    const recommendedMin = Math.round(weeklyAvailableMin * MODE_WEIGHT[mode] / totalWeight);
+    const isUserSet = e.weeklyCapacityHours !== undefined && e.weeklyCapacityHours !== null;
+    return {
+      wsId: e.workspace.id, wsName: e.workspace.name, color: colorOf(e.workspace.id), mode,
+      allocatedMin: isUserSet ? Math.round((e.weeklyCapacityHours as number) * 60) : recommendedMin,
+      recommendedMin,
+      plannedMin: plannedWeekMinForWs(entries, weekStart, e.workspace.id),
+      isUserSet,
+    };
+  });
 }
 
 // ── Replanning 제안 (P0: 결정적·승인식) ──

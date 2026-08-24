@@ -14,7 +14,8 @@ import WorkHoursPanel from '../components/WorkHoursPanel';
 import ReplanProposalModal from '../components/ReplanProposalModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, computeWeekCapacity, proposeReplan, fmtMin, fmtHours, ReplanProposal, WeekLoadStatus } from '../lib/capacity';
+import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove, WeekLoadStatus } from '../lib/capacity';
+import type { OperatingMode } from '../lib/types';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -39,6 +40,11 @@ export default function Home() {
   const [showYesterday, setShowYesterday] = useState(false);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null); // 캘린더에서 클릭한 날짜(그 날짜 업무 목록)
   const [replanOpen, setReplanOpen] = useState(false); // 재배치 제안 모달
+  const [aiReplan, setAiReplan] = useState<{ proposal: ReplanProposal; reply: string } | null>(null); // AI가 만든 재배치 제안
+  const [aiReplanBusy, setAiReplanBusy] = useState(false);
+  const [urgentOpen, setUrgentOpen] = useState(false); // 긴급 업무 입력
+  const [urgentName, setUrgentName] = useState('');
+  const [urgentDur, setUrgentDur] = useState('');
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -164,8 +170,9 @@ export default function Home() {
     tight: { label: '거의 가득 참', bg: '#FBE7C6', fg: '#96631A' },
     over: { label: '초과', bg: '#FFE1E1', fg: '#C0392B' },
   };
-  // 재배치 제안 (초과일 때만 계산)
-  const replanProposal: ReplanProposal | null = dayCap.overMin > 0 ? proposeReplan(entries, store.workSchedule, store.capacity, dateStr) : null;
+  // 재배치 제안 (초과일 때만 계산). 규칙 기반이 기본, AI 제안이 있으면 그걸 표시
+  const ruleReplan: ReplanProposal | null = dayCap.overMin > 0 ? proposeReplan(entries, store.workSchedule, store.capacity, dateStr) : null;
+  const shownReplan = aiReplan?.proposal ?? ruleReplan;
   const applyReplan = (p: ReplanProposal) => {
     for (const m of p.move) {
       const patch: Partial<import('../lib/types').ProgramSubtask> = { date: m.toDate };
@@ -173,8 +180,45 @@ export default function Home() {
       if (!m.task.deadline || m.task.deadline < m.toDate) patch.deadline = m.toDate;
       store.updateProgramSubtask(m.task.wsId, m.task.programId, m.task.deadlineId, m.task.todoId, m.task.subtaskId, patch);
     }
-    setReplanOpen(false);
+    setReplanOpen(false); setAiReplan(null);
   };
+  // AI에게 더 나은 재배치 제안 요청 (§23) — 규칙 제안의 이동후보 + 향후 14일 여유를 넘김
+  const requestAiReplan = async () => {
+    if (!ruleReplan || aiReplanBusy) return;
+    setAiReplanBusy(true);
+    try {
+      const movable = [...ruleReplan.keep, ...ruleReplan.move.map(m => m.task)];
+      const upcoming: { date: string; freeMin: number }[] = [];
+      for (let i = 1; i <= 14; i++) {
+        const ds = localDateStr(addDaysD(today, i));
+        const dc = computeDayCapacity(entries, store.workSchedule, store.capacity, ds);
+        upcoming.push({ date: ds, freeMin: Math.max(0, dc.availableProjectMin - dc.plannedProjectMin) });
+      }
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        mode: 'replan', today: dateStr,
+        replan: {
+          date: dateStr, availableMin: dayCap.availableProjectMin, plannedMin: dayCap.plannedProjectMin, overMin: dayCap.overMin,
+          tasks: movable.map(t => ({ id: t.subtaskId, name: t.name, durationMin: t.durationMin, deadline: t.deadline, priority: t.priority ?? 0, schedulingType: t.schedulingType })),
+          upcoming,
+        },
+      }) });
+      const data = await res.json().catch(() => ({}));
+      const moves = (Array.isArray(data.moves) ? data.moves : []) as { id: string; toDate: string }[];
+      const byId = new Map(movable.map(t => [t.subtaskId, t]));
+      const built: ReplanMove[] = [];
+      for (const mv of moves) { const t = byId.get(mv.id); if (t) built.push({ task: t, toDate: mv.toDate, withinDeadline: !t.deadline || mv.toDate <= t.deadline }); }
+      const movedIds = new Set(built.map(m => m.task.subtaskId));
+      const resolvedMin = built.reduce((s, m) => s + (m.task.durationMin ?? 0), 0);
+      setAiReplan({
+        reply: String(data.reply ?? '').trim(),
+        proposal: { date: dateStr, overMin: dayCap.overMin, keep: movable.filter(t => !movedIds.has(t.subtaskId)), move: built, resolvedMin, stillOverMin: Math.max(0, dayCap.overMin - resolvedMin) },
+      });
+    } catch { /* 실패 시 규칙 제안 유지 */ }
+    finally { setAiReplanBusy(false); }
+  };
+
+  // ── Operating Mode: 비즈니스별 Capacity 배분 ──
+  const allocations = businessAllocations(entries, weekCap.availableProjectMin, localDateStr(thisWeekStart), id => workspaceColor(entries, id));
   const focusArea = currentWeekAreas[0] ?? null; // 이번 주 가장 집중해야 할 업무 영역
   const areaReason = (a: WeekArea) => (a.minDday < 0 ? '기한 지남' : a.minDday === 0 ? '오늘 마감' : a.minDday <= 7 ? `D-${a.minDday} 임박` : `업무 ${a.count}개`) + (a.minDday <= 7 ? ` · 업무 ${a.count}개` : '');
 
@@ -589,9 +633,19 @@ export default function Home() {
               <span className="text-[12px] font-semibold rounded-full px-2.5 py-0.5" style={{ color: '#96852F', backgroundColor: '#F6EFC2' }}>☕ 오프데이</span>
             )}
           </div>
-          {/* Task 페이지 숨김 — '전체보기' 진입점 제거 (라우트/기능 유지, 배포 전 완전 삭제 여부 확인 예정)
-          <button onClick={() => router.push('/task')} className="text-[13px] transition-colors hover:opacity-70" style={{ color: '#9AA39D' }}>전체보기</button> */}
+          <button onClick={() => setUrgentOpen(o => !o)} className="flex items-center gap-1 text-[12px] font-bold rounded-full px-3 py-1.5 transition-colors" style={{ backgroundColor: urgentOpen ? '#FFE1E1' : '#F0F0EA', color: urgentOpen ? '#C0392B' : '#5B6560' }} title="프로젝트에 속하지 않는 갑작스러운 업무를 빠르게 추가">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>긴급 업무
+          </button>
         </div>
+
+        {/* 긴급/ad-hoc 업무 빠른 추가 (§11) */}
+        {urgentOpen && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border p-2.5" style={{ borderColor: '#F3C7C7', backgroundColor: '#FFF7F7' }}>
+            <input autoFocus value={urgentName} onChange={e => setUrgentName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && urgentName.trim()) { store.addUrgentTask(urgentName.trim(), { date: dateStr, deadline: dateStr, durationMin: Number(urgentDur) > 0 ? Number(urgentDur) : undefined, priority: 5 }); setUrgentName(''); setUrgentDur(''); } }} placeholder="긴급 업무 이름" className="flex-1 min-w-0 text-[13px] bg-white border rounded-lg px-3 py-2 outline-none focus:border-red-300" style={{ borderColor: 'var(--spira-border)' }} />
+            <input type="number" min={0} step={15} value={urgentDur} onChange={e => setUrgentDur(e.target.value)} placeholder="분" className="w-16 text-[13px] tabular-nums bg-white border rounded-lg px-2 py-2 outline-none focus:border-red-300" style={{ borderColor: 'var(--spira-border)' }} title="예상 소요 시간(분)" />
+            <button onClick={() => { if (!urgentName.trim()) return; store.addUrgentTask(urgentName.trim(), { date: dateStr, deadline: dateStr, durationMin: Number(urgentDur) > 0 ? Number(urgentDur) : undefined, priority: 5 }); setUrgentName(''); setUrgentDur(''); }} disabled={!urgentName.trim()} className="px-3.5 py-2 rounded-lg text-[13px] font-bold disabled:opacity-40 flex-shrink-0" style={{ backgroundColor: '#FF696C', color: '#fff' }}>추가</button>
+          </div>
+        )}
 
         {/* 어제 못한 업무 — 복구해서 보기 */}
         {yesterdayUndoneCount > 0 && (
@@ -709,6 +763,43 @@ export default function Home() {
           </div>
         )}
 
+        {/* 비즈니스별 배분 (Operating Mode) */}
+        {allocations.length > 1 && weekCap.availableProjectMin > 0 && (
+          <div className="bg-white border rounded-2xl p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[13px] font-black" style={{ color: '#16211E' }}>비즈니스별 배분</span>
+              <span className="text-[11px]" style={{ color: '#9AA39D' }}>이번 주 {fmtHours(weekCap.availableProjectMin)}h</span>
+            </div>
+            <p className="text-[11px] mb-3 leading-relaxed" style={{ color: '#9AA39D' }}>각 사업의 운영 상태(모드)에 따라 주간 가용시간을 추천 배분해요. 직접 시간을 정하면 그 값이 우선돼요.</p>
+            <div className="space-y-3">
+              {allocations.map(a => {
+                const planPct = a.allocatedMin > 0 ? Math.min(100, Math.round(a.plannedMin / a.allocatedMin * 100)) : (a.plannedMin > 0 ? 100 : 0);
+                const over = a.plannedMin > a.allocatedMin && a.allocatedMin > 0;
+                return (
+                  <div key={a.wsId}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
+                      <span className="text-[12px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{a.wsName}</span>
+                      <span className="text-[11px] font-semibold tabular-nums flex-shrink-0" style={{ color: over ? '#C0392B' : '#5B6560' }}>{fmtHours(a.plannedMin)}/{fmtHours(a.allocatedMin)}h</span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden mb-1.5" style={{ backgroundColor: '#F0F0EA' }}>
+                      <div className="h-full rounded-full" style={{ width: `${planPct}%`, backgroundColor: over ? '#FF696C' : a.color }} />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {(['development', 'update', 'management'] as OperatingMode[]).map(m => (
+                        <button key={m} onClick={() => store.setOperatingMode(a.wsId, m)} className="text-[10px] font-bold rounded-full px-2 py-0.5 transition-colors" style={a.mode === m ? { backgroundColor: MODE_META[m].bg, color: MODE_META[m].fg } : { backgroundColor: '#F6F6F2', color: '#B4BCB4' }}>{MODE_META[m].label}</button>
+                      ))}
+                      <span className="flex-1" />
+                      <input type="number" min={0} step={0.5} value={a.isUserSet ? fmtHours(a.allocatedMin) : ''} placeholder={`추천 ${fmtHours(a.recommendedMin)}`} onChange={e => store.setWeeklyCapacityHours(a.wsId, e.target.value === '' ? null : Number(e.target.value))} className="w-20 text-[11px] tabular-nums bg-white border rounded-lg px-1.5 py-1 outline-none focus:border-violet-400 text-right" style={{ borderColor: 'var(--spira-border)' }} title="주간 배분 시간(비우면 추천값)" />
+                      <span className="text-[10px]" style={{ color: '#9AA39D' }}>h</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 타이머 pill */}
         <MusicTimer compact />
 
@@ -781,8 +872,17 @@ export default function Home() {
         />
       )}
 
-      {replanOpen && replanProposal && (
-        <ReplanProposalModal proposal={replanProposal} onApply={applyReplan} onClose={() => setReplanOpen(false)} />
+      {replanOpen && shownReplan && (
+        <ReplanProposalModal
+          proposal={shownReplan}
+          onApply={applyReplan}
+          onClose={() => { setReplanOpen(false); setAiReplan(null); }}
+          onRequestAI={requestAiReplan}
+          aiBusy={aiReplanBusy}
+          aiReply={aiReplan?.reply}
+          aiActive={!!aiReplan}
+          aiEnabled
+        />
       )}
     </div>
   );

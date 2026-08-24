@@ -66,9 +66,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [sel, setSel] = useState<Map<string, SelItem>>(new Map());
   const [bulkOpen, setBulkOpen] = useState(false);
   const toggleSel = (it: SelItem) => setSel(prev => { const n = new Map(prev); n.has(it.key) ? n.delete(it.key) : n.set(it.key, it); return n; });
-  const [kbForm, setKbForm] = useState<null | { mode: 'task' | 'subtask'; col: KbCol; s?: Sub; editUnitId?: string }>(null); // task/세부작업 추가·수정 팝업
+  const [kbForm, setKbForm] = useState<null | { mode: 'task' | 'subtask'; col: KbCol; s?: Sub; editUnitId?: string; editTaskId?: string }>(null); // task/세부작업 추가·수정 팝업
   const [formName, setFormName] = useState('');
   const [formDur, setFormDur] = useState(''); // 세부작업 소요 시간(분)
+  const [formType, setFormType] = useState<'fixed' | 'due' | 'flexible'>('flexible'); // task 일정 성격
+  const [formPriority, setFormPriority] = useState(2); // task 우선순위 (1낮음~4긴급)
   const boardRef = useRef<HTMLDivElement>(null);
   const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
@@ -359,10 +361,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
   };
   // task/세부작업 추가는 팝업 폼으로 (이름 + 소요 시간). task 날짜는 자동 지정
-  const kbCreateTask = (col: KbCol, name: string, durMin?: number) => {
+  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     const d = col.due || todayStr; // 날짜 자동 지정 (산출물 기한, 없으면 오늘)
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin }] }) }) });
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority }] }) }) });
   };
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
@@ -371,11 +373,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
-  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); };
+  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); };
+  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); };
   const kbSubmitForm = () => {
     const n = formName.trim(); if (!n || !kbForm) return;
     const d = Number(formDur); const dur = Number.isFinite(d) && d > 0 ? d : undefined;
-    if (kbForm.mode === 'task') kbCreateTask(kbForm.col, n, dur);
+    if (kbForm.mode === 'task') {
+      if (kbForm.editTaskId) updateSub(kbForm.col, kbForm.editTaskId, { name: n, durationMin: dur, schedulingType: formType, priority: formPriority });
+      else kbCreateTask(kbForm.col, n, dur, formType, formPriority);
+    }
     else if (kbForm.s) { if (kbForm.editUnitId) kbUpdateUnit(kbForm.col, kbForm.s, kbForm.editUnitId, n, dur); else kbCreateUnit(kbForm.col, kbForm.s, n, dur); }
     setKbForm(null);
   };
@@ -536,7 +542,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                             <div className="flex items-start gap-1.5">
                               {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
                               <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: s.done ? '#5EA63A' : '#C7CEC7', backgroundColor: s.done ? '#5EA63A' : 'transparent' }}>{s.done && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
-                              <span className="text-[13px] font-semibold flex-1 min-w-0 break-words" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</span>
+                              <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="text-[13px] font-semibold flex-1 min-w-0 break-words text-left" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</button>
+                              {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
+                              {s.schedulingType && s.schedulingType !== 'flexible' && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: s.schedulingType === 'fixed' ? '#E7F0FF' : '#FBF3E0', color: s.schedulingType === 'fixed' ? '#2B62C4' : '#96631A' }}>{s.schedulingType === 'fixed' ? '고정' : '기한'}</span>}
                               {s.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(s.durationMin)}</span> : null}
                               {!s.done && <DdayBadge d={s.deadline} />}
                               <button onClick={() => kbDel(col, s.id)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
@@ -672,7 +680,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setKbForm(null)}>
           <div className="bg-white rounded-2xl w-full max-w-[360px] p-5" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>{kbForm.mode === 'task' ? 'task 추가' : kbForm.editUnitId ? '세부 작업 수정' : '세부 작업 추가'}</h3>
+              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>{kbForm.mode === 'task' ? (kbForm.editTaskId ? 'task 수정' : 'task 추가') : kbForm.editUnitId ? '세부 작업 수정' : '세부 작업 추가'}</h3>
               <button onClick={() => setKbForm(null)} className="text-neutral-300 hover:text-neutral-700 text-lg leading-none">×</button>
             </div>
             <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>이름</label>
@@ -690,9 +698,27 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 </div>
               </>
             )}
+            {kbForm.mode === 'task' && (
+              <>
+                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>일정 성격</label>
+                <div className="flex gap-1.5 mt-1 mb-3">
+                  {([['flexible', '자유', '언제든 이동 가능'], ['due', '기한', '기한 내 자유 배치'], ['fixed', '고정', '이 날짜에 고정']] as const).map(([v, label, hint]) => {
+                    const on = formType === v;
+                    return <button key={v} onClick={() => setFormType(v)} title={hint} className="flex-1 text-[12px] font-semibold rounded-lg py-1.5 border transition-colors" style={on ? { backgroundColor: '#EEF6FF', borderColor: '#B9D4F5', color: '#2B62C4' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#9AA39D' }}>{label}</button>;
+                  })}
+                </div>
+                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>우선순위</label>
+                <div className="flex gap-1.5 mt-1 mb-4">
+                  {([[1, '낮음'], [2, '보통'], [3, '높음'], [4, '긴급']] as const).map(([v, label]) => {
+                    const on = formPriority === v;
+                    return <button key={v} onClick={() => setFormPriority(v)} className="flex-1 text-[12px] font-semibold rounded-lg py-1.5 border transition-colors" style={on ? { backgroundColor: v >= 4 ? '#FFE1E1' : '#DFF9C4', borderColor: v >= 4 ? '#F3C7C7' : '#BCE89A', color: v >= 4 ? '#C0392B' : '#3E6B1F' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#9AA39D' }}>{label}</button>;
+                  })}
+                </div>
+              </>
+            )}
             <div className="flex gap-2">
               <button onClick={() => setKbForm(null)} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>취소</button>
-              <button onClick={kbSubmitForm} disabled={!formName.trim()} className="flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>{kbForm.editUnitId ? '수정' : '추가'}</button>
+              <button onClick={kbSubmitForm} disabled={!formName.trim()} className="flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>{(kbForm.editUnitId || kbForm.editTaskId) ? '수정' : '추가'}</button>
             </div>
           </div>
         </div>

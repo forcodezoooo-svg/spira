@@ -364,10 +364,16 @@ export interface RevenueTarget {
   milestoneProgram?: MilestoneProgram;
 }
 
+// Operating Mode — 이 비즈니스가 지금 어떤 상태인지 (Capacity 배분 추천에 활용)
+// development=신규 개발 집중, update=개선/업데이트 집중, management=운영·루틴 중심(낮은 프로젝트 Capacity)
+export type OperatingMode = 'development' | 'update' | 'management';
+
 export interface WorkspaceEntry {
   workspace: Workspace;
   plan: PlanData;
   programs: Program[];
+  operatingMode?: OperatingMode;   // 없으면 development로 취급
+  weeklyCapacityHours?: number;    // 이 비즈니스에 배분한 주간 가용시간(시간). 없으면 미배분(추천값 사용)
   routineSystems: RoutineSystem[];
   resources: ResourceEntry[];
   subscriptions: Subscription[];

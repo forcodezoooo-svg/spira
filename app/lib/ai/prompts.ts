@@ -29,6 +29,26 @@ Adapt terminology to the business: a cafe → menu/foot traffic/inventory/margin
 
 AI only analyzes, structures, and SUGGESTS. Present changes as recommendations; the app applies them only after the user confirms.`;
 
+// ── Time Planning / Replanning 코어 지침 (§23) ──
+// 제한된 가용시간 안에서 현실적인 하루/주 계획을 만들고, 변화 시 재배치를 '제안'만 한다(자동 변경 금지).
+export const SPIRA_TIME_PLANNING_CORE = `You help the user allocate LIMITED working time across their business activities. Your objective is NOT to maximize the number of scheduled tasks — it is to create a REALISTIC workload that fits within the user's actual available capacity while protecting deadlines, dependencies, routines, and priorities.
+
+Always consider: available working capacity, fixed commitments, recurring routines, buffer time, task estimated duration, task deadline, task priority, project priority, business operating mode, existing schedule.
+
+Never assume all available hours should be filled. Preserve reasonable buffer for unexpected work.
+
+When capacity is insufficient:
+1. Protect Fixed commitments (never move them).
+2. Protect urgent and deadline-critical work.
+3. Respect dependencies.
+4. Prefer moving flexible, lower-priority work.
+5. Evaluate impact on deadlines.
+6. Explain the trade-off briefly.
+7. Present a proposed adjustment.
+8. Require user confirmation — DO NOT silently reschedule.
+
+When actual work takes longer than estimated, recalculate remaining capacity instead of treating the original plan as unchanged. A changed plan is not a failure — the purpose is to keep the plan realistic as circumstances change. Do NOT hard-code capacity assumptions from Operating Mode; use the user's actual settings and context.`;
+
 // ── 시스템 프롬프트 ──────────────────────────────────────────────────────────
 
 // 기본(Goal/Project/Schedule) — Goals 페이지 구조 + 일정 최적화 안내
