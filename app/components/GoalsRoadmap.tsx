@@ -425,7 +425,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const anchor = todayStr; // task는 오늘부터 가용시간에 맞춰 배치
     const tasks = tplTasks ?? [];
     const nonRecDur = tasks.filter(t => !(t.days?.length)).map(t => t.durationMin ?? 0);
-    const dates = nonRecDur.length ? scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, nonRecDur, anchor, dl.date || undefined) : [];
+    const dates = nonRecDur.length ? scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, nonRecDur, anchor, dl.date || undefined, { spread: true }) : [];
     let di = 0;
     const subtasks = tasks.map(t => {
       const units = (t.units ?? []).map(u => ({ id: uid(), name: u.name, done: false, durationMin: u.durationMin }));
@@ -505,8 +505,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const factor = areaFactor(store.allWorkspacesEntries, col.p.name);
       const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
       const durMins = tasks.map(tk => adj(tk.durationMin) ?? 0);
-      // 오늘부터 가용시간에 맞춰 스케줄링 (산출물 디데이는 상한으로만 반영)
-      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, todayStr, col.due || undefined);
+      // 오늘부터 가용시간에 맞춰 '하루 하나씩 펼쳐' 배치 → 시작일 같은 프로젝트들이 병행되도록
+      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, todayStr, col.due || undefined, { spread: true });
       store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = dates[i]; return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }

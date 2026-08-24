@@ -374,9 +374,12 @@ export function daysBetweenDates(a: string, b: string): number {
 // 이미 저장된 계획(computeDayCapacity)에 이번 배치분(extra)을 더해가며 하루 용량을 초과하지 않게 채우고,
 // deadline(산출물 디데이)이 있으면 그 날짜를 넘겨 배치하지 않는다(넘칠 땐 마감일에 몰아넣음).
 const SCHEDULE_DEFAULT_TASK_MIN = 60; // 소요시간 미상 task는 1시간으로 가정
+// spread=true 이면 한 배치의 task를 '하루에 하나씩' 다음 날로 펼쳐 배치한다.
+// → 시작일이 같은 여러 프로젝트가 각자 첫 task를 같은 날에 넣어 하루의 남은 용량을 나눠 쓰므로,
+//   하나를 끝내고 다음을 하는 게 아니라 '병행'으로 일정이 짜인다.
 export function scheduleTasksByCapacity(
   entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined,
-  durations: number[], startDate: string, deadline?: string,
+  durations: number[], startDate: string, deadline?: string, opts?: { spread?: boolean },
 ): string[] {
   const extra = new Map<string, number>();     // 이번 배치에서 추가한 부하(분)
   const cache = new Map<string, { avail: number; planned: number }>();
@@ -407,7 +410,8 @@ export function scheduleTasksByCapacity(
     }
     dates.push(chosen);
     extra.set(chosen, (extra.get(chosen) ?? 0) + dur);
-    cursor = chosen; // 다음 task는 같은 날(free 남으면)부터, 아니면 이후로 밀림
+    // spread: 다음 task는 '다음 날'부터 (하루 하나씩 펼침 → 병행 스케줄) / 아니면 같은 날부터 채움
+    cursor = opts?.spread ? addDays(chosen, 1) : chosen;
   }
   return dates;
 }
