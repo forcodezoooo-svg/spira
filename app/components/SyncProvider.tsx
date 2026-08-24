@@ -12,6 +12,15 @@ import type { AppData } from '../lib/types';
 
 const UID_KEY = 'spira_uid';
 
+// 데이터 '내용량' 점수 — 프로그램/데드라인/프로젝트 총합. 서버가 로컬보다 내용이 적으면(가져오기 유실 등) 로컬을 우선.
+function contentScore(d: AppData): number {
+  return (d.workspaces ?? []).reduce((n, e) => {
+    const progs = e.programs ?? [];
+    const dls = progs.reduce((m, p) => m + (p.deadlines?.length ?? 0), 0);
+    return n + progs.length + dls + (e.plan?.projects?.length ?? 0) + (e.plan?.goals?.length ?? 0);
+  }, 0);
+}
+
 // 로그인 후 서버(app_data)와 로컬(localStorage)을 동기화한다.
 // - 서버에 데이터 있으면 → 로컬을 서버 데이터로 교체
 // - 서버가 비어 있고 로컬에 (로그인 전) 데이터가 있으면 → 서버로 이전(1회 마이그레이션)
@@ -45,11 +54,14 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (server && Array.isArray(server.workspaces) && server.workspaces.length > 0) {
-        // 서버에 데이터 있음. 단, 같은 사용자의 로컬이 더 최신(아직 서버에 못 올린 변경)이면 로컬을 유지.
+        // 서버에 데이터 있음. 단, 같은 사용자의 로컬이 더 최신(아직 서버에 못 올린 변경)이거나
+        // 로컬에 더 많은 내용(아직 서버에 반영 못 한 가져오기 등)이 있으면 로컬을 유지 → 새로고침 시 유실 방지.
         const prevUid = localStorage.getItem(UID_KEY);
         const local = load();
-        // 같은 사용자면 이 기기의 로컬을 우선(서버가 '엄격히' 더 최신일 때만 서버 채택) → 새로고침 시 로컬 유실 방지
-        const localNewer = prevUid === uid && (local.workspaces?.length ?? 0) > 0 && (local.updatedAt ?? 0) >= (server.updatedAt ?? 0);
+        const sameUser = prevUid === uid || !prevUid; // UID 미기록(로그인 전 데이터 포함)도 같은 사용자로 취급
+        const localHas = (local.workspaces?.length ?? 0) > 0;
+        const localNewer = sameUser && localHas
+          && ((local.updatedAt ?? 0) >= (server.updatedAt ?? 0) || contentScore(local) > contentScore(server));
         if (localNewer) {
           try { await upsertAppData(supabase, uid, local); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);

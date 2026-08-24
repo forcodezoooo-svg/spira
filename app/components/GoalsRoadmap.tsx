@@ -312,7 +312,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     : [...programs].sort((a, b) => (a.wsName ?? a.wsId).localeCompare(b.wsName ?? b.wsId));
   const rows: Row[] = [];
   if (sortMode === 'dday') {
-    // 디데이순: 프로젝트 구분 없이 '업무영역별 산출물'을 디데이 가까운 순으로 평면 나열.
+    // 시작일순: 프로젝트 구분 없이 '업무영역별 산출물'을 시작일 빠른 순으로 평면 나열.
     // 산출물이 1차 정보, 프로젝트명은 부가 설명(subName)으로 표시.
     const flat: (Row & { due: string })[] = [];
     for (const p of roadmapPrograms) {
@@ -320,8 +320,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       for (const dl of (p.deadlines ?? []).filter(d => dlVisible(p.wsId, d))) {
         for (const t of dl.todos.filter(t => !t.done)) {
           const ts = t.date || t.deadline, te = t.deadline || t.date;
-          // 디데이 = 산출물 자체 마감 우선, 없으면 상위 프로젝트 마감으로 폴백(날짜 없는 산출물도 제대로 정렬)
-          const due = t.deadline || t.date || dl.date || '9999-99-99';
+          // 시작일 기준 정렬 — 산출물 시작일 우선, 없으면 상위 프로젝트 시작일로 폴백
+          const due = t.date || t.deadline || dl.startDate || dl.date || '9999-99-99';
           flat.push({ key: `t-${t.id}`, level: 1, kind: 'todo', name: t.name, subName: dl.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, due });
         }
       }
@@ -699,9 +699,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             </div>
             <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>{gran === 'year' ? '연 단위' : gran === 'month' ? '월 단위' : '주 단위'}</span>
             <span className="flex-1" />
-            {/* 정렬: 디데이순 / 비즈니스별 */}
+            {/* 정렬: 시작일순 / 비즈니스별 */}
             <div className="flex gap-1 rounded-full p-1 flex-shrink-0" style={{ backgroundColor: '#F1F1EB' }}>
-              {([['dday', '디데이순'], ['business', '비즈니스별']] as [typeof sortMode, string][]).map(([m, label]) => (
+              {([['dday', '시작일순'], ['business', '비즈니스별']] as [typeof sortMode, string][]).map(([m, label]) => (
                 <button key={m} onClick={() => setSortMode(m)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={sortMode === m ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>
               ))}
             </div>
