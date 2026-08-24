@@ -144,6 +144,22 @@ export function useStore() {
       if (hours === null) delete ov[date]; else ov[date] = Math.max(0, hours);
       return { ...d, capacity: { ...(d.capacity ?? {}), dateOverrides: ov } };
     });
+  // 주별 업무시간표 override — 그 주(월요일 키)에 한해 요일 근무시간을 조정 (기본 workSchedule은 유지)
+  const setWeekWorkDay = (weekStart: string, day: number, patch: Partial<WorkDay>) =>
+    update(d => {
+      const base = (d.workSchedule && d.workSchedule.length === 7) ? d.workSchedule : DEFAULT_WORK_SCHEDULE;
+      const weeks = { ...(d.capacity?.weekSchedules ?? {}) };
+      const cur = (weeks[weekStart] && weeks[weekStart].length === 7) ? weeks[weekStart] : base;
+      weeks[weekStart] = cur.map((wd, i) => (i === day ? { ...wd, ...patch } : wd));
+      return { ...d, capacity: { ...(d.capacity ?? {}), weekSchedules: weeks } };
+    });
+  // 그 주를 기본 스케줄로 되돌리기 (override 제거)
+  const resetWeekSchedule = (weekStart: string) =>
+    update(d => {
+      const weeks = { ...(d.capacity?.weekSchedules ?? {}) };
+      delete weeks[weekStart];
+      return { ...d, capacity: { ...(d.capacity ?? {}), weekSchedules: weeks } };
+    });
 
   // 업무 영역 표시 순서 (이름 기준). Goals에서 사용자가 조정
   const areaOrder = appData.areaOrder ?? [];
@@ -715,7 +731,7 @@ export function useStore() {
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask,
     offDays, isOffDay, toggleOffDay,
     workSchedule, setWorkDay,
-    capacity, setBufferPercent, setDateCapacityOverride,
+    capacity, setBufferPercent, setDateCapacityOverride, setWeekWorkDay, resetWeekSchedule,
     setOperatingMode, setWeeklyCapacityHours,
     areaOrder, moveArea, setAreaOrder,
     calendarMemos, setCalendarMemo,

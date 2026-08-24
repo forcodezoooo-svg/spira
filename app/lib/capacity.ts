@@ -10,11 +10,22 @@ export const DEFAULT_BUFFER_PERCENT = 0.15;
 const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 const dowOf = (date: string) => new Date(date + 'T00:00:00').getDay();
 
-// 그 날짜의 기본 가용시간(분): 날짜 override 우선, 없으면 요일 업무시간(시작~종료)
+// 그 날짜가 속한 주의 시작(월요일) "YYYY-MM-DD"
+export function weekStartMonday(date: string): string {
+  const d = new Date(date + 'T00:00:00');
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// 그 날짜에 적용할 업무시간표: 그 주 전용(weekSchedules) 우선, 없으면 기본 schedule
+export function effectiveSchedule(schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string): WorkSchedule {
+  return capacity?.weekSchedules?.[weekStartMonday(date)] ?? schedule;
+}
+
+// 그 날짜의 기본 가용시간(분): 날짜 override 우선, 없으면 그 주 업무시간표의 요일값(시작~종료)
 export function baseMinForDate(schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string): number {
   const ov = capacity?.dateOverrides?.[date];
   if (ov !== undefined && ov !== null) return Math.max(0, Math.round(ov * 60));
-  const wd = schedule[dowOf(date)];
+  const wd = effectiveSchedule(schedule, capacity, date)[dowOf(date)];
   if (!wd || !wd.on) return 0;
   return Math.max(0, toMin(wd.end) - toMin(wd.start));
 }
@@ -88,6 +99,17 @@ export function computeDayCapacity(
   const plannedProjectMin = plannedProjectMinForDate(entries, date);
   const overMin = Math.max(0, plannedProjectMin - availableProjectMin);
   return { date, baseMin, routineMin, fixedMin, bufferMin, availableProjectMin, plannedProjectMin, overMin };
+}
+
+// 특정 집합(exclude)을 뺀 그 날짜의 계획된 프로젝트 작업(분) — 재배치 때 '나머지 부하' 계산용
+export function plannedProjectMinForDateExcluding(entries: WorkspaceEntry[], date: string, exclude: Set<string>): number {
+  let sum = 0;
+  for (const t of getSubtaskTasksForDate(entries, date, { onlyFromPlan: true })) {
+    if (t.done || t.schedulingType === 'fixed' || exclude.has(t.subtaskId)) continue;
+    sum += t.durationMin ?? 0;
+  }
+  for (const e of entries) for (const q of e.quickTasks ?? []) if (q.date === date && !q.completed && q.schedulingType !== 'fixed') sum += q.durationMin ?? 0;
+  return sum;
 }
 
 export type WeekLoadStatus = 'light' | 'ok' | 'tight' | 'over';
@@ -388,6 +410,51 @@ export function scheduleTasksByCapacity(
     cursor = chosen; // 다음 task는 같은 날(free 남으면)부터, 아니면 이후로 밀림
   }
   return dates;
+}
+
+// ── 주간 업무 재배치 (그 주 스케줄 변경 시 배당된 업무를 새 가용시간에 맞춰 이동) ──
+export interface WeekRedistributeMove { task: SubtaskTask; toDate: string }
+export function redistributeWeekTasks(
+  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined, weekStart: string, fromDate: string,
+): WeekRedistributeMove[] {
+  const weekEnd = addDays(weekStart, 6);
+  const start = fromDate > weekStart ? fromDate : weekStart; // 오늘 이전 날짜는 건드리지 않음
+  const seen = new Set<string>();
+  const movable: SubtaskTask[] = [];
+  for (let i = 0; i <= 6; i++) {
+    const ds = addDays(weekStart, i);
+    if (ds > weekEnd) break;
+    for (const t of getSubtaskTasksForDate(entries, ds, { onlyFromPlan: true })) {
+      if (t.done || t.schedulingType === 'fixed') continue;   // 완료·고정은 이동 대상 아님
+      if (!t.date || t.date < start) continue;                // 오늘 이전 배치는 유지
+      if (seen.has(t.subtaskId)) continue; seen.add(t.subtaskId);
+      movable.push(t);
+    }
+  }
+  if (!movable.length) return [];
+  const excl = new Set(movable.map(t => t.subtaskId));
+  movable.sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || (b.priority ?? 0) - (a.priority ?? 0));
+  const extra = new Map<string, number>();
+  const cache = new Map<string, { avail: number; other: number }>();
+  const dayInfo = (ds: string) => {
+    let v = cache.get(ds);
+    if (!v) { v = { avail: computeDayCapacity(entries, schedule, capacity, ds).availableProjectMin, other: plannedProjectMinForDateExcluding(entries, ds, excl) }; cache.set(ds, v); }
+    return v;
+  };
+  const free = (ds: string) => { const d = dayInfo(ds); return Math.max(0, d.avail - d.other - (extra.get(ds) ?? 0)); };
+  const moves: WeekRedistributeMove[] = [];
+  let cursor = start;
+  for (const t of movable) {
+    const dur = t.durationMin && t.durationMin > 0 ? t.durationMin : 60;
+    let day = cursor; let chosen: string | null = null;
+    for (let i = 0; i < 365; i++) { if (dayInfo(day).avail > 0 && free(day) >= dur) { chosen = day; break; } day = addDays(day, 1); }
+    if (chosen === null) { let d2 = cursor; for (let i = 0; i < 365; i++) { if (dayInfo(d2).avail > 0) break; d2 = addDays(d2, 1); } chosen = d2; }
+    moves.push({ task: t, toDate: chosen });
+    extra.set(chosen, (extra.get(chosen) ?? 0) + dur);
+    cursor = chosen;
+  }
+  // 실제로 날짜가 바뀌는 것만 반환
+  return moves.filter(m => m.toDate !== m.task.date);
 }
 
 // 분 → "Xh Ym" / "Xh" / "Ym" 표기

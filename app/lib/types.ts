@@ -424,6 +424,7 @@ export interface AppData {
 export interface CapacitySettings {
   bufferPercent?: number;                 // 하루 Capacity 대비 Buffer 비율 (0~1, 기본 0.15)
   dateOverrides?: Record<string, number>; // "YYYY-MM-DD" -> 그 날 총 가용시간(시간). 있으면 요일 업무시간보다 우선
+  weekSchedules?: Record<string, WorkSchedule>; // 주(월요일 "YYYY-MM-DD") -> 그 주 전용 업무시간표. 없으면 기본 workSchedule 사용
 }
 
 // 주간 업무시간 — 요일(0=일 ~ 6=토)별로 근무 여부 + 시작·종료 시각("HH:MM")

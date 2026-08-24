@@ -138,6 +138,9 @@ export default function Home() {
   // 오늘 task를 내일로 옮기기
   const moveSubtaskToTomorrow = (t: SubtaskTask) =>
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: tomorrowStr, deadline: tomorrowStr });
+  // task의 세부작업(unit) 완료 토글
+  const toggleSubtaskUnit = (t: SubtaskTask, unitId: string) =>
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: (t.units ?? []).map(u => u.id === unitId ? { ...u, done: !u.done } : u) });
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
   // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
@@ -543,6 +546,19 @@ export default function Home() {
           >
             내일 ↪
           </button>
+        )}
+        {(t.units?.length ?? 0) > 0 && (
+          <ul className="w-full mt-1 ml-7 space-y-1">
+            {t.units!.map(u => (
+              <li key={u.id} className="flex items-center gap-2">
+                <button onClick={() => toggleSubtaskUnit(t, u.id)} className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>
+                  {u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                </button>
+                <span className="text-[12px] flex-1 min-w-0 truncate" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</span>
+                {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
+              </li>
+            ))}
+          </ul>
         )}
       </li>
     );

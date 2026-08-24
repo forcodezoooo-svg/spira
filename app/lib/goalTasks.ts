@@ -164,6 +164,7 @@ export interface SubtaskTask {
   projectDeadline?: string;   // 소속 프로젝트(ProgramDeadline) 마감일
   projectName?: string;       // 소속 프로젝트 이름
   actualMin?: number;         // 실제 소요 시간(분)
+  units?: { id: string; name: string; done: boolean; durationMin?: number }[]; // 세부 작업(체크리스트)
 }
 
 // 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
@@ -190,7 +191,7 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               programName: p.name, deliverableName: t.name, date: s.date, deadline: s.deadline, durationMin: s.durationMin,
               schedulingType: s.schedulingType, priority: s.priority,
               dependsOn: s.dependsOn, projectDeadline: dl.date || undefined, projectName: dl.name,
-              actualMin: s.actualMin,
+              actualMin: s.actualMin, units: s.units,
             });
           }
         }
