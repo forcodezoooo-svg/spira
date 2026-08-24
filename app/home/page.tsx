@@ -14,7 +14,7 @@ import WorkHoursPanel from '../components/WorkHoursPanel';
 import ReplanProposalModal from '../components/ReplanProposalModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove, WeekLoadStatus } from '../lib/capacity';
+import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, buildSubIndex, earliestFromDeps, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove, WeekLoadStatus } from '../lib/capacity';
 import type { OperatingMode } from '../lib/types';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -198,15 +198,24 @@ export default function Home() {
         mode: 'replan', today: dateStr,
         replan: {
           date: dateStr, availableMin: dayCap.availableProjectMin, plannedMin: dayCap.plannedProjectMin, overMin: dayCap.overMin,
-          tasks: movable.map(t => ({ id: t.subtaskId, name: t.name, durationMin: t.durationMin, deadline: t.deadline, priority: t.priority ?? 0, schedulingType: t.schedulingType })),
+          tasks: movable.map(t => ({ id: t.subtaskId, name: t.name, durationMin: t.durationMin, deadline: t.deadline, priority: t.priority ?? 0, schedulingType: t.schedulingType, dependsOn: t.dependsOn, projectDeadline: t.projectDeadline })),
           upcoming,
         },
       }) });
       const data = await res.json().catch(() => ({}));
       const moves = (Array.isArray(data.moves) ? data.moves : []) as { id: string; toDate: string }[];
       const byId = new Map(movable.map(t => [t.subtaskId, t]));
+      const idx = buildSubIndex(entries);
       const built: ReplanMove[] = [];
-      for (const mv of moves) { const t = byId.get(mv.id); if (t) built.push({ task: t, toDate: mv.toDate, withinDeadline: !t.deadline || mv.toDate <= t.deadline }); }
+      for (const mv of moves) {
+        const t = byId.get(mv.id);
+        if (t) built.push({
+          task: t, toDate: mv.toDate, withinDeadline: !t.deadline || mv.toDate <= t.deadline,
+          projectName: t.projectName, projectDeadline: t.projectDeadline,
+          projectAffected: !!t.projectDeadline && mv.toDate > t.projectDeadline,
+          depEarliest: earliestFromDeps(idx, t.dependsOn),
+        });
+      }
       const movedIds = new Set(built.map(m => m.task.subtaskId));
       const resolvedMin = built.reduce((s, m) => s + (m.task.durationMin ?? 0), 0);
       setAiReplan({

@@ -71,6 +71,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [formDur, setFormDur] = useState(''); // 세부작업 소요 시간(분)
   const [formType, setFormType] = useState<'fixed' | 'due' | 'flexible'>('flexible'); // task 일정 성격
   const [formPriority, setFormPriority] = useState(2); // task 우선순위 (1낮음~4긴급)
+  const [formDeps, setFormDeps] = useState<string[]>([]); // 선행 task id 목록
   const boardRef = useRef<HTMLDivElement>(null);
   const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
@@ -352,6 +353,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 같은 업무 영역이면 한 칸으로 묶고, 그 안에서 산출물별로 구분
   const kbAreas: { area: string; wsId: string; cols: KbCol[] }[] = [];
   for (const c of kbCols) { let g = kbAreas.find(x => x.area === c.area); if (!g) { g = { area: c.area, wsId: c.p.wsId, cols: [] }; kbAreas.push(g); } g.cols.push(c); }
+  // 전체 task(subtask) 색인 — 선행(dependsOn) 이름/완료 표시용
+  const subById = new Map<string, { name: string; done: boolean }>();
+  for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) subById.set(s.id, { name: s.name, done: s.done });
+  // 특정 프로젝트(데드라인) 안의 다른 task들 — 선행 선택 후보
+  const depCandidates = (col: KbCol, selfId?: string): { id: string; name: string }[] => {
+    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return [];
+    const dl = (prog.deadlines ?? []).find(d => d.id === col.dlId); if (!dl) return [];
+    const out: { id: string; name: string }[] = [];
+    for (const t of dl.todos) for (const s of (t.subtasks ?? [])) if (s.id !== selfId) out.push({ id: s.id, name: s.name });
+    return out;
+  };
+  const isBlocked = (s: Sub) => !s.done && (s.dependsOn ?? []).some(id => { const p = subById.get(id); return p && !p.done; });
   // D-day 계산 + 배지 스타일
   const ddayOf = (d?: string) => { if (!d) return null; const diff = daysBetween(todayStr, d); if (diff > 0) return { label: `D-${diff}`, s: diff <= 3 ? 'urgent' : 'future' }; if (diff === 0) return { label: 'D-Day', s: 'urgent' }; return { label: `D+${-diff}`, s: 'over' }; };
   const DdayBadge = ({ d }: { d?: string }) => { const dd = ddayOf(d); if (!dd) return null; const st = dd.s === 'urgent' ? { color: '#fff', backgroundColor: '#FF696C' } : dd.s === 'over' ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }; return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={st}>{dd.label}</span>; };
@@ -361,10 +374,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
   };
   // task/세부작업 추가는 팝업 폼으로 (이름 + 소요 시간). task 날짜는 자동 지정
-  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number) => {
+  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[]) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     const d = col.due || todayStr; // 날짜 자동 지정 (산출물 기한, 없으면 오늘)
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority }] }) }) });
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority, dependsOn: dependsOn?.length ? dependsOn : undefined }] }) }) });
   };
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
@@ -373,14 +386,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
-  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); };
-  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); };
+  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); };
+  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); };
   const kbSubmitForm = () => {
     const n = formName.trim(); if (!n || !kbForm) return;
     const d = Number(formDur); const dur = Number.isFinite(d) && d > 0 ? d : undefined;
     if (kbForm.mode === 'task') {
-      if (kbForm.editTaskId) updateSub(kbForm.col, kbForm.editTaskId, { name: n, durationMin: dur, schedulingType: formType, priority: formPriority });
-      else kbCreateTask(kbForm.col, n, dur, formType, formPriority);
+      if (kbForm.editTaskId) updateSub(kbForm.col, kbForm.editTaskId, { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined });
+      else kbCreateTask(kbForm.col, n, dur, formType, formPriority, formDeps);
     }
     else if (kbForm.s) { if (kbForm.editUnitId) kbUpdateUnit(kbForm.col, kbForm.s, kbForm.editUnitId, n, dur); else kbCreateUnit(kbForm.col, kbForm.s, n, dur); }
     setKbForm(null);
@@ -543,6 +556,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                               {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
                               <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: s.done ? '#5EA63A' : '#C7CEC7', backgroundColor: s.done ? '#5EA63A' : 'transparent' }}>{s.done && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
                               <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="text-[13px] font-semibold flex-1 min-w-0 break-words text-left" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</button>
+                              {isBlocked(s) && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FBF3E0', color: '#96631A' }} title="선행 작업이 아직 안 끝났어요">선행 대기</span>}
                               {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
                               {s.schedulingType && s.schedulingType !== 'flexible' && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: s.schedulingType === 'fixed' ? '#E7F0FF' : '#FBF3E0', color: s.schedulingType === 'fixed' ? '#2B62C4' : '#96631A' }}>{s.schedulingType === 'fixed' ? '고정' : '기한'}</span>}
                               {s.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(s.durationMin)}</span> : null}
@@ -714,6 +728,26 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     return <button key={v} onClick={() => setFormPriority(v)} className="flex-1 text-[12px] font-semibold rounded-lg py-1.5 border transition-colors" style={on ? { backgroundColor: v >= 4 ? '#FFE1E1' : '#DFF9C4', borderColor: v >= 4 ? '#F3C7C7' : '#BCE89A', color: v >= 4 ? '#C0392B' : '#3E6B1F' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#9AA39D' }}>{label}</button>;
                   })}
                 </div>
+                {(() => {
+                  const cands = depCandidates(kbForm.col, kbForm.editTaskId);
+                  if (!cands.length) return null;
+                  return (
+                    <>
+                      <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>선행 작업 (먼저 끝나야 하는 것)</label>
+                      <div className="flex flex-col gap-1 mt-1 mb-4 max-h-28 overflow-y-auto rounded-lg border p-1.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                        {cands.map(c => {
+                          const on = formDeps.includes(c.id);
+                          return (
+                            <button key={c.id} onClick={() => setFormDeps(prev => on ? prev.filter(x => x !== c.id) : [...prev, c.id])} className="flex items-center gap-2 text-left rounded-md px-1.5 py-1 transition-colors" style={on ? { backgroundColor: '#F3F0FF' } : undefined}>
+                              <span className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: on ? '#7C3AED' : '#C7CEC7', backgroundColor: on ? '#7C3AED' : 'transparent' }}>{on && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>
+                              <span className="text-[12px] truncate" style={{ color: '#5B6560' }}>{c.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })()}
               </>
             )}
             <div className="flex gap-2">

@@ -69,12 +69,25 @@ export default function ReplanProposalModal({
           ) : (
             <ul className="space-y-1.5">
               {move.map(m => (
-                <li key={m.task.key} className="flex items-center gap-2 border rounded-xl px-3 py-2" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
-                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.task.color }} />
-                  <span className="text-[13px] font-semibold flex-1 min-w-0 truncate" style={{ color: '#16211E' }}>{m.task.name}</span>
-                  {m.task.durationMin ? <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtMin(m.task.durationMin)}</span> : null}
-                  <span className="text-[11px] font-bold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>{mdLabel(m.toDate)}로</span>
-                  <span className="text-[10px] font-semibold flex-shrink-0" style={m.withinDeadline ? { color: '#3E7A2E' } : { color: '#C0392B' }}>{m.withinDeadline ? '기한 내' : '⚠ 기한 초과'}</span>
+                <li key={m.task.key} className="border rounded-xl px-3 py-2" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: m.task.color }} />
+                    <span className="text-[13px] font-semibold flex-1 min-w-0 truncate" style={{ color: '#16211E' }}>{m.task.name}</span>
+                    {m.task.durationMin ? <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtMin(m.task.durationMin)}</span> : null}
+                    <span className="text-[11px] font-bold rounded-full px-2 py-0.5 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>{mdLabel(m.toDate)}로</span>
+                    <span className="text-[10px] font-semibold flex-shrink-0" style={m.withinDeadline ? { color: '#3E7A2E' } : { color: '#C0392B' }}>{m.withinDeadline ? '기한 내' : '⚠ 기한 초과'}</span>
+                  </div>
+                  {/* 영향 범위 (§20): 프로젝트 마감 / 선행 제약 */}
+                  {(m.projectDeadline || m.depEarliest) && (
+                    <div className="mt-1 ml-3.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                      {m.projectDeadline && (
+                        <span style={{ color: m.projectAffected ? '#C0392B' : '#9AA39D' }}>
+                          {m.projectAffected ? `⚠ 프로젝트 '${m.projectName ?? ''}' 마감(${mdLabel(m.projectDeadline)}) 초과` : `프로젝트 마감(${mdLabel(m.projectDeadline)}) 영향 없음`}
+                        </span>
+                      )}
+                      {m.depEarliest && <span style={{ color: '#96631A' }}>선행 작업 이후({mdLabel(m.depEarliest)}~)로 배치</span>}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

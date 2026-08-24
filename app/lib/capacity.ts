@@ -197,8 +197,32 @@ export function businessAllocations(
 // 오늘 초과분을 없애기 위해 이동할 flexible/저우선 Task와 이동 날짜를 제안한다. (자동 적용 아님)
 export interface ReplanMove {
   task: SubtaskTask;
-  toDate: string;       // 이동 제안 날짜
-  withinDeadline: boolean; // 이동해도 기한 내인가
+  toDate: string;            // 이동 제안 날짜
+  withinDeadline: boolean;   // 이동해도 task 기한 내인가
+  projectName?: string;      // 소속 프로젝트 이름
+  projectDeadline?: string;  // 프로젝트 마감일
+  projectAffected?: boolean; // 이동일이 프로젝트 마감을 넘기는가 (§20 영향 전파)
+  depEarliest?: string;      // 선행 작업 때문에 이 날짜 이전엔 못 옮김 (있으면)
+}
+
+interface SubIndexEntry { date?: string; deadline?: string; done: boolean }
+// 전체 subtask(id → 날짜/완료) 색인 — 선행(dependsOn) 날짜 제약 계산용
+export function buildSubIndex(entries: WorkspaceEntry[]): Map<string, SubIndexEntry> {
+  const m = new Map<string, SubIndexEntry>();
+  for (const e of entries) for (const p of e.programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? [])
+    m.set(s.id, { date: s.date, deadline: s.deadline, done: !!s.done });
+  return m;
+}
+// 선행 작업들 때문에 이 task가 시작 가능한 가장 이른 날 (미완료 선행의 마감/시작일 중 최대). 없으면 undefined
+export function earliestFromDeps(idx: Map<string, SubIndexEntry>, dependsOn?: string[]): string | undefined {
+  let earliest: string | undefined;
+  for (const pid of dependsOn ?? []) {
+    const pred = idx.get(pid);
+    if (!pred || pred.done) continue; // 완료된 선행은 제약 없음
+    const d = pred.deadline || pred.date;
+    if (d && (!earliest || d > earliest)) earliest = d;
+  }
+  return earliest;
 }
 export interface ReplanProposal {
   date: string;
@@ -233,18 +257,28 @@ export function proposeReplan(
     const dc = computeDayCapacity(entries, schedule, capacity, ds);
     slack.push({ date: ds, freeMin: Math.max(0, dc.availableProjectMin - dc.plannedProjectMin) });
   }
+  const idx = buildSubIndex(entries);
   const move: ReplanMove[] = [];
   const movedIds = new Set<string>();
   let resolved = 0;
   for (const t of candidates) {
     if (resolved >= day.overMin) break;
     const dur = t.durationMin ?? 0;
-    // 이 task가 들어갈 수 있는 가장 이른 날 (여유 ≥ 소요), 없으면 내일
-    let slot = slack.find(s => s.freeMin >= dur && dur > 0);
-    if (!slot) slot = slack[0];
-    const toDate = slot?.date ?? addDays(date, 1);
+    // 선행 작업(dependsOn) 때문에 이보다 이른 날엔 못 옮김
+    const depEarliest = earliestFromDeps(idx, t.dependsOn);
+    const okDate = (ds: string) => !depEarliest || ds >= depEarliest;
+    // 이 task가 들어갈 수 있는 가장 이른 날 (선행 이후 + 여유 ≥ 소요), 없으면 선행 이후 첫 날
+    let slot = slack.find(s => okDate(s.date) && s.freeMin >= dur && dur > 0);
+    if (!slot) slot = slack.find(s => okDate(s.date));
+    const toDate = slot?.date ?? (depEarliest && depEarliest > date ? depEarliest : addDays(date, 1));
     if (slot) slot.freeMin = Math.max(0, slot.freeMin - dur);
-    move.push({ task: t, toDate, withinDeadline: !t.deadline || toDate <= t.deadline });
+    move.push({
+      task: t, toDate,
+      withinDeadline: !t.deadline || toDate <= t.deadline,
+      projectName: t.projectName, projectDeadline: t.projectDeadline,
+      projectAffected: !!t.projectDeadline && toDate > t.projectDeadline,
+      depEarliest,
+    });
     movedIds.add(t.subtaskId);
     resolved += dur;
   }
