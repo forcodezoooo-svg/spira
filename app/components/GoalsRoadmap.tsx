@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import type { Program } from '../lib/types';
+import ActualTimeModal from './ActualTimeModal';
+import { areaFactor } from '../lib/capacity';
 
 // Goals 간트 로드맵 — 좌측 트리(사업목표 › 프로젝트 › 영역별 산출물 › task)와 우측 타임라인을 1:1 정렬.
 // 가로 시간축은 연/월/주/일/시로 확대·축소하며 '연속 스크롤'(윈도우 제한 없음).
@@ -72,6 +74,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [formType, setFormType] = useState<'fixed' | 'due' | 'flexible'>('flexible'); // task 일정 성격
   const [formPriority, setFormPriority] = useState(2); // task 우선순위 (1낮음~4긴급)
   const [formDeps, setFormDeps] = useState<string[]>([]); // 선행 task id 목록
+  const [actualTarget, setActualTarget] = useState<{ col: KbCol; s: Sub } | null>(null); // 완료 시 실제시간 입력
   const boardRef = useRef<HTMLDivElement>(null);
   const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
@@ -410,8 +413,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const tasks = (Array.isArray(data.tasks) ? data.tasks : []) as { name: string; durationMin?: number }[];
       if (!tasks.length) return;
       const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-      // 날짜 자동 지정(오늘부터 하루 간격) + AI가 추정한 소요시간 반영 → Home 캘린더 자동 반영
-      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = addDaysStr(todayStr, i); return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: tk.durationMin }; })] }) }) });
+      // 개인화 보정: 이 업무 영역의 과거 예상 대비 실제 배율을 AI 예상시간에 반영 (§15)
+      const factor = areaFactor(store.allWorkspacesEntries, col.p.name);
+      const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
+      // 날짜 자동 지정(오늘부터 하루 간격) + AI가 추정한 소요시간(개인화 보정) 반영 → Home 캘린더 자동 반영
+      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = addDaysStr(todayStr, i); return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
   };
@@ -419,7 +425,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) }) }) });
   };
-  const kbToggleDone = (col: KbCol, s: Sub) => updateSub(col, s.id, { done: !s.done, status: !s.done ? 'done' : 'todo' });
+  const kbToggleDone = (col: KbCol, s: Sub) => {
+    const nowDone = !s.done;
+    updateSub(col, s.id, { done: nowDone, status: nowDone ? 'done' : 'todo' });
+    if (nowDone && s.actualMin === undefined) setActualTarget({ col, s }); // 실제 소요시간 물어보기 (§14)
+  };
   const kbAddUnit = (col: KbCol, s: Sub) => { setKbForm({ mode: 'subtask', col, s }); setFormName(''); setFormDur(''); };
   const kbEditUnit = (col: KbCol, s: Sub, u: NonNullable<Sub['units']>[number]) => { setKbForm({ mode: 'subtask', col, s, editUnitId: u.id }); setFormName(u.name); setFormDur(u.durationMin ? String(u.durationMin) : ''); };
   const kbUpdateUnit = (col: KbCol, s: Sub, uId: string, name: string, durMin?: number) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, name, durationMin: durMin } : u) });
@@ -682,6 +692,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       </div>
+      )}
+
+      {/* 완료 시 실제 소요시간 입력 */}
+      {actualTarget && (
+        <ActualTimeModal
+          taskName={actualTarget.s.name}
+          estimatedMin={actualTarget.s.durationMin}
+          onSave={min => { updateSub(actualTarget.col, actualTarget.s.id, { actualMin: min }); setActualTarget(null); }}
+          onSkip={() => setActualTarget(null)}
+        />
       )}
 
       {/* 일괄 수정 팝업 */}

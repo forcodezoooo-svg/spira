@@ -290,6 +290,39 @@ export function proposeReplan(
   };
 }
 
+// ── 예상 vs 실제 학습 (§15) ──
+export interface AreaAccuracy {
+  area: string;       // 업무 영역(programName)
+  count: number;      // 예상·실제 둘 다 있는 task 수
+  avgEstimate: number;// 평균 예상(분)
+  avgActual: number;  // 평균 실제(분)
+  factor: number;     // 실제/예상 배율 (1.29 = 예상보다 29% 더 걸림)
+}
+
+// 완료 task 중 예상(durationMin)·실제(actualMin) 둘 다 있는 것들을 업무 영역별로 집계
+export function estimateAccuracy(entries: WorkspaceEntry[]): AreaAccuracy[] {
+  const map = new Map<string, { est: number; act: number; n: number }>();
+  for (const e of entries) for (const p of e.programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) {
+    if (!s.durationMin || !s.actualMin) continue;
+    const area = p.name || '업무';
+    const g = map.get(area) ?? { est: 0, act: 0, n: 0 };
+    g.est += s.durationMin; g.act += s.actualMin; g.n += 1;
+    map.set(area, g);
+  }
+  return [...map.entries()].map(([area, g]) => ({
+    area, count: g.n,
+    avgEstimate: Math.round(g.est / g.n),
+    avgActual: Math.round(g.act / g.n),
+    factor: g.est > 0 ? g.act / g.est : 1,
+  })).sort((a, b) => b.count - a.count);
+}
+
+// 특정 업무 영역의 개인화 배율 (충분한 표본이 있을 때만 1이 아닌 값). 표본 < min이면 1
+export function areaFactor(entries: WorkspaceEntry[], area: string, minSamples = 3): number {
+  const a = estimateAccuracy(entries).find(x => x.area === area);
+  return a && a.count >= minSamples ? a.factor : 1;
+}
+
 // 분 → "Xh Ym" / "Xh" / "Ym" 표기
 export function fmtMin(min: number): string {
   const m = Math.round(min);

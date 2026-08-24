@@ -12,9 +12,10 @@ import MusicTimer from '../components/MusicTimer';
 import GoalsCalendar from '../components/GoalsCalendar';
 import WorkHoursPanel from '../components/WorkHoursPanel';
 import ReplanProposalModal from '../components/ReplanProposalModal';
+import ActualTimeModal from '../components/ActualTimeModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, buildSubIndex, earliestFromDeps, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove, WeekLoadStatus } from '../lib/capacity';
+import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, buildSubIndex, earliestFromDeps, estimateAccuracy, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove, WeekLoadStatus } from '../lib/capacity';
 import type { OperatingMode } from '../lib/types';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -45,6 +46,7 @@ export default function Home() {
   const [urgentOpen, setUrgentOpen] = useState(false); // 긴급 업무 입력
   const [urgentName, setUrgentName] = useState('');
   const [urgentDur, setUrgentDur] = useState('');
+  const [actualTarget, setActualTarget] = useState<SubtaskTask | null>(null); // 완료 시 실제시간 입력 대상
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -126,7 +128,10 @@ export default function Home() {
   const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true });
   // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
   const toggleSubtaskDone = (t: SubtaskTask) => {
-    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: !t.done, status: !t.done ? 'done' : 'todo' });
+    const nowDone = !t.done;
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo' });
+    // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
+    if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
@@ -228,6 +233,12 @@ export default function Home() {
 
   // ── Operating Mode: 비즈니스별 Capacity 배분 ──
   const allocations = businessAllocations(entries, weekCap.availableProjectMin, localDateStr(thisWeekStart), id => workspaceColor(entries, id));
+  // ── 예상 vs 실제 학습 (§15) ──
+  const accuracy = estimateAccuracy(entries).filter(a => a.count >= 2);
+  const saveActual = (t: SubtaskTask, min: number) => {
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { actualMin: min });
+    setActualTarget(null);
+  };
   const focusArea = currentWeekAreas[0] ?? null; // 이번 주 가장 집중해야 할 업무 영역
   const areaReason = (a: WeekArea) => (a.minDday < 0 ? '기한 지남' : a.minDday === 0 ? '오늘 마감' : a.minDday <= 7 ? `D-${a.minDday} 임박` : `업무 ${a.count}개`) + (a.minDday <= 7 ? ` · 업무 ${a.count}개` : '');
 
@@ -809,6 +820,33 @@ export default function Home() {
           </div>
         )}
 
+        {/* 예상 vs 실제 (학습) */}
+        {accuracy.length > 0 && (
+          <div className="bg-white border rounded-2xl p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
+            <span className="text-[13px] font-black" style={{ color: '#16211E' }}>예상 vs 실제</span>
+            <p className="text-[11px] mt-0.5 mb-3 leading-relaxed" style={{ color: '#9AA39D' }}>완료한 업무의 실제 시간을 모아 예상과 비교해요. 새 업무의 예상시간 보정에 쓰여요.</p>
+            <div className="space-y-2.5">
+              {accuracy.slice(0, 5).map(a => {
+                const diff = Math.round((a.factor - 1) * 100);
+                return (
+                  <div key={a.area}>
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <span className="text-[12px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{a.area}</span>
+                      <span className="text-[11px] font-bold flex-shrink-0" style={{ color: diff > 10 ? '#C0392B' : diff < -10 ? '#2B62C4' : '#3E7A2E' }}>{diff > 0 ? `+${diff}%` : `${diff}%`}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px]" style={{ color: '#9AA39D' }}>
+                      <span>예상 {fmtMin(a.avgEstimate)}</span>
+                      <span>→</span>
+                      <span style={{ color: '#5B6560' }}>실제 {fmtMin(a.avgActual)}</span>
+                      <span className="ml-auto">{a.count}건</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 타이머 pill */}
         <MusicTimer compact />
 
@@ -878,6 +916,15 @@ export default function Home() {
           } as ProgramTodo}
           onSave={patch => store.updateProgramTodo(editTodoTarget.wsId, editTodoTarget.programId, editTodoTarget.deadlineId, editTodoTarget.todoId, patch)}
           onClose={() => setEditTodoTarget(null)}
+        />
+      )}
+
+      {actualTarget && (
+        <ActualTimeModal
+          taskName={actualTarget.name}
+          estimatedMin={actualTarget.durationMin}
+          onSave={min => saveActual(actualTarget, min)}
+          onSkip={() => setActualTarget(null)}
         />
       )}
 
