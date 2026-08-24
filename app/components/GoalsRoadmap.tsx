@@ -75,7 +75,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [formType, setFormType] = useState<'fixed' | 'due' | 'flexible'>('flexible'); // task 일정 성격
   const [formPriority, setFormPriority] = useState(2); // task 우선순위 (1낮음~4긴급)
   const [formDeps, setFormDeps] = useState<string[]>([]); // 선행 task id 목록
+  const [formDays, setFormDays] = useState<number[]>([]); // 매주 반복 요일 (비어있으면 단발)
   const [actualTarget, setActualTarget] = useState<{ col: KbCol; s: Sub } | null>(null); // 완료 시 실제시간 입력
+  const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
+  const [catName, setCatName] = useState('');
   const boardRef = useRef<HTMLDivElement>(null);
   const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
@@ -347,7 +350,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   // ── 카테고리 보드: 업무 영역을 '칸'으로, 그 안에서 산출물별로 구분, 하위 task 카드 ──
   type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
-  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; due: string; subtasks: Sub[] };
+  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; due: string; subtasks: Sub[] };
   const parseArea = (name: string) => { const m = name.match(/^(.*?)\s*[:：]\s*(.*)$/); return { area: (m ? m[1] : name).trim(), goalSub: m ? m[2].trim() : '' }; };
   const kbScope = resolveChain(selectedKey);
   const kbCols: KbCol[] = [];
@@ -359,7 +362,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
         if (kbScope.todoId && kbScope.todoId !== t.id) continue;
         const { area, goalSub } = parseArea(t.name);
-        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, due: t.deadline || t.date || '', subtasks: (t.subtasks ?? []) });
+        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', subtasks: (t.subtasks ?? []) });
       }
     }
   }
@@ -375,6 +378,38 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     return out;
   };
   const isBlocked = (s: Sub) => !s.done && (s.dependsOn ?? []).some(id => { const p = subById.get(id); return p && !p.done; });
+
+  // ── 카테고리(산출물) 추가 대상: 스코프된 프로젝트, 없으면 첫 칼럼의 프로젝트 ──
+  const catTarget = kbScope.deadlineId && kbScope.program ? { wsId: kbScope.program.wsId, programId: kbScope.program.id, dlId: kbScope.deadlineId }
+    : kbCols[0] ? { wsId: kbCols[0].p.wsId, programId: kbCols[0].p.id, dlId: kbCols[0].dlId } : null;
+  // 새 카테고리(산출물) 생성 — 템플릿 tasks가 있으면 함께 채워 넣음(비반복은 가용시간 배치)
+  const addCategory = (name: string, tplTasks?: import('../lib/types').BoardTemplateTask[]) => {
+    const n = name.trim(); if (!n || !catTarget) return;
+    const prog = findProg(catTarget.wsId, catTarget.programId); if (!prog) return;
+    const dl = (prog.deadlines ?? []).find(d => d.id === catTarget.dlId); if (!dl) return;
+    const start = dl.startDate || dl.date || todayStr;
+    const anchor = start > todayStr ? start : todayStr;
+    const tasks = tplTasks ?? [];
+    const nonRecDur = tasks.filter(t => !(t.days?.length)).map(t => t.durationMin ?? 0);
+    const dates = nonRecDur.length ? scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, nonRecDur, anchor, dl.date || undefined) : [];
+    let di = 0;
+    const subtasks = tasks.map(t => {
+      const units = (t.units ?? []).map(u => ({ id: uid(), name: u.name, done: false, durationMin: u.durationMin }));
+      if (t.days?.length) return { id: uid(), name: t.name, done: false, date: anchor, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, days: t.days, units };
+      const d = dates[di++] ?? anchor;
+      return { id: uid(), name: t.name, done: false, date: d, deadline: d, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, units };
+    });
+    const newTodo = { id: uid(), name: n, done: false, date: start, deadline: dl.date || start, subtasks };
+    store.updateProgramInWs(catTarget.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== catTarget.dlId ? d : { ...d, todos: [...d.todos, newTodo] }) });
+    setCatName(''); setCatPanel(false);
+  };
+  // 이 카테고리(산출물)의 task 세트를 템플릿으로 저장
+  const saveColAsTemplate = (col: KbCol) => {
+    store.addBoardTemplate({
+      name: col.name,
+      tasks: col.subtasks.map(s => ({ name: s.name, durationMin: s.durationMin, schedulingType: s.schedulingType, priority: s.priority, days: s.days, units: (s.units ?? []).map(u => ({ name: u.name, durationMin: u.durationMin })) })),
+    });
+  };
   // D-day 계산 + 배지 스타일
   const ddayOf = (d?: string) => { if (!d) return null; const diff = daysBetween(todayStr, d); if (diff > 0) return { label: `D-${diff}`, s: diff <= 3 ? 'urgent' : 'future' }; if (diff === 0) return { label: 'D-Day', s: 'urgent' }; return { label: `D+${-diff}`, s: 'over' }; };
   const DdayBadge = ({ d }: { d?: string }) => { const dd = ddayOf(d); if (!dd) return null; const st = dd.s === 'urgent' ? { color: '#fff', backgroundColor: '#FF696C' } : dd.s === 'over' ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }; return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={st}>{dd.label}</span>; };
@@ -384,10 +419,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
   };
   // task/세부작업 추가는 팝업 폼으로 (이름 + 소요 시간). task 날짜는 자동 지정
-  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[]) => {
+  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[]) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    const d = col.due || todayStr; // 날짜 자동 지정 (산출물 기한, 없으면 오늘)
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority, dependsOn: dependsOn?.length ? dependsOn : undefined }] }) }) });
+    const recurring = !!days?.length;
+    const d = col.start || col.due || todayStr; // 날짜 자동 지정 (산출물 시작일→기한→오늘)
+    const sub = recurring
+      ? { id: uid(), name, done: false, date: d, durationMin: durMin, schedulingType, priority, days, dependsOn: dependsOn?.length ? dependsOn : undefined }
+      : { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority, dependsOn: dependsOn?.length ? dependsOn : undefined };
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), sub] }) }) });
   };
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
@@ -396,14 +435,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
-  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); };
-  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); };
+  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); setFormDays([]); };
+  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); setFormDays(s.days ?? []); };
   const kbSubmitForm = () => {
     const n = formName.trim(); if (!n || !kbForm) return;
     const d = Number(formDur); const dur = Number.isFinite(d) && d > 0 ? d : undefined;
     if (kbForm.mode === 'task') {
-      if (kbForm.editTaskId) updateSub(kbForm.col, kbForm.editTaskId, { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined });
-      else kbCreateTask(kbForm.col, n, dur, formType, formPriority, formDeps);
+      const days = formDays.length ? [...formDays].sort((a, b) => a - b) : undefined;
+      if (kbForm.editTaskId) updateSub(kbForm.col, kbForm.editTaskId, { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined, days, deadline: days ? undefined : (kbForm.col.due || kbForm.col.start || todayStr) });
+      else kbCreateTask(kbForm.col, n, dur, formType, formPriority, formDeps, days);
     }
     else if (kbForm.s) { if (kbForm.editUnitId) kbUpdateUnit(kbForm.col, kbForm.s, kbForm.editUnitId, n, dur); else kbCreateUnit(kbForm.col, kbForm.s, n, dur); }
     setKbForm(null);
@@ -424,8 +464,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const factor = areaFactor(store.allWorkspacesEntries, col.p.name);
       const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
       const durMins = tasks.map(tk => adj(tk.durationMin) ?? 0);
-      // 가용시간(다른 칼럼/사업 포함) + 산출물 디데이를 반영해 날짜를 스케줄링 → 오늘부터 무작정 쌓지 않음
-      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, todayStr, col.due || undefined);
+      // 산출물 시작일 기준으로 스케줄링(미래면 그때부터, 과거/없으면 오늘) + 가용시간·디데이 반영
+      const anchor = col.start && col.start > todayStr ? col.start : todayStr;
+      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, anchor, col.due || undefined);
       store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = dates[i]; return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
@@ -451,7 +492,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbToggleDone = (col: KbCol, s: Sub) => {
     const nowDone = !s.done;
     updateSub(col, s.id, { done: nowDone, status: nowDone ? 'done' : 'todo' });
-    if (nowDone && s.actualMin === undefined) setActualTarget({ col, s }); // 실제 소요시간 물어보기 (§14)
+    if (nowDone && s.actualMin === undefined && !(s.days?.length)) setActualTarget({ col, s }); // 실제 소요시간 물어보기 (§14, 반복 제외)
   };
   const kbAddUnit = (col: KbCol, s: Sub) => { setKbForm({ mode: 'subtask', col, s }); setFormName(''); setFormDur(''); };
   const kbEditUnit = (col: KbCol, s: Sub, u: NonNullable<Sub['units']>[number]) => { setKbForm({ mode: 'subtask', col, s, editUnitId: u.id }); setFormName(u.name); setFormDur(u.durationMin ? String(u.durationMin) : ''); };
@@ -558,9 +599,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
               <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="group/col flex items-center gap-1.5 min-w-0">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
                   <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
+                  {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
                 </div>
                 {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
@@ -581,6 +623,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                               {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
                               <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: s.done ? '#5EA63A' : '#C7CEC7', backgroundColor: s.done ? '#5EA63A' : 'transparent' }}>{s.done && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
                               <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="text-[13px] font-semibold flex-1 min-w-0 break-words text-left" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</button>
+                              {(s.days?.length ?? 0) > 0 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="매주 반복 업무">매주</span>}
                               {isBlocked(s) && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FBF3E0', color: '#96631A' }} title="선행 작업이 아직 안 끝났어요">선행 대기</span>}
                               {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
                               {s.schedulingType && s.schedulingType !== 'flexible' && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: s.schedulingType === 'fixed' ? '#E7F0FF' : '#FBF3E0', color: s.schedulingType === 'fixed' ? '#2B62C4' : '#96631A' }}>{s.schedulingType === 'fixed' ? '고정' : '기한'}</span>}
@@ -629,6 +672,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             </div>
           ))}
+          {/* + 새 카테고리 */}
+          {catTarget && (
+            <button onClick={() => setCatPanel(true)} className="flex flex-col items-center justify-center gap-1.5 w-[200px] flex-shrink-0 rounded-xl border-2 border-dashed transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D', minHeight: 120 }}>
+              <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+              <span className="text-[12px] font-bold">카테고리 추가</span>
+              {store.boardTemplates.length > 0 && <span className="text-[10px]" style={{ color: '#7C3AED' }}>템플릿 {store.boardTemplates.length}개</span>}
+            </button>
+          )}
         </div>
         )
       ) : (
@@ -729,6 +780,40 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         />
       )}
 
+      {/* 카테고리 추가 / 템플릿 */}
+      {catPanel && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setCatPanel(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-[420px] max-h-[85vh] overflow-y-auto p-5" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>카테고리 추가</h3>
+              <button onClick={() => setCatPanel(false)} className="text-neutral-300 hover:text-neutral-700 text-lg leading-none">×</button>
+            </div>
+            <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>새 카테고리(산출물) 이름 <span style={{ color: '#C4CCC4' }}>· 영역: 내용 형태 가능</span></label>
+            <div className="flex gap-1.5 mt-1 mb-4">
+              <input autoFocus value={catName} onChange={e => setCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && catName.trim()) addCategory(catName); }} placeholder="예: 디자인: 랜딩 페이지 시안" className="flex-1 bg-neutral-50 border rounded-xl px-3 py-2 text-[14px] outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+              <button onClick={() => addCategory(catName)} disabled={!catName.trim()} className="px-3.5 py-2 rounded-xl text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
+            </div>
+            {store.boardTemplates.length > 0 && (
+              <>
+                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>저장된 템플릿 <span style={{ color: '#C4CCC4' }}>· 카테고리+task 세트를 불러와요</span></label>
+                <div className="mt-1.5 space-y-1.5">
+                  {store.boardTemplates.map(tpl => (
+                    <div key={tpl.id} className="flex items-center gap-2 border rounded-xl px-3 py-2" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-bold truncate" style={{ color: '#16211E' }}>{tpl.name}</p>
+                        <p className="text-[11px]" style={{ color: '#9AA39D' }}>task {tpl.tasks.length}개</p>
+                      </div>
+                      <button onClick={() => addCategory(tpl.name, tpl.tasks)} className="text-[12px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>적용</button>
+                      <button onClick={() => store.deleteBoardTemplate(tpl.id)} className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0" title="템플릿 삭제">×</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 일괄 수정 팝업 */}
       {bulkOpen && sel.size > 0 && (
         <BulkEditModal items={[...sel.values()]} context={programs.filter(p => [...sel.values()].some(i => i.programId === p.id)).map(p => `${p.name}${p.goal ? ` (${p.goal})` : ''}`).join(' / ')} onApply={applyBulkPatches} onClose={() => setBulkOpen(false)} />
@@ -771,6 +856,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   {([[1, '낮음'], [2, '보통'], [3, '높음'], [4, '긴급']] as const).map(([v, label]) => {
                     const on = formPriority === v;
                     return <button key={v} onClick={() => setFormPriority(v)} className="flex-1 text-[12px] font-semibold rounded-lg py-1.5 border transition-colors" style={on ? { backgroundColor: v >= 4 ? '#FFE1E1' : '#DFF9C4', borderColor: v >= 4 ? '#F3C7C7' : '#BCE89A', color: v >= 4 ? '#C0392B' : '#3E6B1F' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#9AA39D' }}>{label}</button>;
+                  })}
+                </div>
+                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>매주 반복 {formDays.length > 0 && <span style={{ color: '#7C3AED' }}>· 반복 업무</span>}</label>
+                <div className="flex gap-1 mt-1 mb-4">
+                  {['일', '월', '화', '수', '목', '금', '토'].map((label, dow) => {
+                    const on = formDays.includes(dow);
+                    return <button key={dow} onClick={() => setFormDays(prev => on ? prev.filter(x => x !== dow) : [...prev, dow])} className="flex-1 text-[12px] font-bold rounded-lg py-1.5 border transition-colors" style={on ? { backgroundColor: '#F3F0FF', borderColor: '#C9BCF0', color: '#7C3AED' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#C4CCC4' }}>{label}</button>;
                   })}
                 </div>
                 {(() => {

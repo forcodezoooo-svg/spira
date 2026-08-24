@@ -161,6 +161,13 @@ export function useStore() {
       return { ...d, capacity: { ...(d.capacity ?? {}), weekSchedules: weeks } };
     });
 
+  // 카테고리 보드 템플릿 (산출물+task 세트)
+  const boardTemplates = appData.boardTemplates ?? [];
+  const addBoardTemplate = (tpl: Omit<import('./types').BoardTemplate, 'id' | 'createdAt'>) =>
+    update(d => ({ ...d, boardTemplates: [...(d.boardTemplates ?? []), { ...tpl, id: uid(), createdAt: new Date().toISOString() }] }));
+  const deleteBoardTemplate = (id: string) =>
+    update(d => ({ ...d, boardTemplates: (d.boardTemplates ?? []).filter(t => t.id !== id) }));
+
   // 업무 영역 표시 순서 (이름 기준). Goals에서 사용자가 조정
   const areaOrder = appData.areaOrder ?? [];
   const moveArea = (name: string, dir: -1 | 1) =>
@@ -732,6 +739,7 @@ export function useStore() {
     offDays, isOffDay, toggleOffDay,
     workSchedule, setWorkDay,
     capacity, setBufferPercent, setDateCapacityOverride, setWeekWorkDay, resetWeekSchedule,
+    boardTemplates, addBoardTemplate, deleteBoardTemplate,
     setOperatingMode, setWeeklyCapacityHours,
     areaOrder, moveArea, setAreaOrder,
     calendarMemos, setCalendarMemo,

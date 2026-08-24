@@ -265,7 +265,7 @@ export function proposeReplan(
 ): ReplanProposal {
   const day = computeDayCapacity(entries, schedule, capacity, date);
   const tasks = getSubtaskTasksForDate(entries, date, { onlyFromPlan: true })
-    .filter(t => !t.done && t.schedulingType !== 'fixed');
+    .filter(t => !t.done && t.schedulingType !== 'fixed' && !(t.days?.length)); // 고정·반복은 이동 대상 아님
   // 이동 우선순위: 우선순위 낮은 것 → 기한 여유 많은 것(늦은 deadline) → 소요 큰 것
   const candidates = [...tasks].sort((a, b) =>
     (a.priority ?? 0) - (b.priority ?? 0)
@@ -425,7 +425,7 @@ export function redistributeWeekTasks(
     const ds = addDays(weekStart, i);
     if (ds > weekEnd) break;
     for (const t of getSubtaskTasksForDate(entries, ds, { onlyFromPlan: true })) {
-      if (t.done || t.schedulingType === 'fixed') continue;   // 완료·고정은 이동 대상 아님
+      if (t.done || t.schedulingType === 'fixed' || (t.days?.length)) continue;   // 완료·고정·반복은 이동 대상 아님
       if (!t.date || t.date < start) continue;                // 오늘 이전 배치는 유지
       if (seen.has(t.subtaskId)) continue; seen.add(t.subtaskId);
       movable.push(t);

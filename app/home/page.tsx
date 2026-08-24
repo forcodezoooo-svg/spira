@@ -127,6 +127,13 @@ export default function Home() {
   const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true });
   // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
   const toggleSubtaskDone = (t: SubtaskTask) => {
+    if (t.days?.length) {
+      // 반복 task: 오늘 날짜만 완료 토글 (doneDates)
+      const has = (t.doneDates ?? []).includes(dateStr);
+      const next = has ? (t.doneDates ?? []).filter(d => d !== dateStr) : [...(t.doneDates ?? []), dateStr];
+      store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { doneDates: next });
+      return;
+    }
     const nowDone = !t.done;
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo' });
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
@@ -523,6 +530,9 @@ export default function Home() {
         {isToday && (
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>오늘</span>
         )}
+        {(t.days?.length ?? 0) > 0 && (
+          <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>매주</span>
+        )}
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
         <span className="text-[15px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
@@ -538,7 +548,7 @@ export default function Home() {
           </span>
         )}
         <TaskTimerButton taskId={t.key} done={t.done} />
-        {!t.done && (
+        {!t.done && !(t.days?.length) && (
           <button
             onClick={() => moveSubtaskToTomorrow(t)}
             className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"

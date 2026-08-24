@@ -209,6 +209,18 @@ export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위
   priority?: number;    // 우선순위 (클수록 중요, 없으면 0)
   dependsOn?: string[]; // 선행 task id 목록 (Dependency, P1에서 활용)
   actualMin?: number;   // 실제 소요 시간(분) — 완료 시 기록 (P2)
+  days?: number[];      // 매주 반복 요일 (0=일 ~ 6=토). 있으면 반복 task
+  doneDates?: string[]; // 반복 task의 날짜별 완료 기록 "YYYY-MM-DD"
+}
+
+// 카테고리 보드 템플릿 — 산출물(카테고리) 하나 + 그 안의 task/세부작업을 한 세트로 저장·재사용
+export interface BoardTemplateUnit { name: string; durationMin?: number }
+export interface BoardTemplateTask { name: string; durationMin?: number; schedulingType?: TaskSchedulingType; priority?: number; days?: number[]; units?: BoardTemplateUnit[] }
+export interface BoardTemplate {
+  id: string;
+  name: string;        // 카테고리(산출물) 이름 (예: "디자인: 최종 UI 시안")
+  tasks: BoardTemplateTask[];
+  createdAt?: string;
 }
 export interface ProgramTodo {
   id: string;
@@ -419,6 +431,7 @@ export interface AppData {
   journeyFlags?: JourneyFlag[]; // 나의 여정 지도 — 달성한 영역 목표 깃발 (전 비즈니스 통합)
   workSchedule?: WorkSchedule; // 주간 업무시간 타임테이블 (요일별 근무 가능 시간)
   capacity?: CapacitySettings; // Time Management: Buffer 비율 + 날짜별 Capacity 예외
+  boardTemplates?: BoardTemplate[]; // 카테고리 보드 템플릿 (산출물+task 세트 저장·재사용)
 }
 
 // Time Management — 가용시간(Capacity) 관련 사용자 설정 (사용자 전체 공통)

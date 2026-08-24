@@ -165,6 +165,8 @@ export interface SubtaskTask {
   projectName?: string;       // 소속 프로젝트 이름
   actualMin?: number;         // 실제 소요 시간(분)
   units?: { id: string; name: string; done: boolean; durationMin?: number }[]; // 세부 작업(체크리스트)
+  days?: number[];            // 매주 반복 요일 (있으면 반복 task)
+  doneDates?: string[];       // 반복 task의 날짜별 완료 기록
 }
 
 // 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
@@ -179,19 +181,30 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
         if (dl.enabled === false) continue;
         for (const t of dl.todos ?? []) {
           for (const s of t.subtasks ?? []) {
-            const a = s.date, b = s.deadline;
-            if (!a && !b) continue;
-            const lo = a && b ? (a <= b ? a : b) : (a || b)!;
-            const hi = a && b ? (a <= b ? b : a) : (b || a)!;
-            if (dateStr < lo || dateStr > hi) continue;
+            const hasDays = (s.days?.length ?? 0) > 0;
+            let done = !!s.done;
+            if (hasDays) {
+              // 매주 반복: 시작일 이후 & (기한 없거나 이전) & 해당 요일에 표시. 완료는 날짜별(doneDates)
+              const dow = new Date(dateStr + 'T00:00:00').getDay();
+              const afterStart = !s.date || s.date <= dateStr;
+              const beforeEnd = !s.deadline || s.deadline >= dateStr;
+              if (!(afterStart && beforeEnd && s.days!.includes(dow))) continue;
+              done = (s.doneDates ?? []).includes(dateStr);
+            } else {
+              const a = s.date, b = s.deadline;
+              if (!a && !b) continue;
+              const lo = a && b ? (a <= b ? a : b) : (a || b)!;
+              const hi = a && b ? (a <= b ? b : a) : (b || a)!;
+              if (dateStr < lo || dateStr > hi) continue;
+            }
             out.push({
               key: `s:${e.workspace.id}:${p.id}:${dl.id}:${t.id}:${s.id}`,
               wsId: e.workspace.id, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id,
-              name: s.name, done: !!s.done, color: workspaceColor(entries, e.workspace.id),
+              name: s.name, done, color: workspaceColor(entries, e.workspace.id),
               programName: p.name, deliverableName: t.name, date: s.date, deadline: s.deadline, durationMin: s.durationMin,
               schedulingType: s.schedulingType, priority: s.priority,
               dependsOn: s.dependsOn, projectDeadline: dl.date || undefined, projectName: dl.name,
-              actualMin: s.actualMin, units: s.units,
+              actualMin: s.actualMin, units: s.units, days: s.days, doneDates: s.doneDates,
             });
           }
         }
