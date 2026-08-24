@@ -388,7 +388,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(catTarget.wsId, catTarget.programId); if (!prog) return;
     const dl = (prog.deadlines ?? []).find(d => d.id === catTarget.dlId); if (!dl) return;
     const start = dl.startDate || dl.date || todayStr;
-    const anchor = start > todayStr ? start : todayStr;
+    const anchor = todayStr; // task는 오늘부터 가용시간에 맞춰 배치
     const tasks = tplTasks ?? [];
     const nonRecDur = tasks.filter(t => !(t.days?.length)).map(t => t.durationMin ?? 0);
     const dates = nonRecDur.length ? scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, nonRecDur, anchor, dl.date || undefined) : [];
@@ -422,7 +422,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[]) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     const recurring = !!days?.length;
-    const d = col.start || col.due || todayStr; // 날짜 자동 지정 (산출물 시작일→기한→오늘)
+    const d = todayStr; // 날짜 자동 지정 = 오늘
     const sub = recurring
       ? { id: uid(), name, done: false, date: d, durationMin: durMin, schedulingType, priority, days, dependsOn: dependsOn?.length ? dependsOn : undefined }
       : { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority, dependsOn: dependsOn?.length ? dependsOn : undefined };
@@ -442,7 +442,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const d = Number(formDur); const dur = Number.isFinite(d) && d > 0 ? d : undefined;
     if (kbForm.mode === 'task') {
       const days = formDays.length ? [...formDays].sort((a, b) => a - b) : undefined;
-      if (kbForm.editTaskId) updateSub(kbForm.col, kbForm.editTaskId, { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined, days, deadline: days ? undefined : (kbForm.col.due || kbForm.col.start || todayStr) });
+      if (kbForm.editTaskId) {
+        const cur = kbForm.col.subtasks.find(x => x.id === kbForm.editTaskId);
+        const patch: Partial<Sub> = { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined, days };
+        if (days) { patch.deadline = undefined; if (!cur?.date) patch.date = todayStr; } // 반복: 기존 날짜 유지·기한 제거
+        else { const dd = cur?.date || cur?.deadline || todayStr; patch.date = dd; patch.deadline = dd; } // 단발: 기존 날짜 유지
+        updateSub(kbForm.col, kbForm.editTaskId, patch);
+      }
       else kbCreateTask(kbForm.col, n, dur, formType, formPriority, formDeps, days);
     }
     else if (kbForm.s) { if (kbForm.editUnitId) kbUpdateUnit(kbForm.col, kbForm.s, kbForm.editUnitId, n, dur); else kbCreateUnit(kbForm.col, kbForm.s, n, dur); }
@@ -464,9 +470,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const factor = areaFactor(store.allWorkspacesEntries, col.p.name);
       const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
       const durMins = tasks.map(tk => adj(tk.durationMin) ?? 0);
-      // 산출물 시작일 기준으로 스케줄링(미래면 그때부터, 과거/없으면 오늘) + 가용시간·디데이 반영
-      const anchor = col.start && col.start > todayStr ? col.start : todayStr;
-      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, anchor, col.due || undefined);
+      // 오늘부터 가용시간에 맞춰 스케줄링 (산출물 디데이는 상한으로만 반영)
+      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, todayStr, col.due || undefined);
       store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = dates[i]; return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
