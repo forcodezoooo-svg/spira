@@ -1779,12 +1779,44 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
   );
 }
 
+// 업무 영역 입력 — 자유 입력 + ▼로 기존 업무 영역 '전체'를 언제나 다시 선택 (datalist 필터 문제 해결)
+function AreaField({ value, onChange, options, placeholder, done, className }: {
+  value: string; onChange: (v: string) => void; options: string[]; placeholder: string; done?: boolean; className: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative w-28 flex-shrink-0">
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className={`w-full ${options.length ? 'pr-6' : ''} font-semibold ${className} ${done ? 'line-through text-neutral-400' : ''}`} />
+      {options.length > 0 && (
+        <button type="button" onClick={() => setOpen(o => !o)} className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700" title="업무 영역 선택">
+          <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      )}
+      {open && options.length > 0 && (
+        <div className="absolute z-30 top-full left-0 mt-1 w-full min-w-[7rem] max-h-44 overflow-y-auto bg-white border border-neutral-200 rounded-lg shadow-lg py-1">
+          {options.map(o => (
+            <button key={o} type="button" onClick={() => { onChange(o); setOpen(false); }} className="block w-full text-left px-2.5 py-1 text-[13px] hover:bg-neutral-100 truncate" style={o === value ? { backgroundColor: '#F3F0FF', color: '#7C3AED', fontWeight: 700 } : { color: '#5B6560' }}>{o}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 사업 목표: Goal > Strategy > Project > Area Deliverable (Progressive Disclosure) ──
 function GoalsSection({
   goals, projectsOfGoal, workAreas,
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
-  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects,
+  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects, onToggleAreaDone,
   aiBusyId, aiEnabled, focusGoal, onFocusHandled,
 }: {
   goals: Goal[];
@@ -1805,6 +1837,7 @@ function GoalsSection({
   onImportGoal?: (goalId: string) => void;
   onReviseProjects?: (goalId: string) => void;
   onResequenceProjects?: (goalId: string) => void;
+  onToggleAreaDone?: (projectId: string, deliverableId: string) => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -1861,23 +1894,22 @@ function GoalsSection({
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
   const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void) => (
     <div className="flex items-start gap-2">
-      <input value={area} onChange={e => onArea(e.target.value)} placeholder={areaPh} list="spira-areas" className={`w-28 flex-shrink-0 font-semibold ${inputCls} ${done ? 'line-through text-neutral-400' : ''}`} />
-      <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
-        <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
-      </div>
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
-          className={`flex-shrink-0 mt-1 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
+          className={`flex-shrink-0 mt-1.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
           <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       )}
+      <AreaField value={area} onChange={onArea} options={workAreas} placeholder={areaPh} done={done} className={inputCls} />
+      <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
+        <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
+      </div>
       <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1.5">×</button>
     </div>
   );
 
   return (
     <section>
-      <datalist id="spira-areas">{workAreas.map(a => <option key={a} value={a} />)}</datalist>
       <div className="flex items-start justify-between gap-2 mb-1">
         <h2 className="text-[17px] font-black text-neutral-900">사업 목표</h2>
         {aiEnabled && onSuggestGoals && (
@@ -2064,7 +2096,7 @@ function GoalsSection({
                                         () => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).filter(x => x.id !== a.id) }),
                                         '업무 영역', '이 영역의 결과물',
                                         a.done,
-                                        () => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, done: !x.done } : x) }),
+                                        () => (onToggleAreaDone ? onToggleAreaDone(p.id, a.id) : onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, done: !x.done } : x) })),
                                       ))}
                                       <button onClick={() => onUpdateProject(p.id, { areaDeliverables: [...(p.areaDeliverables ?? []), { id: uid(), area: '', content: '' }] })}
                                         className="w-full py-1.5 rounded-lg border-2 border-dashed border-neutral-200 text-[12px] text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물</button>
@@ -2842,6 +2874,7 @@ export default function PlanPage() {
         id: uid(),
         name: a.area ? `${a.area}: ${a.content}` : a.content,
         done: !!a.done,
+        deliverableId: a.id,
         ...(start ? { date: start } : end ? { date: end } : {}),
         ...(end ? { deadline: end } : {}),
       }));
@@ -2863,6 +2896,33 @@ export default function PlanPage() {
     toast(`‘${goal.name}’을(를) Goals 로드맵으로 가져왔어요. 🌿`, 'success');
   };
   const updateProject = (id: string, patch: Partial<Project>) => update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
+  // 영역별 산출물 완료 토글 — Plan에 반영 + Goals(카테고리 보드)의 대응 산출물(todo) 완료 동기화
+  const toggleAreaDeliverableDone = (projectId: string, deliverableId: string) => {
+    const proj = (plan.projects ?? []).find(p => p.id === projectId);
+    const ad = proj?.areaDeliverables?.find(x => x.id === deliverableId);
+    if (!ad) return;
+    const nextDone = !ad.done;
+    update({ projects: (plan.projects ?? []).map(p => p.id !== projectId ? p : { ...p, areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === deliverableId ? { ...x, done: nextDone } : x) }) });
+    // Goals 프로그램의 대응 todo 동기화 (현재 워크스페이스)
+    if (!selectedWsId) return;
+    const now = new Date();
+    const todayS = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const expectedName = ad.area ? `${ad.area}: ${ad.content}` : ad.content;
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    for (const pg of ws?.programs ?? []) {
+      let changed = false;
+      const deadlines = (pg.deadlines ?? []).map(dl => {
+        if (dl.projectId !== projectId) return dl;
+        return { ...dl, todos: dl.todos.map(t => {
+          const match = t.deliverableId === deliverableId || (!t.deliverableId && t.name === expectedName);
+          if (!match) return t;
+          changed = true;
+          return { ...t, done: nextDone, doneDate: nextDone ? todayS : undefined };
+        }) };
+      });
+      if (changed) store.updateProgramInWs(selectedWsId, { ...pg, deadlines });
+    }
+  };
   // 프로젝트 날짜 재조정 — 오늘(또는 목표 시작일)부터 순서대로 기간 유지하며 겹치지 않게 배치
   const resequenceProjects = (goalId: string) => {
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
@@ -3147,6 +3207,7 @@ export default function PlanPage() {
           onImportGoal={importGoalToGoals}
           onReviseProjects={reviseProjects}
           onResequenceProjects={resequenceProjects}
+          onToggleAreaDone={toggleAreaDeliverableDone}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
           focusGoal={focusGoal}

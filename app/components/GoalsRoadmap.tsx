@@ -356,6 +356,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     for (const dl of (p.deadlines ?? [])) {
       if (kbScope.deadlineId && kbScope.deadlineId !== dl.id) continue;
       for (const t of dl.todos) {
+        if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
         if (kbScope.todoId && kbScope.todoId !== t.id) continue;
         const { area, goalSub } = parseArea(t.name);
         kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, due: t.deadline || t.date || '', subtasks: (t.subtasks ?? []) });

@@ -225,6 +225,7 @@ export interface ProgramTodo {
   light?: boolean; // 가벼운 작업(외부에서도 가능). 기본 false = 무거운 작업(작업실 필요)
   startTime?: string; // 시작 예정 시각 "HH:MM"
   durationDays?: number; // 대략 소요 일수 — 프로젝트 '일정 이어붙이기'에서 날짜를 순차 배치할 때 사용
+  deliverableId?: string; // 원본 Plan 영역별 산출물(Project.areaDeliverables[].id) — Plan 완료 상태 동기화용
 }
 
 // 프로그램 내 데드라인 항목 (depth 2)
