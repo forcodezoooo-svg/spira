@@ -21,7 +21,7 @@ type SelItem = { key: string; kind: Lvl; name: string; wsId: string; programId: 
 type BulkPatch = { name?: string; deadline?: string; durationMin?: number };
 
 export interface GoalsRoadmapHandle { focus: (level: Lvl, key: string, start?: string, end?: string, name?: string) => void; startListDrag: (payload: Payload, e: React.DragEvent) => void; }
-interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string } | null; cardClassName?: string; }
+interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string; status?: string } | null; cardClassName?: string; }
 
 const LABEL_W = 240;
 const ROW_H = 34;
@@ -259,6 +259,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     updateVisLabel(el);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pxPerDay]);
+  // 트랙패드 핀치 / Ctrl+휠 → 로드맵 줌인·아웃 (날짜 간격 조절)
+  useEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // macOS 트랙패드 핀치는 ctrlKey+wheel로 전달됨
+      e.preventDefault();
+      const dy = clampN(e.deltaY, -30, 30); // 마우스 휠 한 칸이 과하게 튀지 않게 제한
+      setPxPerDay(v => clampN(v * Math.exp(-dy * 0.012), ZMIN, ZMAX));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kanban]);
   const fmtVis = (d: string) => { const dd = new Date(d); return gran === 'year' ? `${dd.getFullYear()}년` : gran === 'week' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
   const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / pxPerDay), 0, span - 1); const cd = addDaysStr(rangeStart, di); centerDateRef.current = cd; setVisLabel(fmtVis(cd)); };
   const scrollByScreen = (dir: -1 | 1) => { const el = scrollRef.current; if (!el) return; el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' }); };
@@ -267,12 +280,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const enterLevel = (r: Row) => { setSelectedKey(r.key); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
-  const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
+  // 완료 처리된 프로젝트 숨김: 데드라인 done 또는 Plan 프로젝트 상태가 done
+  const dlVisible = (wsId: string, dl: Deadline) => dl.enabled !== false && !dl.done && !(dl.projectId && resolveProject(wsId, dl.projectId)?.status === 'done');
+  const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl)); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
   const dlPeriod = (p: CalProgram, dl: Deadline) => { if (!dl.date) { const ts = dl.todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = dl.todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
   const rows: Row[] = [];
   for (const p of programs) {
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
-    const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done);
+    const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl));
     const pp = progPeriod(p);
     rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, pgKey });
     if (!isOpen(pgKey, 0)) continue;
@@ -293,7 +308,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     }
   }
   const rowsDraw = rows.map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
-  void resolveProject;
 
   // ── 항목 추가 (스케일별 depth, 부모=선택 계보) ──
   const resolveChain = (key: string | null) => {
@@ -365,7 +379,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   for (const p of programs) {
     if (kbScope.program && kbScope.program.id !== p.id) continue;
     for (const dl of (p.deadlines ?? [])) {
-      if (dl.done) continue; // 완료 처리한 프로젝트(데드라인)는 숨김
+      if (!dlVisible(p.wsId, dl)) continue; // 완료 처리한 프로젝트(데드라인)는 숨김
       if (kbScope.deadlineId && kbScope.deadlineId !== dl.id) continue;
       for (const t of dl.todos) {
         if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
