@@ -56,6 +56,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const ZMIN = 3, ZMAX = 110;
   const gran: Scale = pxPerDay < 8 ? 'year' : pxPerDay < 40 ? 'month' : 'week'; // 줌 정도에 따라 눈금/라벨 밀도만 결정
   const [kanban, setKanban] = useState(false); // 칸반 탭 여부
+  const [sortMode, setSortMode] = useState<'dday' | 'business'>('business'); // 로드맵 정렬: 디데이순 / 비즈니스별
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
   const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -293,10 +294,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const dlVisible = (wsId: string, dl: Deadline) => dl.enabled !== false && !dl.done && !(dl.projectId && resolveProject(wsId, dl.projectId)?.status === 'done');
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl)); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
   const dlPeriod = (p: CalProgram, dl: Deadline) => { if (!dl.date) { const ts = dl.todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = dl.todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
+  // 로드맵 정렬: 디데이순(가까운 마감 먼저) / 비즈니스별(같은 사업끼리)
+  const progNearestDue = (p: CalProgram) => { const ds = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl) && dl.date).map(dl => dl.date); return ds.length ? [...ds].sort()[0] : '9999-99-99'; };
+  const roadmapPrograms = sortMode === 'dday'
+    ? [...programs].sort((a, b) => progNearestDue(a).localeCompare(progNearestDue(b)))
+    : [...programs].sort((a, b) => (a.wsName ?? a.wsId).localeCompare(b.wsName ?? b.wsId));
   const rows: Row[] = [];
-  for (const p of programs) {
+  for (const p of roadmapPrograms) {
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
     const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl));
+    if (sortMode === 'dday') dls.sort((a, b) => (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99')); // 프로젝트 디데이 가까운 순
     const pp = progPeriod(p);
     rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, pgKey });
     if (!isOpen(pgKey, 0)) continue;
@@ -609,7 +616,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
   const barH = (lvl: number) => lvl === 0 ? 24 : lvl === 1 ? 24 : lvl === 2 ? 20 : lvl === 3 ? 17 : 15;
-  const pgOrder = new Map<string, number>(); programs.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
+  const pgOrder = new Map<string, number>(); roadmapPrograms.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
   // 선택 아이템 빌더 + 체크 표시
   const rowSel = (r: Row): SelItem => ({ key: r.key, kind: r.kind, name: r.name, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, deadline: r.end });
   const subSel = (col: KbCol, s: Sub): SelItem => ({ key: `s-${s.id}`, kind: 'subtask', name: s.name, wsId: col.p.wsId, programId: col.p.id, deadlineId: col.dlId, todoId: col.todoId, subtaskId: s.id, deadline: s.deadline });
@@ -625,6 +632,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
           ))}
         </div>
+        {kanban && catTarget && (
+          <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+            카테고리 추가{store.boardTemplates.length > 0 ? ` · 템플릿 ${store.boardTemplates.length}` : ''}
+          </button>
+        )}
         {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
       </div>
 
@@ -651,6 +664,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             </div>
             <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>{gran === 'year' ? '연 단위' : gran === 'month' ? '월 단위' : '주 단위'}</span>
             <span className="flex-1" />
+            {/* 정렬: 디데이순 / 비즈니스별 */}
+            <div className="flex gap-1 rounded-full p-1 flex-shrink-0" style={{ backgroundColor: '#F1F1EB' }}>
+              {([['dday', '디데이순'], ['business', '비즈니스별']] as [typeof sortMode, string][]).map(([m, label]) => (
+                <button key={m} onClick={() => setSortMode(m)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={sortMode === m ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>
+              ))}
+            </div>
             <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>
           </div>
           {offOpen && (
@@ -688,6 +707,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <button onClick={() => kbTogglePin(col)} title={col.pinned ? '우선 해제' : '우선 표시 (맨 앞으로)'} className="flex-shrink-0 transition-transform hover:scale-110">
                     <svg className="w-4 h-4" viewBox="0 0 20 20" fill={col.pinned ? '#F0B429' : 'none'} stroke={col.pinned ? '#F0B429' : '#C7CEC7'} strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8L10 2z" strokeLinejoin="round" /></svg>
                   </button>
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} title={col.p.wsName ?? ''} />
                   <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
                   {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
@@ -760,14 +780,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             </div>
           ))}
-          {/* + 새 카테고리 */}
-          {catTarget && (
-            <button onClick={() => setCatPanel(true)} className="flex flex-col items-center justify-center gap-1.5 w-[200px] flex-shrink-0 rounded-xl border-2 border-dashed transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D', minHeight: 120 }}>
-              <svg className="w-5 h-5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-              <span className="text-[12px] font-bold">카테고리 추가</span>
-              {store.boardTemplates.length > 0 && <span className="text-[10px]" style={{ color: '#7C3AED' }}>템플릿 {store.boardTemplates.length}개</span>}
-            </button>
-          )}
         </div>
         )
       ) : (
