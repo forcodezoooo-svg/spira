@@ -46,7 +46,7 @@ export function useStore() {
   }, [ready]);
 
   const update = useCallback((updater: (d: AppData) => AppData) => {
-    const next = updater(globalData);
+    const next = { ...updater(globalData), updatedAt: Date.now() }; // 변경 시각 스탬프 → 새로고침 시 최신본 유지
     globalData = next;
     try {
       save(next);

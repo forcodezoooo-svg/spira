@@ -43,10 +43,19 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (server && Array.isArray(server.workspaces) && server.workspaces.length > 0) {
-        // 서버가 정본 — 로컬을 서버 데이터로 교체 후 전역 스토어도 갱신(마이그레이션 포함)
-        try { writeLocalRaw(server); } catch { /* 용량 초과여도 서버 데이터 기준으로 진행 */ }
-        localStorage.setItem(UID_KEY, uid);
-        setGlobalStoreData(load());
+        // 서버에 데이터 있음. 단, 같은 사용자의 로컬이 더 최신(아직 서버에 못 올린 변경)이면 로컬을 유지.
+        const prevUid = localStorage.getItem(UID_KEY);
+        const local = load();
+        const localNewer = prevUid === uid && (local.workspaces?.length ?? 0) > 0 && (local.updatedAt ?? 0) > (server.updatedAt ?? 0);
+        if (localNewer) {
+          try { await upsertAppData(supabase, uid, local); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
+          localStorage.setItem(UID_KEY, uid);
+          setGlobalStoreData(local);
+        } else {
+          try { writeLocalRaw(server); } catch { /* 용량 초과여도 서버 데이터 기준으로 진행 */ }
+          localStorage.setItem(UID_KEY, uid);
+          setGlobalStoreData(load());
+        }
       } else if (pullOk) {
         // 서버 비어 있음
         const prevUid = localStorage.getItem(UID_KEY);

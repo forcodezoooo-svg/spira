@@ -17,7 +17,7 @@ type Lvl = 'program' | 'deadline' | 'todo' | 'subtask' | 'unit';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
 type Payload = { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string };
-type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string; isAdd?: boolean; addKind?: Lvl };
+type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; subName?: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string; isAdd?: boolean; addKind?: Lvl };
 type SelItem = { key: string; kind: Lvl; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; deadline?: string; durationMin?: number };
 type BulkPatch = { name?: string; deadline?: string; durationMin?: number };
 
@@ -147,7 +147,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const deadlines = (prog.deadlines ?? []).map(dl => {
       if (dl.id !== d.deadlineId) return dl;
       if (d.level === 'deadline') { if (d.mode === 'move') return { ...dl, date: d.end, startDate: d.start, todos: dl.todos.map(t => ({ ...t, date: shift(t.date), deadline: shift(t.deadline), subtasks: (t.subtasks ?? []).map(shSub) })) }; if (d.mode === 'resize-end') return { ...dl, date: d.end }; return { ...dl, startDate: d.start }; }
-      return { ...dl, todos: dl.todos.map(t => {
+      const newTodos = dl.todos.map(t => {
         if (t.id !== d.todoId) return t;
         if (d.level === 'todo') { if (d.mode === 'move') return { ...t, date: d.start, deadline: d.end, subtasks: (t.subtasks ?? []).map(shSub) }; if (d.mode === 'resize-end') return { ...t, deadline: d.end }; return { ...t, date: d.start }; }
         return { ...t, subtasks: (t.subtasks ?? []).map(s => {
@@ -155,7 +155,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           if (d.level === 'subtask') { if (d.mode === 'move') return { ...s, date: d.start, deadline: d.end, units: (s.units ?? []).map(u => ({ ...u, date: shift(u.date), deadline: shift(u.deadline) })) }; if (d.mode === 'resize-end') return { ...s, deadline: d.end }; return { ...s, date: d.start }; }
           return { ...s, units: (s.units ?? []).map(u => { if (u.id !== d.unitId) return u; if (d.mode === 'move') return { ...u, date: d.start, deadline: d.end }; if (d.mode === 'resize-end') return { ...u, deadline: d.end }; return { ...u, date: d.start }; }) };
         }) };
-      }) };
+      });
+      // 산출물(todo) 기간이 바뀌면 상위 프로젝트(데드라인) 기간을 산출물 전체 범위로 자동 조정
+      if (d.level === 'todo') {
+        const tds = newTodos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x);
+        if (tds.length) {
+          const minT = tds.reduce((a, b) => (a < b ? a : b));
+          const maxT = tds.reduce((a, b) => (a > b ? a : b));
+          return { ...dl, startDate: minT, date: maxT, todos: newTodos };
+        }
+      }
+      return { ...dl, todos: newTodos };
     });
     store.updateProgramInWs(d.wsId, { ...prog, deadlines });
   };
@@ -301,10 +311,25 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     ? [...programs].sort((a, b) => progNearestDue(a).localeCompare(progNearestDue(b)))
     : [...programs].sort((a, b) => (a.wsName ?? a.wsId).localeCompare(b.wsName ?? b.wsId));
   const rows: Row[] = [];
+  if (sortMode === 'dday') {
+    // 디데이순: 프로젝트 구분 없이 '업무영역별 산출물'을 디데이 가까운 순으로 평면 나열.
+    // 산출물이 1차 정보, 프로젝트명은 부가 설명(subName)으로 표시.
+    const flat: (Row & { due: string })[] = [];
+    for (const p of roadmapPrograms) {
+      const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
+      for (const dl of (p.deadlines ?? []).filter(d => dlVisible(p.wsId, d))) {
+        for (const t of dl.todos.filter(t => !t.done)) {
+          const ts = t.date || t.deadline, te = t.deadline || t.date;
+          flat.push({ key: `t-${t.id}`, level: 1, kind: 'todo', name: t.name, subName: dl.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, due: t.deadline || t.date || '9999-99-99' });
+        }
+      }
+    }
+    flat.sort((a, b) => a.due.localeCompare(b.due));
+    for (const f of flat) { const { due: _due, ...r } = f; void _due; rows.push(r); }
+  } else {
   for (const p of roadmapPrograms) {
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
     const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl));
-    if (sortMode === 'dday') dls.sort((a, b) => (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99')); // 프로젝트 디데이 가까운 순
     // 사업목표(program, level 0) 행은 로드맵에 표시하지 않고, 프로젝트(deadline)를 최상위로 보여준다.
     if (dls.length === 0) rows.push({ key: `add-${pgKey}`, level: 1, kind: 'deadline', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, pgKey, isAdd: true, addKind: 'deadline' });
     for (const dl of dls) {
@@ -321,6 +346,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       // 산출물이 이미 있어도 '여기서 바로 추가' 행을 항상 노출 (프로젝트 아래에 산출물 직접 추가)
       if (todos.length > 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
     }
+  }
   }
   const rowsDraw = rows.map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
 
@@ -392,6 +418,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       }) };
     }) });
   };
+  void clearSchedule; // 막대 X 버튼 제거로 미사용(로직은 유지)
 
   // ── 카테고리 보드: 업무 영역을 '칸'으로, 그 안에서 산출물별로 구분, 하위 task 카드 ──
   type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
@@ -860,7 +887,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                     ) : <span className="w-4 flex-shrink-0" />}
                     <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />
-                    <span className="line-clamp-2 break-words flex-1 min-w-0 py-1 leading-snug" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
+                    <span className="flex-1 min-w-0 py-1 leading-snug">
+                      <span className="line-clamp-2 break-words block" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
+                      {r.subName && <span className="truncate block text-[10px]" style={{ color: '#9AA39D' }}>{r.subName}</span>}
+                    </span>
                     {!placed && r.level > 0 && <span className="text-[9px] flex-shrink-0" style={{ color: '#C4A24A' }}>미배치</span>}
                     <button onClick={e => { e.stopPropagation(); delRow(r); }} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
                   </div>
@@ -884,7 +914,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         {r.level > 0 && <>
                           <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                           <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
-                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearSchedule(r); }} className="absolute right-0.5 top-0.5 z-30 w-3.5 h-3.5 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[9px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="일정만 삭제(내용 유지)">×</button>
                         </>}
                       </div>
                     )}
