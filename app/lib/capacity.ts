@@ -323,6 +323,30 @@ export function areaFactor(entries: WorkspaceEntry[], area: string, minSamples =
   return a && a.count >= minSamples ? a.factor : 1;
 }
 
+// ── 프로젝트 시간 현황: 완료 예상일 (§16) ──
+// 남은 작업(분)을 fromDate부터 매일 가용시간으로 소진할 때의 완료 예상일 + 소요 work days.
+// (그 날짜의 총 availableProjectMin을 이 프로젝트에 쓴다고 가정 — '현재 Capacity 기준' 추정)
+export function expectedCompletion(
+  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined, remainingMin: number, fromDate: string,
+): { date: string; workDays: number } | null {
+  if (remainingMin <= 0) return { date: fromDate, workDays: 0 };
+  let acc = 0, workDays = 0;
+  for (let i = 0; i < 180; i++) {
+    const ds = addDays(fromDate, i);
+    const avail = computeDayCapacity(entries, schedule, capacity, ds).availableProjectMin;
+    if (avail <= 0) continue;
+    workDays += 1;
+    acc += avail;
+    if (acc >= remainingMin) return { date: ds, workDays };
+  }
+  return null; // 180일 내 완료 불가
+}
+
+// 두 날짜 사이 일수 (b − a)
+export function daysBetweenDates(a: string, b: string): number {
+  return Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+}
+
 // 분 → "Xh Ym" / "Xh" / "Ym" 표기
 export function fmtMin(min: number): string {
   const m = Math.round(min);
