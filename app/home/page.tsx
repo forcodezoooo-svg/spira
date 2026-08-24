@@ -32,7 +32,7 @@ export default function Home() {
   const store = useStore();
   const router = useRouter();
   const { closeChat } = useUI();
-  const { stopTaskTimer } = useTimer();
+  const { stopTaskTimer, getDisplaySeconds } = useTimer();
   const [workspaceName, setWorkspaceName] = useState('');
   const [editTodoTarget, setEditTodoTarget] = useState<GoalTask | null>(null);
   const [homeFilterWs, setHomeFilterWs] = useState<string | null>(null); // 오늘의 업무 비즈니스 필터 (null = 전체)
@@ -871,6 +871,7 @@ export default function Home() {
         <ActualTimeModal
           taskName={actualTarget.name}
           estimatedMin={actualTarget.durationMin}
+          recordedMin={(() => { const sec = getDisplaySeconds(dateStr, actualTarget.key); return sec > 0 ? Math.max(1, Math.round(sec / 60)) : undefined; })()}
           onSave={min => saveActual(actualTarget, min)}
           onSkip={() => setActualTarget(null)}
         />

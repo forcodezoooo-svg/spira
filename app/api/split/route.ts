@@ -104,6 +104,15 @@ Task(세부 할일)는 만들지 마라.
 - 각 task마다 예상 '소요 시간(분)' durationMin을 현실적으로 추정해서 넣어라(1인 작업 기준, 15/30/60/90/120/180/240 중에서). 이 값은 확정이 아니라 사용자가 수정할 수 있는 '대략값'이니 과하게 촘촘히 잡지 말고 현실적으로.
 반드시 '오직 JSON만': {"tasks":[{"name":"메인 화면 시안 디자인","durationMin":120},{"name":"디자인 QA 및 수정","durationMin":60}]}`;
     user = `사업 정보:\n${context}${areaHint}\n\n${goalName ? `상위 목표/프로젝트: ${goalName}\n` : ''}완성할 산출물: ${deliverableName}\n\n이 산출물을 완성하기 위한 구체적 실행 task들을 진행 순서대로 쪼개고, 각 task의 예상 소요 시간(분)도 함께 넣어줘.`;
+  } else if (mode === 'task-units') {
+    // task 하나 → 완료를 위한 '세부 작업(체크리스트)'로 쪼개기 (카테고리 보드 task 카드용)
+    const taskName = (body as { taskName?: string }).taskName ?? '';
+    sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 주어진 'task(할 일)' 하나를 완료하기 위한 '세부 작업(체크리스트 단계)'로 잘게 쪼개.
+- 각 항목은 바로 실행할 수 있는 작은 단위(예: "레퍼런스 5개 수집", "와이어프레임 스케치", "컬러 팔레트 확정").
+- 3~6개, 진행 순서대로.
+- 각 항목의 예상 소요 시간(분) durationMin을 짧게 추정(5/10/15/30/45/60 중에서, 사용자가 수정 가능한 대략값).
+반드시 '오직 JSON만': {"units":[{"name":"레퍼런스 5개 수집","durationMin":30},{"name":"와이어프레임 스케치","durationMin":45}]}`;
+    user = `사업 정보:\n${context}\n\n${deliverableName ? `상위 산출물: ${deliverableName}\n` : ''}완료할 task: ${taskName}\n\n이 task를 끝내기 위한 세부 작업(체크리스트)으로 진행 순서대로 쪼개고, 각 항목의 예상 소요 시간(분)도 함께 넣어줘.`;
   } else if (mode === 'bulk-edit') {
     // 선택한 여러 항목을 대화로 일괄 수정 (이름 + 소요시간/기한)
     sys = `너는 1인 창업가의 실행을 돕는 어시스턴트야. 사용자가 여러 '항목'을 선택하고 대화로 '일괄 수정'을 요청한다.
@@ -188,6 +197,12 @@ ${DELIVERABLE_RULE}
         ? parsed.tasks.map(t => typeof t === 'string' ? { name: t.trim(), durationMin: undefined } : (() => { const o = t as Record<string, unknown>; return { name: String(o.name ?? '').trim(), durationMin: nn(o.durationMin) }; })()).filter(t => t.name).slice(0, 10)
         : [];
       return NextResponse.json({ tasks });
+    } else if (mode === 'task-units') {
+      const nn = (x: unknown) => { const n = Number(x); return Number.isFinite(n) && n > 0 ? n : undefined; };
+      const units = Array.isArray(parsed.units)
+        ? parsed.units.map(u => typeof u === 'string' ? { name: u.trim(), durationMin: undefined } : (() => { const o = u as Record<string, unknown>; return { name: String(o.name ?? '').trim(), durationMin: nn(o.durationMin) }; })()).filter(u => u.name).slice(0, 8)
+        : [];
+      return NextResponse.json({ units });
     } else if (mode === 'bulk-edit') {
       const nn = (x: unknown) => { const n = Number(x); return Number.isFinite(n) && n > 0 ? n : undefined; };
       const items = Array.isArray(parsed.items)

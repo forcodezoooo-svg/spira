@@ -64,6 +64,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offEnd, setOffEnd] = useState('');
   const [kbDrag, setKbDrag] = useState<string | null>(null); // 칸반 드래그 중인 task key
   const [kbAiBusy, setKbAiBusy] = useState<string | null>(null); // AI task 생성 중인 산출물(todoId)
+  const [kbUnitAiBusy, setKbUnitAiBusy] = useState<string | null>(null); // AI 세부작업 생성 중인 task(subtaskId)
   const [selMode, setSelMode] = useState(false); // 다중 선택 모드
   const [sel, setSel] = useState<Map<string, SelItem>>(new Map());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -428,6 +429,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
   };
+  // AI로 이 task의 세부 작업(체크리스트)들을 생성해 추가
+  const kbAiUnits = async (col: KbCol, s: Sub) => {
+    if (kbUnitAiBusy) return;
+    setKbUnitAiBusy(s.id);
+    try {
+      const context = `사업: ${col.p.wsName ?? ''} / 사업목표: ${col.p.name}${col.p.goal ? ` (${col.p.goal})` : ''} / 프로젝트: ${col.dlName}`;
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'task-units', context, deliverableName: col.name, taskName: s.name }) });
+      const data = await res.json().catch(() => ({}));
+      const units = (Array.isArray(data.units) ? data.units : []) as { name: string; durationMin?: number }[];
+      if (!units.length) return;
+      updateSub(col, s.id, { units: [...(s.units ?? []), ...units.map(u => ({ id: uid(), name: u.name, done: false, durationMin: u.durationMin }))] });
+    } catch { /* ignore */ }
+    finally { setKbUnitAiBusy(null); }
+  };
   const kbDel = (col: KbCol, sId: string) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) }) }) });
@@ -588,7 +603,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                                 ))}
                               </div>
                             )}
-                            <button onClick={() => kbAddUnit(col, s)} className="mt-1 ml-5 text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#9AA39D' }}>+ 세부 작업</button>
+                            <div className="mt-1 ml-5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => kbAddUnit(col, s)} className="text-[10px] font-semibold" style={{ color: '#9AA39D' }}>+ 세부 작업</button>
+                              <button onClick={() => kbAiUnits(col, s)} disabled={!!kbUnitAiBusy} title="AI로 세부 작업 생성" className="flex items-center gap-0.5 text-[10px] font-bold disabled:opacity-50" style={{ color: '#7C3AED' }}>
+                                {kbUnitAiBusy === s.id
+                                  ? <span className="w-2.5 h-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                  : <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+                                AI 세부작업
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
