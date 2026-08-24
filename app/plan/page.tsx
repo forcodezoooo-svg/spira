@@ -2903,6 +2903,38 @@ export default function PlanPage() {
     if ((patch.startDate !== undefined || patch.endDate !== undefined) && prev) {
       syncDeadlineDates(id, patch.startDate ?? prev.startDate, patch.endDate ?? prev.endDate, prev.startDate);
     }
+    // 이름/영역별 산출물이 바뀌면 로드맵 데드라인의 이름·산출물(todo)을 즉시 동기화
+    if ((patch.name !== undefined || patch.areaDeliverables !== undefined) && prev) {
+      syncProjectToRoadmap(id, { ...prev, ...patch });
+    }
+  };
+  // Plan 프로젝트(이름·영역별 산출물) → 로드맵 데드라인의 이름·산출물(todo) 즉시 반영 (하위 task 보존)
+  const syncProjectToRoadmap = (projectId: string, proj: Project) => {
+    if (!selectedWsId) return;
+    const ads = proj.areaDeliverables ?? [];
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    for (const pg of ws?.programs ?? []) {
+      let changed = false;
+      const deadlines = (pg.deadlines ?? []).map(dl => {
+        if (dl.projectId !== projectId) return dl;
+        const existing = new Map(dl.todos.filter(t => t.deliverableId).map(t => [t.deliverableId as string, t] as const));
+        const start = dl.startDate || dl.date || undefined;
+        // Plan의 산출물 순서대로 todo 재구성: 기존은 이름·완료만 갱신(하위 task 보존), 새 산출물은 생성
+        const synced = ads.map(a => {
+          const name = a.area ? `${a.area}: ${a.content}` : a.content;
+          const ex = existing.get(a.id);
+          if (ex) return { ...ex, name, done: !!a.done };
+          return { id: uid(), name, done: !!a.done, deliverableId: a.id, ...(start ? { date: start, deadline: dl.date || start } : {}) };
+        });
+        const manual = dl.todos.filter(t => !t.deliverableId); // 로드맵에서 직접 추가한 산출물은 유지
+        const nextTodos = [...synced, ...manual];
+        const sig = (todos: typeof nextTodos, nm: string) => nm + ' ' + todos.map(t => `${t.id}:${t.name}:${t.done ? 1 : 0}:${t.deliverableId ?? ''}`).join('|');
+        if (sig(dl.todos, dl.name) === sig(nextTodos, proj.name)) return dl; // 변화 없으면 그대로 (불필요한 쓰기 방지)
+        changed = true;
+        return { ...dl, name: proj.name, todos: nextTodos };
+      });
+      if (changed) store.updateProgramInWs(selectedWsId, { ...pg, deadlines });
+    }
   };
   // Plan 프로젝트 날짜 변경 → 로드맵 데드라인(+하위 할일/task) 이동
   const syncDeadlineDates = (projectId: string, newStart?: string, newEnd?: string, oldStart?: string) => {
