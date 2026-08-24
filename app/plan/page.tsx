@@ -1842,6 +1842,7 @@ function GoalsSection({
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
+  const chat = useChatContext();
   const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
   const [editId, setEditId] = useState<string | null>(null);
@@ -1893,7 +1894,7 @@ function GoalsSection({
     );
   };
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
-  const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void) => (
+  const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void) => (
     <div className="flex items-start gap-2">
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
@@ -1905,6 +1906,11 @@ function GoalsSection({
       <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
         <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
       </div>
+      {onDiscuss && (
+        <button onClick={onDiscuss} title="AI와 이 내용을 다듬기" className="flex-shrink-0 mt-1.5 w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-violet-50" style={{ color: '#7C3AED' }}>
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+        </button>
+      )}
       <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1.5">×</button>
     </div>
   );
@@ -1999,6 +2005,8 @@ function GoalsSection({
                         v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: v } : x) }),
                         () => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).filter(x => x.id !== s.id) }),
                         '업무 영역', '이 영역의 전략 방향',
+                        undefined, undefined,
+                        () => chat?.openWithTarget(`업무 영역별 전략${s.area ? ` · ${s.area}` : ''} (목표: ${g.name})`, s.content, text => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: text } : x) })),
                       ))}
                       <button onClick={() => onUpdateGoal(g.id, { strategies: [...(g.strategies ?? []), { id: uid(), area: '', content: '' }] })} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 전략 추가</button>
                     </div>
@@ -2098,6 +2106,7 @@ function GoalsSection({
                                         '업무 영역', '이 영역의 결과물',
                                         a.done,
                                         () => (onToggleAreaDone ? onToggleAreaDone(p.id, a.id) : onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, done: !x.done } : x) })),
+                                        () => chat?.openWithTarget(`영역별 산출물${a.area ? ` · ${a.area}` : ''} (프로젝트: ${p.name})`, a.content, text => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, content: text } : x) })),
                                       ))}
                                       <button onClick={() => onUpdateProject(p.id, { areaDeliverables: [...(p.areaDeliverables ?? []), { id: uid(), area: '', content: '' }] })}
                                         className="w-full py-1.5 rounded-lg border-2 border-dashed border-neutral-200 text-[12px] text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물</button>

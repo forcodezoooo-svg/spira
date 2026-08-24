@@ -6,7 +6,7 @@ import { useToast } from './ToastContext';
 import { useUpgrade } from './UpgradeContext';
 import { isOnboardingActive } from './onboarding';
 import { createClient } from './supabase/client';
-import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER } from './ai/markers';
+import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, ITEM_REVISE_MARKER } from './ai/markers';
 import { FEEDBACK, AI_COPY } from './ai/messages';
 
 // 대화 내용에서 인식된 '앱에 자동 반영' 액션. 버튼으로 노출되며, 클릭 시 실제 반영(Pro/온보딩 게이트).
@@ -117,6 +117,9 @@ interface ChatContextType {
   sendMessage: (text: string, displayText?: string, opts?: SendOptions) => Promise<void>;
   applyAction: (idx: number) => void;
   openWithContext: (label: string, content: string) => void;
+  openWithTarget: (label: string, content: string, onRevise: (text: string) => void) => void;
+  reviseTargetLabel: string | null;
+  clearReviseTarget: () => void;
   registerPlanHandler: (handler: (patch: PlanPatch) => void) => void;
   unregisterPlanHandler: () => void;
   registerRoutineHandler: (handler: (routines: AISuggestedRoutine[]) => void) => void;
@@ -147,6 +150,10 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   const before = (marker: string) => full.split(marker)[0].trimEnd();
   const after = (marker: string) => full.split(marker)[1]?.trim() ?? '';
 
+  if (full.includes(ITEM_REVISE_MARKER)) {
+    const payload = tryParse(sliceObj(after(ITEM_REVISE_MARKER)));
+    if (payload && typeof (payload as { text?: unknown }).text === 'string') return { kind: 'plan', marker: ITEM_REVISE_MARKER, payload, route: '', label: '이 내용으로 반영', feedback: '선택한 항목에 반영했어요. 🌿', display: before(ITEM_REVISE_MARKER) };
+  }
   if (full.includes(PLAN_MARKER)) {
     const payload = tryParse(sliceObj(after(PLAN_MARKER)));
     if (payload) return { kind: 'plan', marker: PLAN_MARKER, payload, route: '/plan', label: 'Plan에 자동으로 채우기', feedback: FEEDBACK.planUpdated, display: before(PLAN_MARKER) };
@@ -234,6 +241,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   loadingRef.current = loading;
   const planHandlerRef = useRef<((patch: PlanPatch) => void) | null>(null);
   const planModeRef = useRef(false);
+  // 특정 항목 다듬기(item revise): 반영 대상 항목의 라벨 + 적용 콜백
+  const reviseHandlerRef = useRef<((text: string) => void) | null>(null);
+  const reviseTargetRef = useRef<string | null>(null);
+  const [reviseTargetLabel, setReviseTargetLabel] = useState<string | null>(null);
   const routineHandlerRef = useRef<((routines: AISuggestedRoutine[]) => void) | null>(null);
   const routineModeRef = useRef(false);
   const goalsHandlerRef = useRef<((ops: GoalsOperation[]) => void) | null>(null);
@@ -341,6 +352,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
     setMessages([]);
     localStorage.removeItem(CURRENT_KEY);
+    reviseHandlerRef.current = null; reviseTargetRef.current = null; setReviseTargetLabel(null); // 항목 다듬기 대상 해제
   }, []);
 
   const loadSession = useCallback((session: ChatSession) => {
@@ -387,7 +399,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, appContext: appContextRef.current }),
+        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, appContext: appContextRef.current, reviseTarget: reviseTargetRef.current }),
       });
 
       if (res.status === 429) {
@@ -412,7 +424,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         if (opts?.intro) continue; // 고정 문구 모드: 스트리밍 중엔 '생각 중' 상태 유지, 완료 시 intro+버튼 표시
 
-        const display = full.includes(PLAN_MARKER)
+        const display = full.includes(ITEM_REVISE_MARKER)
+          ? full.split(ITEM_REVISE_MARKER)[0].trimEnd()
+          : full.includes(PLAN_MARKER)
           ? full.split(PLAN_MARKER)[0].trimEnd()
           : full.includes(ROUTINE_MARKER)
           ? full.split(ROUTINE_MARKER)[0].trimEnd()
@@ -473,6 +487,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (marker === QUARTER_PLAN_MARKER && quarterPlanHandlerRef.current) { quarterPlanHandlerRef.current(payload as QuarterPlan[]); return true; }
     if (marker === AREA_ASSIGN_MARKER && areaAssignHandlerRef.current) { areaAssignHandlerRef.current(payload as AreaAssignment[]); return true; }
     if (marker === PROJECT_ASSIGN_MARKER && projectAssignHandlerRef.current) { projectAssignHandlerRef.current(payload as ProjectAssignPlan[]); return true; }
+    if (marker === ITEM_REVISE_MARKER && reviseHandlerRef.current) { reviseHandlerRef.current((payload as { text: string }).text); return true; }
     return false;
   }, []);
 
@@ -527,6 +542,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     sendMessage(msg);
   }, [sendMessage, setOpen]);
 
+  // 특정 항목을 채팅의 '반영 대상'으로 고정하고, 그 항목을 함께 다듬기 시작한다.
+  // onRevise: AI가 최종 내용을 내면 '적용' 시 이 콜백으로 그 항목에 반영된다.
+  const openWithTarget = useCallback((label: string, content: string, onRevise: (text: string) => void) => {
+    if (loadingRef.current) return;
+    reviseHandlerRef.current = onRevise;
+    reviseTargetRef.current = label;
+    setReviseTargetLabel(label);
+    setOpen(true);
+    const msg = `[${label}] 이 항목을 함께 다듬을게요.\n현재 내용:\n${content.trim() || '(비어 있음)'}\n\n어떻게 바꾸고 싶은지 편하게 말해줘. 내용이 정해지면 '적용' 버튼으로 이 항목에 바로 반영할 수 있어.`;
+    sendMessage(msg, `"${label}" 다듬기`);
+  }, [sendMessage, setOpen]);
+  const clearReviseTarget = useCallback(() => { reviseHandlerRef.current = null; reviseTargetRef.current = null; setReviseTargetLabel(null); }, []);
+
   const registerPlanHandler = useCallback((handler: (patch: PlanPatch) => void) => {
     planHandlerRef.current = handler;
     planModeRef.current = true;
@@ -554,6 +582,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     <ChatContext.Provider value={{
       open, setOpen, messages, loading,
       sendMessage, applyAction, openWithContext,
+      openWithTarget, reviseTargetLabel, clearReviseTarget,
       registerPlanHandler, unregisterPlanHandler,
       registerRoutineHandler, unregisterRoutineHandler,
       sessions, loadSession, deleteSession, newChat,

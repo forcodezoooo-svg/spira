@@ -391,6 +391,16 @@ export default function AIChatButton() {
                 <div ref={bottomRef} />
               </div>
 
+              {chat?.reviseTargetLabel && (
+                <div className="px-3 pt-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 rounded-xl px-3 py-1.5" style={{ backgroundColor: '#F3F0FF' }}>
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#7C3AED' }}><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                    <span className="text-[12px] font-semibold truncate flex-1 min-w-0" style={{ color: '#5B4B8A' }}>‘{chat.reviseTargetLabel}’ 다듬는 중 · 적용하면 이 항목에 반영</span>
+                    <button onClick={() => chat.clearReviseTarget()} className="text-[13px] flex-shrink-0" style={{ color: '#9AA39D' }} title="대상 해제">×</button>
+                  </div>
+                </div>
+              )}
+
               <div className="px-3 py-3 border-t flex gap-2 items-end flex-shrink-0" style={{ borderColor: 'var(--spira-border)' }}>
                 <textarea
                   ref={inputRef}
