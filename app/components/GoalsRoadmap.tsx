@@ -407,8 +407,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       }
     }
   }
-  // '우선' 표시된 카테고리를 맨 앞으로 (그 외는 로드맵 순서 유지 — 안정 정렬)
-  kbCols.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  // '우선' 먼저, 그 다음 디데이(기한) 가까운 순
+  kbCols.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.due || '9999-99-99').localeCompare(b.due || '9999-99-99'));
   // 전체 task(subtask) 색인 — 선행(dependsOn) 이름/완료 표시용
   const subById = new Map<string, { name: string; done: boolean }>();
   for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) subById.set(s.id, { name: s.name, done: s.done });
@@ -615,7 +615,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
-  const barH = (lvl: number) => lvl === 0 ? 24 : lvl === 1 ? 24 : lvl === 2 ? 20 : lvl === 3 ? 17 : 15;
+  const barH = (lvl: number) => lvl === 0 ? 28 : lvl === 1 ? 21 : lvl === 2 ? 15 : lvl === 3 ? 13 : 12; // 위계별 높이 차이
   const pgOrder = new Map<string, number>(); roadmapPrograms.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
   // 선택 아이템 빌더 + 체크 표시
   const rowSel = (r: Row): SelItem => ({ key: r.key, kind: r.kind, name: r.name, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, deadline: r.end });
@@ -632,12 +632,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
           ))}
         </div>
-        {kanban && catTarget && (
-          <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-            카테고리 추가{store.boardTemplates.length > 0 ? ` · 템플릿 ${store.boardTemplates.length}` : ''}
-          </button>
-        )}
         {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
       </div>
 
@@ -693,12 +687,22 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       )}
 
       {kanban ? (
-        /* 칸반: 영역별 산출물(칸) 안에 task 카드 — 산출물끼리 드래그로 이동 */
-        kbCols.length === 0 ? (
-          <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
-        ) : (
-        <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
-          {kbCols.map(col => (
+        /* 칸반: 타이틀 영역(우측 카테고리 추가) + 영역별 산출물(칸) */
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex items-center justify-between mb-2 flex-shrink-0">
+            <span className="text-[13px] font-bold" style={{ color: '#5B6560' }}>카테고리{kbCols.length > 0 ? ` · ${kbCols.length}` : ''}</span>
+            {catTarget && (
+              <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                카테고리 추가{store.boardTemplates.length > 0 ? ` · 템플릿 ${store.boardTemplates.length}` : ''}
+              </button>
+            )}
+          </div>
+          {kbCols.length === 0 ? (
+            <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
+          ) : (
+          <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
+            {kbCols.map(col => (
             <div key={col.todoId} className="flex flex-col min-h-0 w-[264px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
@@ -780,8 +784,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             </div>
           ))}
+          </div>
+          )}
         </div>
-        )
       ) : (
       /* 간트: 좌측 트리(고정) + 우측 타임라인(연속 가로/세로 스크롤) */
       <div ref={scrollRef} onScroll={e => updateVisLabel(e.currentTarget)} className="flex-1 min-h-0 overflow-auto overscroll-contain border rounded-xl" style={{ borderColor: 'var(--spira-border-subtle)' }} onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
@@ -850,10 +855,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
-                        className="group/bar absolute top-1/2 -translate-y-1/2 rounded-lg border flex items-center cursor-pointer overflow-hidden"
-                        style={{ left, width: Math.max(width, 6), height: barH(r.level), backgroundColor: `${r.color}${r.level === 0 ? '3A' : r.level === 1 ? '2A' : r.level === 2 ? '1C' : r.level === 3 ? '16' : '12'}`, borderColor: r.color, opacity: dragging ? 0.95 : 1, boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : '0 1px 2px rgba(0,0,0,0.04)', zIndex: hl ? 5 : 1 }}
+                        className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer overflow-hidden"
+                        style={{
+                          left, width: Math.max(width, r.level === 0 ? 14 : 6), height: barH(r.level),
+                          // 위계: 사업목표=진한 단색, 프로젝트=반투명 채움+테두리, 산출물 이하=흰 배경+점선 테두리
+                          backgroundColor: r.level === 0 ? r.color : r.level === 1 ? `${r.color}59` : '#ffffff',
+                          border: r.level === 0 ? `1px solid ${r.color}` : `1.5px ${r.level >= 2 ? 'dashed' : 'solid'} ${r.color}`,
+                          borderRadius: r.level === 0 ? 8 : r.level === 1 ? 6 : 5,
+                          opacity: dragging ? 0.95 : 1,
+                          boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : (r.level === 0 ? '0 2px 5px rgba(0,0,0,0.15)' : r.level === 1 ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'),
+                          zIndex: hl ? 6 : r.level === 0 ? 4 : r.level === 1 ? 2 : 1,
+                        }}
                         title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동${r.level > 0 ? ' · 양끝: 기간 조절' : ''}`}>
-                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level <= 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: '#16211E' }}>{r.name}</span>
+                        {r.level >= 2 && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: r.color }} />}
+                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level === 0 ? 12 : r.level === 1 ? 11 : 10, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 700 : 500, color: r.level === 0 ? '#fff' : '#16211E', textShadow: r.level === 0 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
                         {r.level > 0 && <>
                           <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                           <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
