@@ -243,13 +243,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   };
 
   const centerDateRef = useRef(todayStr); // 현재 화면 중앙 날짜 (줌 시 위치 유지용)
-  // 초기/enterLevel 목표가 있으면 그곳으로, 없으면 오늘로 스크롤
+  // 최초 진입 시 오늘로 중앙 정렬 (한 번만)
   useEffect(() => {
     const el = scrollRef.current; if (!el) return;
-    const t = scrollTarget || todayStr;
-    el.scrollTo({ left: Math.max(0, xOf(t) - el.clientWidth / 2), behavior: scrollTarget ? 'smooth' : 'auto' });
+    el.scrollLeft = Math.max(0, xOf(todayStr) - el.clientWidth / 2);
     updateVisLabel(el);
-    if (scrollTarget) setScrollTarget(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 리스트 항목 클릭 등으로 scrollTarget이 잡히면 그 위치로 스무스 스크롤 (완료 후 초기화 — 오늘로 되돌아가지 않음)
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const el = scrollRef.current; if (!el) return;
+    el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - el.clientWidth / 2), behavior: 'smooth' });
+    updateVisLabel(el);
+    setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollTarget]);
   // 줌 변경 시: 화면 중앙 날짜를 그대로 유지 (좌우로 튀지 않게)

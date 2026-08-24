@@ -2896,7 +2896,37 @@ export default function PlanPage() {
     });
     toast(`‘${goal.name}’을(를) Goals 로드맵으로 가져왔어요. 🌿`, 'success');
   };
-  const updateProject = (id: string, patch: Partial<Project>) => update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
+  const updateProject = (id: string, patch: Partial<Project>) => {
+    const prev = (plan.projects ?? []).find(p => p.id === id);
+    update({ projects: (plan.projects ?? []).map(p => p.id === id ? { ...p, ...patch } : p) });
+    // 시작일/종료일이 바뀌면 Goals 로드맵의 대응 프로젝트(데드라인)도 함께 이동
+    if ((patch.startDate !== undefined || patch.endDate !== undefined) && prev) {
+      syncDeadlineDates(id, patch.startDate ?? prev.startDate, patch.endDate ?? prev.endDate, prev.startDate);
+    }
+  };
+  // Plan 프로젝트 날짜 변경 → 로드맵 데드라인(+하위 할일/task) 이동
+  const syncDeadlineDates = (projectId: string, newStart?: string, newEnd?: string, oldStart?: string) => {
+    if (!selectedWsId) return;
+    const addDaysS = (ds: string, n: number) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const daysBtw = (a: string, b: string) => Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    for (const pg of ws?.programs ?? []) {
+      let changed = false;
+      const deadlines = (pg.deadlines ?? []).map(dl => {
+        if (dl.projectId !== projectId) return dl;
+        changed = true;
+        const base = dl.startDate || oldStart; // 이동 기준(기존 시작일)
+        const delta = newStart && base ? daysBtw(base, newStart) : 0;
+        const shift = (d?: string) => (d && delta ? addDaysS(d, delta) : d);
+        const todos = dl.todos.map(t => ({
+          ...t, date: shift(t.date), deadline: shift(t.deadline),
+          subtasks: (t.subtasks ?? []).map(s => ({ ...s, date: shift(s.date), deadline: shift(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: shift(u.date), deadline: shift(u.deadline) })) })),
+        }));
+        return { ...dl, startDate: newStart || dl.startDate, date: newEnd || shift(dl.date) || dl.date, todos };
+      });
+      if (changed) store.updateProgramInWs(selectedWsId, { ...pg, deadlines });
+    }
+  };
   // 영역별 산출물 완료 토글 — Plan에 반영 + Goals(카테고리 보드)의 대응 산출물(todo) 완료 동기화
   const toggleAreaDeliverableDone = (projectId: string, deliverableId: string) => {
     const proj = (plan.projects ?? []).find(p => p.id === projectId);
