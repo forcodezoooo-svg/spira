@@ -455,7 +455,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         const tasks: ParallelTask[] = [];
         for (const t of dl.todos) for (const s of (t.subtasks ?? [])) {
           if (s.done || s.schedulingType === 'fixed' || (s.days?.length)) continue; // 완료·고정·반복 제외
-          tasks.push({ subtaskId: s.id, dur: s.durationMin ?? 60, deadline: s.deadline, earliest });
+          // 상한은 task 자기 날짜가 아니라 '산출물/프로젝트 실제 기한' — 그래야 제자리에 고정되지 않고 펼쳐짐
+          const cap = t.deadline || dl.date || undefined;
+          tasks.push({ subtaskId: s.id, dur: s.durationMin ?? 60, deadline: cap, earliest });
         }
         if (tasks.length) groups.push({ tasks });
       }
@@ -469,15 +471,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       if (changed) store.updateProgramInWs(p.wsId, { ...prog, deadlines });
     }
   };
-  // task가 새로 추가되면 자동으로 병행 배치 (프로젝트 시작일을 읽어 같은 시기 프로젝트는 동시 진행)
+  // 자동 병행 배치: 로드맵/보드를 볼 때와 task 집합(추가/완료)이 바뀔 때마다,
+  // 프로젝트 시작일(캘린더 일정)을 읽어 같은 시기 프로젝트를 동시 진행되도록 다시 배치.
+  // (subtask id 목록을 서명으로 사용 — 날짜만 바뀌는 재배치 자신은 서명이 그대로라 무한루프 없음)
   const allSubIdsSig = programs.flatMap(p => (p.deadlines ?? []).flatMap(dl => (dl.todos ?? []).flatMap(t => (t.subtasks ?? []).map(s => s.id)))).sort().join(',');
-  const prevSubIdsRef = useRef<Set<string> | null>(null);
   useEffect(() => {
-    const cur = new Set(allSubIdsSig ? allSubIdsSig.split(',') : []);
-    if (prevSubIdsRef.current === null) { prevSubIdsRef.current = cur; return; } // 최초 진입은 기존 일정 유지
-    const hasNew = [...cur].some(id => !prevSubIdsRef.current!.has(id));
-    prevSubIdsRef.current = cur;
-    if (hasNew) parallelReschedule(); // 새 task가 생겼을 때만 (날짜 변경/완료는 재배치 안 함)
+    parallelReschedule();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allSubIdsSig]);
   // D-day 계산 + 배지 스타일
