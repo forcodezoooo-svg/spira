@@ -320,7 +320,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       for (const dl of (p.deadlines ?? []).filter(d => dlVisible(p.wsId, d))) {
         for (const t of dl.todos.filter(t => !t.done)) {
           const ts = t.date || t.deadline, te = t.deadline || t.date;
-          flat.push({ key: `t-${t.id}`, level: 1, kind: 'todo', name: t.name, subName: dl.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, due: t.deadline || t.date || '9999-99-99' });
+          // 디데이 = 산출물 자체 마감 우선, 없으면 상위 프로젝트 마감으로 폴백(날짜 없는 산출물도 제대로 정렬)
+          const due = t.deadline || t.date || dl.date || '9999-99-99';
+          flat.push({ key: `t-${t.id}`, level: 1, kind: 'todo', name: t.name, subName: dl.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, due });
         }
       }
     }
