@@ -45,13 +45,32 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
     store.setDateCapacityOverride(ovDate, h);
     setOvDate(''); setOvHours('');
   };
-  // 이 주에 배당된 업무를 새 스케줄에 맞춰 재배치
-  const redistribute = () => {
-    const moves = redistributeWeekTasks(store.allWorkspacesEntries, base, capacity, weekStart, todayStr);
+  // 주어진 스케줄(capNext) 기준으로 이 주 업무를 재배치. verbose면 '옮길 게 없어요'도 안내
+  const applyRedistribute = (capNext: typeof capacity, verbose: boolean) => {
+    const moves = redistributeWeekTasks(store.allWorkspacesEntries, base, capNext, weekStart, todayStr);
     for (const m of moves) store.updateProgramSubtask(m.task.wsId, m.task.programId, m.task.deadlineId, m.task.todoId, m.task.subtaskId, { date: m.toDate, deadline: m.toDate });
-    setRedistMsg(moves.length ? `${moves.length}개 업무를 새 시간표에 맞춰 옮겼어요.` : '옮길 업무가 없어요 (이미 시간표에 맞아요).');
-    setTimeout(() => setRedistMsg(''), 3500);
+    if (moves.length) setRedistMsg(`${moves.length}개 업무를 새 시간표에 맞춰 옮겼어요.`);
+    else if (verbose) setRedistMsg('옮길 업무가 없어요 (이미 시간표에 맞아요).');
+    if (moves.length || verbose) setTimeout(() => setRedistMsg(''), 3500);
   };
+  // 요일 근무 on/off 토글 → 그 주 스케줄 즉시 반영 + 자동 재배치
+  const toggleDay = (i: number, on: boolean) => {
+    const nextSched = weekSched.map((w, j) => (j === i ? { ...w, on } : w));
+    store.setWeekWorkDay(weekStart, i, { on });
+    applyRedistribute({ ...capacity, weekSchedules: { ...(capacity.weekSchedules ?? {}), [weekStart]: nextSched } }, false);
+  };
+  // 시간(시작/종료) 변경 → 반영 + 자동 재배치
+  const editDayTime = (i: number, patch: { start?: string; end?: string }) => {
+    const nextSched = weekSched.map((w, j) => (j === i ? { ...w, ...patch } : w));
+    store.setWeekWorkDay(weekStart, i, patch);
+    applyRedistribute({ ...capacity, weekSchedules: { ...(capacity.weekSchedules ?? {}), [weekStart]: nextSched } }, false);
+  };
+  const resetWeek = () => {
+    store.resetWeekSchedule(weekStart);
+    const w = { ...(capacity.weekSchedules ?? {}) }; delete w[weekStart];
+    applyRedistribute({ ...capacity, weekSchedules: w }, false);
+  };
+  const redistribute = () => applyRedistribute(capacity, true);
 
   const openModal = () => { setWeekStart(thisWeekStart); setOpen(true); };
 
@@ -107,12 +126,12 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
                 const bad = wd.on && hrs === 0;
                 return (
                   <div key={i} className="flex items-center gap-2.5 rounded-xl border px-3 py-2 transition-colors" style={{ borderColor: wd.on ? '#BCE89A' : 'var(--spira-border-subtle)', backgroundColor: wd.on ? '#F8FBF3' : '#FBFBF9' }}>
-                    <button onClick={() => store.setWeekWorkDay(weekStart, i, { on: !wd.on })} className="w-10 flex-shrink-0 text-[14px] font-bold rounded-lg py-1.5 transition-colors" style={wd.on ? { backgroundColor: '#9DFE3B', color: '#16211E' } : { backgroundColor: '#F0F0EA', color: '#9AA39D' }} title={wd.on ? '휴무로 전환' : '근무로 전환'}>{DOW[i]}</button>
+                    <button onClick={() => toggleDay(i, !wd.on)} className="w-10 flex-shrink-0 text-[14px] font-bold rounded-lg py-1.5 transition-colors" style={wd.on ? { backgroundColor: '#9DFE3B', color: '#16211E' } : { backgroundColor: '#F0F0EA', color: '#9AA39D' }} title={wd.on ? '휴무로 전환' : '근무로 전환'}>{DOW[i]}</button>
                     {wd.on ? (
                       <>
-                        <input type="time" value={wd.start} onChange={e => store.setWeekWorkDay(weekStart, i, { start: e.target.value })} className="text-[13px] tabular-nums bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+                        <input type="time" value={wd.start} onChange={e => editDayTime(i, { start: e.target.value })} className="text-[13px] tabular-nums bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
                         <span className="text-[13px]" style={{ color: '#9AA39D' }}>~</span>
-                        <input type="time" value={wd.end} onChange={e => store.setWeekWorkDay(weekStart, i, { end: e.target.value })} className="text-[13px] tabular-nums bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400" style={{ borderColor: bad ? '#FF696C' : 'var(--spira-border)' }} />
+                        <input type="time" value={wd.end} onChange={e => editDayTime(i, { end: e.target.value })} className="text-[13px] tabular-nums bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400" style={{ borderColor: bad ? '#FF696C' : 'var(--spira-border)' }} />
                         <span className="ml-auto text-[12px] font-semibold tabular-nums flex-shrink-0" style={{ color: bad ? '#FF696C' : '#7A9463' }}>{bad ? '시간 오류' : `${fmtH(hrs)}시간`}</span>
                       </>
                     ) : (
@@ -130,7 +149,7 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
                 이 주 업무 재배치
               </button>
               {hasOverride && (
-                <button onClick={() => store.resetWeekSchedule(weekStart)} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>기본 스케줄로</button>
+                <button onClick={resetWeek} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>기본 스케줄로</button>
               )}
               {redistMsg && <span className="text-[11px] font-semibold" style={{ color: '#3E7A2E' }}>{redistMsg}</span>}
             </div>
