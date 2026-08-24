@@ -519,16 +519,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
           {kbAreas.map(grp => {
             const total = grp.cols.reduce((n, c) => n + c.subtasks.length, 0);
+            const twoCol = grp.cols.length > 1; // 산출물이 여러 개면 2칼럼으로 가로 확장
             return (
-            <div key={grp.area} className="flex flex-col min-h-0 w-[264px] flex-shrink-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
+            <div key={grp.area} className={`flex flex-col min-h-0 flex-shrink-0 rounded-xl border ${twoCol ? 'w-[524px]' : 'w-[264px]'}`} style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
               {/* 업무 영역 헤더 */}
               <div className="px-3 py-2 border-b flex items-center gap-1.5 min-w-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(grp.wsId) }} />
                 <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{grp.area}</span>
                 <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{total}</span>
               </div>
-              {/* 산출물별 구분 */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-3">
+              {/* 산출물별 구분 (여러 개면 2칼럼 그리드) */}
+              <div className={`flex-1 min-h-0 overflow-y-auto p-2 ${twoCol ? 'grid grid-cols-2 gap-3 items-start' : 'space-y-3'}`}>
                 {grp.cols.map(col => (
                   <div key={col.todoId} className="rounded-lg" onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
                     {/* 산출물 소제목 + 기한 */}
