@@ -27,7 +27,6 @@ const LABEL_W = 240;
 const ROW_H = 34;
 const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주']];
 const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
@@ -51,7 +50,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
   const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-  const [scale, setScale] = useState<Scale>('month');
+  const [pxPerDay, setPxPerDay] = useState(20); // 날짜 간격(줌). 연/월/주 구분 대신 연속 줌
+  const ZMIN = 3, ZMAX = 110;
+  const gran: Scale = pxPerDay < 8 ? 'year' : pxPerDay < 40 ? 'month' : 'week'; // 줌 정도에 따라 눈금/라벨 밀도만 결정
   const [kanban, setKanban] = useState(false); // 칸반 탭 여부
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
   const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
@@ -80,7 +81,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [catName, setCatName] = useState('');
   const boardRef = useRef<HTMLDivElement>(null);
-  const maxDepth = scale === 'year' ? 0 : scale === 'month' ? 1 : 2; // 연0/월1/주2 (task 이하는 칸반)
+  const maxDepth = 2; // 줌과 무관하게 전체 트리(목표>프로젝트>산출물)를 기본 펼침, 화살표로 접기
   const isOpen = (key: string, level: number) => (openMap.has(key) ? openMap.get(key)! : level < maxDepth); // 화살표로 오버라이드 가능
   const toggleOpen = (key: string, level: number) => setOpenMap(prev => { const n = new Map(prev); n.set(key, !(prev.has(key) ? prev.get(key)! : level < maxDepth)); return n; });
 
@@ -92,8 +93,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const cfg = CFG[scale];
-  const LEVEL_SCALE: Scale[] = ['year', 'month', 'week']; // 0=목표→연,1=프로젝트→월,2=산출물→주 (task 이하는 칸반)
+  const cfg = CFG[gran]; // buffer/minSpan만 gran에서, pxPerDay는 연속 줌 값 사용
 
   // ── 표시 범위(연속) ──
   const allDates: string[] = [];
@@ -109,10 +109,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   if (span < cfg.minSpan) { const extra = cfg.minSpan - span; lo = addDaysStr(lo, -Math.ceil(extra / 2)); hi = addDaysStr(hi, Math.floor(extra / 2)); span = cfg.minSpan; }
   if (span > SPAN_CAP) { lo = addDaysStr(todayStr, -Math.floor(SPAN_CAP / 2)); hi = addDaysStr(lo, SPAN_CAP - 1); span = SPAN_CAP; }
   const rangeStart = lo;
-  const contentWidth = span * cfg.pxPerDay;
-  const xOf = (d: string) => daysBetween(rangeStart, d) * cfg.pxPerDay;
-  const wOf = (s: string, e: string) => (daysBetween(s, e) + 1) * cfg.pxPerDay;
-  const dateFromClientX = (x: number): string | null => { const r = timelineRef.current?.getBoundingClientRect(); if (!r) return null; const di = Math.floor((x - r.left) / cfg.pxPerDay); return addDaysStr(rangeStart, clampN(di, 0, span - 1)); };
+  const contentWidth = span * pxPerDay;
+  const xOf = (d: string) => daysBetween(rangeStart, d) * pxPerDay;
+  const wOf = (s: string, e: string) => (daysBetween(s, e) + 1) * pxPerDay;
+  const dateFromClientX = (x: number): string | null => { const r = timelineRef.current?.getBoundingClientRect(); if (!r) return null; const di = Math.floor((x - r.left) / pxPerDay); return addDaysStr(rangeStart, clampN(di, 0, span - 1)); };
 
   // ── 배치 범위 제한 ──
   type Bounds = { min?: string; max?: string };
@@ -242,7 +242,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     }
   };
 
-  // 초기/스케일 변경 시: enterLevel 목표가 있으면 그곳으로, 없으면 오늘로 스크롤
+  const centerDateRef = useRef(todayStr); // 현재 화면 중앙 날짜 (줌 시 위치 유지용)
+  // 초기/enterLevel 목표가 있으면 그곳으로, 없으면 오늘로 스크롤
   useEffect(() => {
     const el = scrollRef.current; if (!el) return;
     const t = scrollTarget || todayStr;
@@ -250,13 +251,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     updateVisLabel(el);
     if (scrollTarget) setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scale, scrollTarget]);
-  const fmtVis = (d: string) => { const dd = new Date(d); return scale === 'year' ? `${dd.getFullYear()}년` : scale === 'week' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
-  const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / cfg.pxPerDay), 0, span - 1); setVisLabel(fmtVis(addDaysStr(rangeStart, di))); };
+  }, [scrollTarget]);
+  // 줌 변경 시: 화면 중앙 날짜를 그대로 유지 (좌우로 튀지 않게)
+  useEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    el.scrollLeft = Math.max(0, xOf(centerDateRef.current) - el.clientWidth / 2);
+    updateVisLabel(el);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pxPerDay]);
+  const fmtVis = (d: string) => { const dd = new Date(d); return gran === 'year' ? `${dd.getFullYear()}년` : gran === 'week' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
+  const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / pxPerDay), 0, span - 1); const cd = addDaysStr(rangeStart, di); centerDateRef.current = cd; setVisLabel(fmtVis(cd)); };
   const scrollByScreen = (dir: -1 | 1) => { const el = scrollRef.current; if (!el) return; el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' }); };
   const scrollToToday = () => { const el = scrollRef.current; if (!el) return; el.scrollTo({ left: Math.max(0, xOf(todayStr) - el.clientWidth / 2), behavior: 'smooth' }); };
-  // 라벨 텍스트 클릭 → 그 단계의 카테고리(스케일)로 전환 + 그 항목으로 스크롤 (하위는 스케일이 자동으로 가림)
-  const enterLevel = (r: Row) => { setSelectedKey(r.key); setOpenMap(new Map()); setScale(LEVEL_SCALE[Math.min(r.level, 2)]); setScrollTarget(r.start ?? r.end ?? null); };
+  // 라벨/막대 클릭 → 그 항목 선택 + 해당 시점으로 스크롤 (줌은 그대로 유지)
+  const enterLevel = (r: Row) => { setSelectedKey(r.key); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
@@ -350,7 +358,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   // ── 카테고리 보드: 업무 영역을 '칸'으로, 그 안에서 산출물별로 구분, 하위 task 카드 ──
   type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
-  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; due: string; subtasks: Sub[] };
+  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; due: string; pinned: boolean; subtasks: Sub[] };
   const parseArea = (name: string) => { const m = name.match(/^(.*?)\s*[:：]\s*(.*)$/); return { area: (m ? m[1] : name).trim(), goalSub: m ? m[2].trim() : '' }; };
   const kbScope = resolveChain(selectedKey);
   const kbCols: KbCol[] = [];
@@ -362,10 +370,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
         if (kbScope.todoId && kbScope.todoId !== t.id) continue;
         const { area, goalSub } = parseArea(t.name);
-        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', subtasks: (t.subtasks ?? []) });
+        // task는 디데이(기한) 순서대로 배치 (완료는 뒤로, 기한 없는 건 맨 뒤)
+        const subs = [...(t.subtasks ?? [])].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs });
       }
     }
   }
+  // '우선' 표시된 카테고리를 맨 앞으로 (그 외는 로드맵 순서 유지 — 안정 정렬)
+  kbCols.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
   // 전체 task(subtask) 색인 — 선행(dependsOn) 이름/완료 표시용
   const subById = new Map<string, { name: string; done: boolean }>();
   for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) subById.set(s.id, { name: s.name, done: s.done });
@@ -435,6 +447,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
+  const kbTogglePin = (col: KbCol) => store.updateProgramTodo(col.p.wsId, col.p.id, col.dlId, col.todoId, { pinned: !col.pinned });
   const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); setFormDays([]); };
   const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); setFormDays(s.days ?? []); };
   const kbSubmitForm = () => {
@@ -522,12 +535,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // ── 그리드/눈금/오늘 (px, 범위 전체) ──
   const dayLines: number[] = []; const strongLines: number[] = []; const labels: { x: number; text: string }[] = [];
   for (let i = 0; i < span; i++) {
-    const d = addDaysStr(rangeStart, i); const dd = new Date(d); const x = i * cfg.pxPerDay; const dow = dd.getDay(); const dom = dd.getDate();
-    if (scale === 'year') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: dd.getMonth() === 0 ? `${dd.getFullYear()}년` : `${dd.getMonth() + 1}월` }); } }
-    else if (scale === 'month') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getFullYear()}.${dd.getMonth() + 1}` }); } else if (dow === 1) { dayLines.push(x); labels.push({ x, text: `${dom}` }); } }
+    const d = addDaysStr(rangeStart, i); const dd = new Date(d); const x = i * pxPerDay; const dow = dd.getDay(); const dom = dd.getDate();
+    if (gran === 'year') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: dd.getMonth() === 0 ? `${dd.getFullYear()}년` : `${dd.getMonth() + 1}월` }); } }
+    else if (gran === 'month') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getFullYear()}.${dd.getMonth() + 1}` }); } else if (dow === 1) { dayLines.push(x); labels.push({ x, text: `${dom}` }); } }
     else { if (dow === 1 || dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}` }); } else dayLines.push(x); }
   }
-  const todayX = xOf(todayStr) + cfg.pxPerDay / 2;
+  const todayX = xOf(todayStr) + pxPerDay / 2;
   void schedule; void DOW;
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
@@ -568,9 +581,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             </button>
           </div>
           <div className="flex items-center gap-2 mb-3">
-            <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#F1F1EB' }}>
-              {SCALES.map(([s, label]) => (<button key={s} onClick={() => setScale(s)} className="flex-1 py-1.5 rounded-full text-[13px] font-semibold transition-colors" style={scale === s ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>))}
+            {/* 줌 인/아웃 — 날짜 간격 조절 (연/월/주 구분 없이 연속) */}
+            <div className="flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: '#F1F1EB' }}>
+              <button onClick={() => setPxPerDay(v => clampN(Math.round(v / 1.4), ZMIN, ZMAX))} disabled={pxPerDay <= ZMIN} className="w-8 h-7 rounded-full flex items-center justify-center transition-colors hover:bg-white disabled:opacity-30" title="축소 (날짜 간격 좁게)"><svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" style={{ color: '#5B6560' }}><path d="M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
+              <input type="range" min={ZMIN} max={ZMAX} step={1} value={pxPerDay} onChange={e => setPxPerDay(Number(e.target.value))} className="w-24 accent-violet-500" title="줌" />
+              <button onClick={() => setPxPerDay(v => clampN(Math.round(v * 1.4), ZMIN, ZMAX))} disabled={pxPerDay >= ZMAX} className="w-8 h-7 rounded-full flex items-center justify-center transition-colors hover:bg-white disabled:opacity-30" title="확대 (날짜 간격 넓게)"><svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" style={{ color: '#5B6560' }}><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg></button>
             </div>
+            <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>{gran === 'year' ? '연 단위' : gran === 'month' ? '월 단위' : '주 단위'}</span>
+            <span className="flex-1" />
             <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>
           </div>
           {offOpen && (
@@ -600,12 +618,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         ) : (
         <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
           {kbCols.map(col => (
-            <div key={col.todoId} className="flex flex-col min-h-0 w-[264px] flex-shrink-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
+            <div key={col.todoId} className="flex flex-col min-h-0 w-[264px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
-              <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+              <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
                 <div className="group/col flex items-center gap-1.5 min-w-0">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
+                  <button onClick={() => kbTogglePin(col)} title={col.pinned ? '우선 해제' : '우선 표시 (맨 앞으로)'} className="flex-shrink-0 transition-transform hover:scale-110">
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill={col.pinned ? '#F0B429' : 'none'} stroke={col.pinned ? '#F0B429' : '#C7CEC7'} strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8L10 2z" strokeLinejoin="round" /></svg>
+                  </button>
                   <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
                   {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>

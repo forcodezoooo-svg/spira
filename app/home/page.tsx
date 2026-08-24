@@ -124,7 +124,7 @@ export default function Home() {
   const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow)
     .filter(t => !store.homeHiddenToday.includes(t.key));
   // 캘린더(Plan에서 가져온 목표)에 오늘 날짜로 배치된 task(세부 산출물 하위 task)
-  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true });
+  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true, carryUnits: true });
   // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
   const toggleSubtaskDone = (t: SubtaskTask) => {
     if (t.days?.length) {
@@ -833,7 +833,7 @@ export default function Home() {
 
         {/* 선택한 날짜의 업무 목록 (캘린더에서 다른 날짜를 클릭하면 표시) */}
         {selectedCalDate && (() => {
-          const list = getSubtaskTasksForDate(store.allWorkspacesEntries, selectedCalDate, { onlyFromPlan: true });
+          const list = getSubtaskTasksForDate(store.allWorkspacesEntries, selectedCalDate, { onlyFromPlan: true, carryUnits: true });
           const d = new Date(selectedCalDate + 'T00:00:00');
           const label = `${d.getMonth() + 1}월 ${d.getDate()}일 ${DOW[d.getDay()]}요일`;
           return (
