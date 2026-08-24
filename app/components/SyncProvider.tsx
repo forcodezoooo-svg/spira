@@ -23,6 +23,7 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
   const [synced, setSynced] = useState(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<AppData | null>(null); // 아직 서버로 못 올린 최신 데이터(디바운스 대기 중)
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -33,6 +34,7 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       return;
     }
     let cancelled = false;
+    let flushCleanup: (() => void) | null = null;
 
     (async () => {
       const uid = user.id;
@@ -46,7 +48,8 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
         // 서버에 데이터 있음. 단, 같은 사용자의 로컬이 더 최신(아직 서버에 못 올린 변경)이면 로컬을 유지.
         const prevUid = localStorage.getItem(UID_KEY);
         const local = load();
-        const localNewer = prevUid === uid && (local.workspaces?.length ?? 0) > 0 && (local.updatedAt ?? 0) > (server.updatedAt ?? 0);
+        // 같은 사용자면 이 기기의 로컬을 우선(서버가 '엄격히' 더 최신일 때만 서버 채택) → 새로고침 시 로컬 유실 방지
+        const localNewer = prevUid === uid && (local.workspaces?.length ?? 0) > 0 && (local.updatedAt ?? 0) >= (server.updatedAt ?? 0);
         if (localNewer) {
           try { await upsertAppData(supabase, uid, local); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);
@@ -90,9 +93,26 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
 
       // 이후 변경사항을 디바운스(800ms)로 서버에 저장
       setServerPusher((d: AppData) => {
+        pendingRef.current = d;
         if (pushTimer.current) clearTimeout(pushTimer.current);
-        pushTimer.current = setTimeout(() => { void save(d); }, 800);
+        pushTimer.current = setTimeout(() => { pendingRef.current = null; void save(d); }, 800);
       });
+
+      // 페이지 이탈/숨김 시 디바운스 대기 중인 변경을 즉시 서버로 flush (새로고침·탭전환 시 유실 방지)
+      const flush = () => {
+        const d = pendingRef.current;
+        if (!d) return;
+        pendingRef.current = null;
+        if (pushTimer.current) clearTimeout(pushTimer.current);
+        try { void upsertAppData(supabase, uid, d); } catch { /* best-effort */ }
+      };
+      const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+      window.addEventListener('pagehide', flush);
+      document.addEventListener('visibilitychange', onHide);
+      flushCleanup = () => {
+        window.removeEventListener('pagehide', flush);
+        document.removeEventListener('visibilitychange', onHide);
+      };
 
       if (!cancelled) setSynced(true);
     })();
@@ -102,6 +122,7 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
       setServerPusher(null);
       if (pushTimer.current) clearTimeout(pushTimer.current);
       if (retryTimer.current) clearTimeout(retryTimer.current);
+      flushCleanup?.();
     };
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [user, loading, supabase, toastOnce, dismiss]);

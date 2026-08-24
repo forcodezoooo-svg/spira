@@ -123,7 +123,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const boundsForTarget = (t: { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string }): Bounds | null => {
     const p = findProg(t.wsId, t.programId);
     if (t.level === 'deadline') return { min: p?.startDate || undefined, max: p?.deadline || undefined };
-    if (t.level === 'todo') { const dl = p?.deadlines?.find(d => d.id === t.deadlineId); return { min: dl?.startDate || undefined, max: dl?.date || undefined }; }
+    if (t.level === 'todo') return null; // 산출물은 자유롭게 이동/조절 — 상위 프로젝트 기간이 산출물에 맞춰 자동 확장됨
     if (t.level === 'subtask') { const td = p?.deadlines?.find(d => d.id === t.deadlineId)?.todos.find(x => x.id === t.todoId); return { min: td?.date || undefined, max: td?.deadline || undefined }; }
     if (t.level === 'unit') { const st = p?.deadlines?.find(d => d.id === t.deadlineId)?.todos.find(x => x.id === t.todoId)?.subtasks?.find(x => x.id === t.subtaskId); return { min: st?.date || undefined, max: st?.deadline || undefined }; }
     return null;
