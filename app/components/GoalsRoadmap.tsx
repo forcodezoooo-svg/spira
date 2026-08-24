@@ -5,7 +5,7 @@ import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import type { Program } from '../lib/types';
 import ActualTimeModal from './ActualTimeModal';
-import { areaFactor } from '../lib/capacity';
+import { areaFactor, scheduleTasksByCapacity } from '../lib/capacity';
 
 // Goals 간트 로드맵 — 좌측 트리(사업목표 › 프로젝트 › 영역별 산출물 › task)와 우측 타임라인을 1:1 정렬.
 // 가로 시간축은 연/월/주/일/시로 확대·축소하며 '연속 스크롤'(윈도우 제한 없음).
@@ -413,8 +413,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       // 개인화 보정: 이 업무 영역의 과거 예상 대비 실제 배율을 AI 예상시간에 반영 (§15)
       const factor = areaFactor(store.allWorkspacesEntries, col.p.name);
       const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
-      // 날짜 자동 지정(오늘부터 하루 간격) + AI가 추정한 소요시간(개인화 보정) 반영 → Home 캘린더 자동 반영
-      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = addDaysStr(todayStr, i); return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
+      const durMins = tasks.map(tk => adj(tk.durationMin) ?? 0);
+      // 가용시간(다른 칼럼/사업 포함) + 산출물 디데이를 반영해 날짜를 스케줄링 → 오늘부터 무작정 쌓지 않음
+      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, todayStr, col.due || undefined);
+      store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = dates[i]; return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
   };

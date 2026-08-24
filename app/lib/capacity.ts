@@ -347,6 +347,49 @@ export function daysBetweenDates(a: string, b: string): number {
   return Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000);
 }
 
+// ── 가용시간 기반 task 자동 배치 (AI 할일 생성용) ──
+// 주어진 소요시간(durations, 순서 유지)의 task들을 startDate부터 '남은 가용시간이 있는 날'에 순차 배치한다.
+// 이미 저장된 계획(computeDayCapacity)에 이번 배치분(extra)을 더해가며 하루 용량을 초과하지 않게 채우고,
+// deadline(산출물 디데이)이 있으면 그 날짜를 넘겨 배치하지 않는다(넘칠 땐 마감일에 몰아넣음).
+const SCHEDULE_DEFAULT_TASK_MIN = 60; // 소요시간 미상 task는 1시간으로 가정
+export function scheduleTasksByCapacity(
+  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined,
+  durations: number[], startDate: string, deadline?: string,
+): string[] {
+  const extra = new Map<string, number>();     // 이번 배치에서 추가한 부하(분)
+  const cache = new Map<string, { avail: number; planned: number }>();
+  const info = (ds: string) => {
+    let v = cache.get(ds);
+    if (!v) { const dc = computeDayCapacity(entries, schedule, capacity, ds); v = { avail: dc.availableProjectMin, planned: dc.plannedProjectMin }; cache.set(ds, v); }
+    return v;
+  };
+  // 그 날 남은 free = 가용 − 이미 저장된 계획 − 이번 배치분
+  const free = (ds: string) => { const d = info(ds); return Math.max(0, d.avail - d.planned - (extra.get(ds) ?? 0)); };
+  const capDate = deadline && deadline >= startDate ? deadline : undefined; // 마감일 상한(과거면 무시)
+  const dates: string[] = [];
+  let cursor = startDate;
+  for (const durRaw of durations) {
+    const dur = durRaw > 0 ? durRaw : SCHEDULE_DEFAULT_TASK_MIN;
+    let day = cursor;
+    let chosen: string | null = null;
+    for (let i = 0; i < 365; i++) {
+      if (capDate && day > capDate) { chosen = capDate; break; } // 마감일 초과 → 마감일에 몰아넣음
+      if (info(day).avail > 0 && free(day) >= dur) { chosen = day; break; }
+      day = addDays(day, 1);
+    }
+    if (chosen === null) {
+      // 하루 용량보다 큰 task 등 — 가용 있는 첫 근무일에 배치(초과 감수)
+      let d2 = cursor;
+      for (let i = 0; i < 365; i++) { if (capDate && d2 > capDate) { d2 = capDate; break; } if (info(d2).avail > 0) break; d2 = addDays(d2, 1); }
+      chosen = d2;
+    }
+    dates.push(chosen);
+    extra.set(chosen, (extra.get(chosen) ?? 0) + dur);
+    cursor = chosen; // 다음 task는 같은 날(free 남으면)부터, 아니면 이후로 밀림
+  }
+  return dates;
+}
+
 // 분 → "Xh Ym" / "Xh" / "Ym" 표기
 export function fmtMin(min: number): string {
   const m = Math.round(min);
