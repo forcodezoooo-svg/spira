@@ -143,6 +143,55 @@ export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, 
   return out;
 }
 
+export interface SubtaskTask {
+  key: string;
+  wsId: string;
+  programId: string;
+  deadlineId: string;
+  todoId: string;
+  subtaskId: string;
+  name: string;
+  done: boolean;
+  color: string;
+  programName: string;     // 업무 영역(사업목표/영역 이름)
+  deliverableName: string; // 소속 산출물(todo) 이름
+  date?: string;
+  deadline?: string;
+  durationMin?: number;
+}
+
+// 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
+// [시작~완수기한] 구간에 dateStr가 포함되면 그 날짜의 업무로 표시
+export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: string, opts?: { onlyFromPlan?: boolean }): SubtaskTask[] {
+  const out: SubtaskTask[] = [];
+  for (const e of entries) {
+    for (const p of e.programs) {
+      if (p.enabled === false) continue;
+      if (opts?.onlyFromPlan && !p.fromPlan) continue;
+      for (const dl of p.deadlines ?? []) {
+        if (dl.enabled === false) continue;
+        for (const t of dl.todos ?? []) {
+          for (const s of t.subtasks ?? []) {
+            const a = s.date, b = s.deadline;
+            if (!a && !b) continue;
+            const lo = a && b ? (a <= b ? a : b) : (a || b)!;
+            const hi = a && b ? (a <= b ? b : a) : (b || a)!;
+            if (dateStr < lo || dateStr > hi) continue;
+            out.push({
+              key: `s:${e.workspace.id}:${p.id}:${dl.id}:${t.id}:${s.id}`,
+              wsId: e.workspace.id, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id,
+              name: s.name, done: !!s.done, color: workspaceColor(entries, e.workspace.id),
+              programName: p.name, deliverableName: t.name, date: s.date, deadline: s.deadline, durationMin: s.durationMin,
+            });
+          }
+        }
+      }
+    }
+  }
+  out.sort((a, b) => (a.deadline || '').localeCompare(b.deadline || ''));
+  return out;
+}
+
 export interface GoalDeadlineMilestone {
   key: string;
   name: string;

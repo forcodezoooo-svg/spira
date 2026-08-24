@@ -24,10 +24,12 @@ interface Props {
   businessColor: (wsId: string) => string;                  // 사업(워크스페이스) 색
   resolveProject: (wsId: string, id?: string) => { name: string } | null; // 프로젝트 id → 프로젝트
   cardClassName?: string;                                    // 카드 높이/flex 제어 (기본 flex-1 min-h-0)
+  selectedDate?: string | null;                             // 선택된 날짜(그 날짜 업무 목록 표시용) — 하이라이트
+  onSelectDate?: (ds: string) => void;                      // 날짜 클릭 콜백
 }
 
 const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalendar(
-  { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0' }, ref,
+  { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0', selectedDate, onSelectDate }, ref,
 ) {
   const store = useStore();
   const now = new Date();
@@ -455,16 +457,18 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                   {week.map((ds, di) => {
                     const isOver = !!ds && ds === dragOverDate;
                     const allowedOn = showAllowed && !!ds && inAllowed(ds);
+                    const isSelected = !!ds && ds === selectedDate;
                     return (
                       <div
                         key={di}
                         data-cal-date={ds ?? undefined}
+                        onClick={ds && onSelectDate ? () => onSelectDate(ds) : undefined}
                         onDragOver={ds ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverDateRef.current = ds; if (dragOverDate !== ds) setDragOverDate(ds); }) : undefined}
-                        className={`flex flex-col items-center rounded-lg transition-colors ${isOver ? 'bg-violet-100 ring-2 ring-violet-400' : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300' : ''}`}
+                        className={`flex flex-col items-center rounded-lg transition-colors ${ds && onSelectDate ? 'cursor-pointer' : ''} ${isOver ? 'bg-violet-100 ring-2 ring-violet-400' : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300' : isSelected ? 'bg-[#F3F0FF] ring-1 ring-violet-300' : ''}`}
                         style={{ minHeight: cellMinH }}
                       >
                         {ds && (
-                          <div className="w-8 h-8 flex items-center justify-center text-sm rounded-full font-semibold" style={isOver ? { backgroundColor: '#5FD93A', color: '#fff' } : ds === todayKey ? { backgroundColor: '#9DFE3B', color: '#16211E' } : { color: '#5B6560' }}>
+                          <div className="w-8 h-8 flex items-center justify-center text-sm rounded-full font-semibold" style={isOver ? { backgroundColor: '#5FD93A', color: '#fff' } : ds === todayKey ? { backgroundColor: '#9DFE3B', color: '#16211E' } : isSelected ? { backgroundColor: '#7C3AED', color: '#fff' } : { color: '#5B6560' }}>
                             {Number(ds.slice(8))}
                           </div>
                         )}

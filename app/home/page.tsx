@@ -5,7 +5,7 @@ import { useStore } from '../lib/useStore';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState, SuccessState } from '../components/EmptyState';
 import { useUI } from '../lib/UIContext';
-import { getGoalTasksForDate, GoalTask, workspaceColor } from '../lib/goalTasks';
+import { getGoalTasksForDate, getSubtaskTasksForDate, GoalTask, SubtaskTask, workspaceColor } from '../lib/goalTasks';
 import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
 import MusicTimer from '../components/MusicTimer';
@@ -35,6 +35,7 @@ export default function Home() {
   const [homeFilterWs, setHomeFilterWs] = useState<string | null>(null); // 오늘의 업무 비즈니스 필터 (null = 전체)
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
   const [showYesterday, setShowYesterday] = useState(false);
+  const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null); // 캘린더에서 클릭한 날짜(그 날짜 업무 목록)
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -112,6 +113,15 @@ export default function Home() {
   // Goals(프로그램→데드라인→할일)에서 오늘 표시할 할일 (Home에서 숨긴 항목 제외)
   const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow)
     .filter(t => !store.homeHiddenToday.includes(t.key));
+  // 캘린더(Plan에서 가져온 목표)에 오늘 날짜로 배치된 task(세부 산출물 하위 task)
+  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true });
+  // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
+  const toggleSubtaskDone = (t: SubtaskTask) => {
+    const prog = store.allWorkspacesEntries.find(e => e.workspace.id === t.wsId)?.programs.find(p => p.id === t.programId);
+    if (!prog) return;
+    store.updateProgramInWs(t.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== t.deadlineId ? dl : { ...dl, todos: dl.todos.map(td => td.id !== t.todoId ? td : { ...td, subtasks: (td.subtasks ?? []).map(s => s.id !== t.subtaskId ? s : { ...s, done: !s.done, status: (!s.done ? 'done' : 'todo') as 'todo' | 'done' }) }) }) });
+  };
+  const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
   // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
   const weekStartOf = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); x.setHours(0, 0, 0, 0); return x; };
@@ -161,19 +171,20 @@ export default function Home() {
     store.updateProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, patch);
   };
 
-  // 오늘의 업무 통합 목록 (목표 + 추가 업무) — 수동 순서 적용
-  type TodayItem = { key: string; kind: 'goal' | 'quick'; goal?: GoalTask; quick?: typeof quickTasks[number] };
+  // 오늘의 업무 통합 목록 (목표 + 캘린더 task + 추가 업무) — 수동 순서 적용
+  type TodayItem = { key: string; kind: 'goal' | 'quick' | 'subtask'; goal?: GoalTask; quick?: typeof quickTasks[number]; subtask?: SubtaskTask };
   const todayItems: TodayItem[] = [
     ...goalTasks.map(t => ({ key: t.key, kind: 'goal' as const, goal: t })),
+    ...subtaskTasks.map(t => ({ key: t.key, kind: 'subtask' as const, subtask: t })),
     ...quickTasks.map(t => ({ key: `quick:${t.id}`, kind: 'quick' as const, quick: t })),
   ];
   const orderIndex = (k: string) => { const i = homeOrder.indexOf(k); return i === -1 ? 9999 : i; };
-  const itemDone = (item: TodayItem) => item.kind === 'goal' ? item.goal!.done : item.quick!.completed;
+  const itemDone = (item: TodayItem) => item.kind === 'goal' ? item.goal!.done : item.kind === 'subtask' ? item.subtask!.done : item.quick!.completed;
 
   // 비즈니스 필터 (null = 전체). 추가 업무(quick)는 현재 활성 워크스페이스 소속으로 취급.
   const activeWsId = store.data.workspace?.id ?? null;
   const visibleItems = todayItems.filter(item =>
-    !homeFilterWs ? true : item.kind === 'goal' ? item.goal!.wsId === homeFilterWs : activeWsId === homeFilterWs,
+    !homeFilterWs ? true : item.kind === 'goal' ? item.goal!.wsId === homeFilterWs : item.kind === 'subtask' ? item.subtask!.wsId === homeFilterWs : activeWsId === homeFilterWs,
   );
   const totalTasks = visibleItems.length;
   const doneTasks = visibleItems.filter(itemDone).length;
@@ -190,11 +201,10 @@ export default function Home() {
   const todayGroups: { key: string; name: string; color: string; items: TodayItem[] }[] = [];
   const groupMap = new Map<string, (typeof todayGroups)[number]>();
   for (const item of orderedItems) {
-    const isGoal = item.kind === 'goal';
     // 업무 영역명 기준으로 묶어 모든 비즈니스의 같은 영역을 하나로 통합 (Goals와 동일)
-    const key = isGoal ? (item.goal!.programName ?? 'area') : QUICK_GROUP;
-    const name = isGoal ? (item.goal!.programName || '업무') : '추가 업무';
-    const color = isGoal ? item.goal!.color : '#C4CCC4';
+    const key = item.kind === 'goal' ? (item.goal!.programName ?? 'area') : item.kind === 'subtask' ? (item.subtask!.programName ?? 'area') : QUICK_GROUP;
+    const name = item.kind === 'goal' ? (item.goal!.programName || '업무') : item.kind === 'subtask' ? (item.subtask!.programName || '업무') : '추가 업무';
+    const color = item.kind === 'goal' ? item.goal!.color : item.kind === 'subtask' ? item.subtask!.color : '#C4CCC4';
     let g = groupMap.get(key);
     if (!g) { g = { key, name, color, items: [] }; groupMap.set(key, g); todayGroups.push(g); }
     g.items.push(item);
@@ -404,6 +414,47 @@ export default function Home() {
     );
   };
 
+  // 캘린더 task(세부 산출물 하위 task) 한 줄 렌더
+  const renderSubtaskTask = (t: SubtaskTask) => {
+    const dday = t.deadline && !t.done ? calcDday(t.deadline) : null;
+    const isToday = !!t.deadline && t.deadline === dateStr && !t.done;
+    const dp = dragProps(t.key);
+    return (
+      <li key={t.key} draggable={dp.draggable} onDragStart={dp.onDragStart} onDragOver={dp.onDragOver} onDrop={dp.onDrop} onDragEnd={dp.onDragEnd}
+        style={{ borderColor: '#BCE89A', backgroundColor: t.done ? '#F8FBF3' : '#FFFFFF' }}
+        className={`group flex flex-wrap items-center gap-x-2 gap-y-1.5 border-[1.5px] rounded-3xl px-5 py-3 transition-colors ${dp.className}`}>
+        <DragHandle />
+        <button
+          onClick={() => { if (!t.done) stopTaskTimer(t.key); toggleSubtaskDone(t); }}
+          style={{ borderColor: t.done ? '#9DFE3B' : '#C7CEC7', backgroundColor: t.done ? '#9DFE3B' : 'transparent' }}
+          className="w-[18px] h-[18px] rounded-full flex-shrink-0 border-2 transition-colors flex items-center justify-center"
+        >
+          {t.done && (
+            <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#16211E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          )}
+        </button>
+        {isToday && (
+          <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>오늘</span>
+        )}
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+        <span className="text-[15px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
+          {t.name}
+        </span>
+        <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deliverableName}</span>
+        <span className="flex-1" />
+        {t.durationMin ? (
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>{fmtDur(t.durationMin)}</span>
+        ) : null}
+        {dday && (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>
+            {dday.label}
+          </span>
+        )}
+        <TaskTimerButton taskId={t.key} done={t.done} />
+      </li>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
       {/* ── 왼쪽: 메인 ── */}
@@ -569,7 +620,9 @@ export default function Home() {
                       {g.items.map(item =>
                         item.kind === 'goal'
                           ? renderGoalTask(item.goal!)
-                          : renderQuickTask(item.quick!)
+                          : item.kind === 'subtask'
+                            ? renderSubtaskTask(item.subtask!)
+                            : renderQuickTask(item.quick!)
                       )}
                     </ul>
                   </div>
@@ -588,13 +641,58 @@ export default function Home() {
         {/* 타이머 pill */}
         <MusicTimer compact />
 
-        {/* Goals 캘린더 — 일정 배치·드래그 편집 (Goals 페이지와 동일) */}
+        {/* Goals 캘린더 — 일정 배치·드래그 편집 (Goals 페이지와 동일). 날짜 클릭 시 그 날짜 업무 목록 표시 */}
         <GoalsCalendar
           programs={calPrograms}
           businessColor={calBusinessColor}
           resolveProject={calResolveProject}
           cardClassName="h-[640px]"
+          selectedDate={selectedCalDate}
+          onSelectDate={ds => setSelectedCalDate(prev => (prev === ds ? null : ds))}
         />
+
+        {/* 선택한 날짜의 업무 목록 (캘린더에서 다른 날짜를 클릭하면 표시) */}
+        {selectedCalDate && (() => {
+          const list = getSubtaskTasksForDate(store.allWorkspacesEntries, selectedCalDate, { onlyFromPlan: true });
+          const d = new Date(selectedCalDate + 'T00:00:00');
+          const label = `${d.getMonth() + 1}월 ${d.getDate()}일 ${DOW[d.getDay()]}요일`;
+          return (
+            <div className="bg-white border rounded-[24px] p-5" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[15px] font-black" style={{ color: '#16211E' }}>{label}</span>
+                  {selectedCalDate === dateStr && <span className="text-[11px] font-semibold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>오늘</span>}
+                  <span className="text-[12px] tabular-nums" style={{ color: '#9AA39D' }}>{list.filter(t => !t.done).length}개</span>
+                </div>
+                <button onClick={() => setSelectedCalDate(null)} className="text-neutral-300 hover:text-neutral-600 text-sm transition-colors" title="닫기">×</button>
+              </div>
+              {list.length === 0 ? (
+                <p className="text-[12px] text-center py-6" style={{ color: '#9AA39D' }}>이 날짜에 배치된 업무가 없어요.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {list.map(t => {
+                    const dday = t.deadline && !t.done ? calcDday(t.deadline) : null;
+                    return (
+                      <li key={t.key} className="flex items-center gap-2.5 border rounded-2xl px-3.5 py-2.5" style={{ borderColor: '#E7EFDD', backgroundColor: t.done ? '#F8FBF3' : '#fff' }}>
+                        <button
+                          onClick={() => toggleSubtaskDone(t)}
+                          style={{ borderColor: t.done ? '#9DFE3B' : '#C7CEC7', backgroundColor: t.done ? '#9DFE3B' : 'transparent' }}
+                          className="w-[16px] h-[16px] rounded-full flex-shrink-0 border-2 transition-colors flex items-center justify-center"
+                        >
+                          {t.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#16211E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                        </button>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+                        <span className="text-[13px] font-semibold flex-1 min-w-0 truncate" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>{t.name}</span>
+                        {t.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(t.durationMin)}</span> : null}
+                        {dday && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{dday.label}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
       </aside>
 
       {editTodoTarget && (
