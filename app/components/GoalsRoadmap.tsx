@@ -447,19 +447,23 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 병행 배치: 여러 프로젝트의 미완료 task를 라운드로빈 교차 후 오늘부터 가용시간에 채움
   // → 시작일이 같은 프로젝트들이 같은 날의 용량을 나눠 써 동시에 진행됨
   const parallelReschedule = () => {
+    // 카테고리(산출물=todo) 단위로 그룹 → 여러 카테고리를 라운드로빈 교차해 동시 진행
     const groups: ParallelGroup[] = [];
     for (const p of programs) {
       for (const dl of (p.deadlines ?? [])) {
         if (!dlVisible(p.wsId, dl)) continue;
+        // 같은 프로젝트의 카테고리는 프로젝트 시작일(없으면 오늘)부터 함께 시작 → 병행
         const earliest = dl.startDate && dl.startDate > todayStr ? dl.startDate : todayStr;
-        const tasks: ParallelTask[] = [];
-        for (const t of dl.todos) for (const s of (t.subtasks ?? [])) {
-          if (s.done || s.schedulingType === 'fixed' || (s.days?.length)) continue; // 완료·고정·반복 제외
-          // 상한은 task 자기 날짜가 아니라 '산출물/프로젝트 실제 기한' — 그래야 제자리에 고정되지 않고 펼쳐짐
-          const cap = t.deadline || dl.date || undefined;
-          tasks.push({ subtaskId: s.id, dur: s.durationMin ?? 60, deadline: cap, earliest });
+        for (const t of dl.todos) {
+          if (t.done) continue; // 완료 산출물 제외
+          const cap = t.deadline || dl.date || undefined; // 상한 = 산출물/프로젝트 실제 기한
+          const tasks: ParallelTask[] = [];
+          for (const s of (t.subtasks ?? [])) {
+            if (s.done || s.schedulingType === 'fixed' || (s.days?.length)) continue; // 완료·고정·반복 제외
+            tasks.push({ subtaskId: s.id, dur: s.durationMin ?? 60, deadline: cap, earliest });
+          }
+          if (tasks.length) groups.push({ tasks });
         }
-        if (tasks.length) groups.push({ tasks });
       }
     }
     if (groups.length < 1) return;
