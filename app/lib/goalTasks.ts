@@ -180,7 +180,7 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
       if (p.enabled === false) continue;
       if (opts?.onlyFromPlan && !p.fromPlan) continue;
       for (const dl of p.deadlines ?? []) {
-        if (dl.enabled === false) continue;
+        if (dl.enabled === false || dl.done) continue; // 완료 처리한 프로젝트는 제외
         for (const t of dl.todos ?? []) {
           for (const s of t.subtasks ?? []) {
             const hasDays = (s.days?.length ?? 0) > 0;

@@ -1816,7 +1816,7 @@ function GoalsSection({
   goals, projectsOfGoal, workAreas,
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
-  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects, onToggleAreaDone,
+  onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects, onToggleAreaDone, onSetProjectStatus,
   aiBusyId, aiEnabled, focusGoal, onFocusHandled,
 }: {
   goals: Goal[];
@@ -1838,6 +1838,7 @@ function GoalsSection({
   onReviseProjects?: (goalId: string) => void;
   onResequenceProjects?: (goalId: string) => void;
   onToggleAreaDone?: (projectId: string, deliverableId: string) => void;
+  onSetProjectStatus?: (projectId: string, status: ProjectStatus) => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -2082,7 +2083,7 @@ function GoalsSection({
                                     <input type="date" value={p.startDate ?? ''} onChange={e => onUpdateProject(p.id, { startDate: e.target.value })} className={inputCls} />
                                     <span className="text-neutral-300 text-xs">–</span>
                                     <input type="date" value={p.endDate ?? ''} onChange={e => onUpdateProject(p.id, { endDate: e.target.value })} className={inputCls} />
-                                    <select value={p.status ?? 'planned'} onChange={e => onUpdateProject(p.id, { status: e.target.value as ProjectStatus })} className={inputCls}>
+                                    <select value={p.status ?? 'planned'} onChange={e => (onSetProjectStatus ? onSetProjectStatus(p.id, e.target.value as ProjectStatus) : onUpdateProject(p.id, { status: e.target.value as ProjectStatus }))} className={inputCls}>
                                       <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
                                     </select>
                                   </div>
@@ -2923,6 +2924,22 @@ export default function PlanPage() {
       if (changed) store.updateProgramInWs(selectedWsId, { ...pg, deadlines });
     }
   };
+  // 프로젝트 상태 변경 — Plan 반영 + Goals(로드맵/보드)의 대응 데드라인 done 동기화(완료 시 숨김)
+  const setProjectStatus = (projectId: string, status: ProjectStatus) => {
+    update({ projects: (plan.projects ?? []).map(p => p.id === projectId ? { ...p, status } : p) });
+    if (!selectedWsId) return;
+    const done = status === 'done';
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    for (const pg of ws?.programs ?? []) {
+      let changed = false;
+      const deadlines = (pg.deadlines ?? []).map(dl => {
+        if (dl.projectId !== projectId || !!dl.done === done) return dl;
+        changed = true;
+        return { ...dl, done, doneAt: done ? new Date().toISOString() : undefined };
+      });
+      if (changed) store.updateProgramInWs(selectedWsId, { ...pg, deadlines });
+    }
+  };
   // 프로젝트 날짜 재조정 — 오늘(또는 목표 시작일)부터 순서대로 기간 유지하며 겹치지 않게 배치
   const resequenceProjects = (goalId: string) => {
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
@@ -3208,6 +3225,7 @@ export default function PlanPage() {
           onReviseProjects={reviseProjects}
           onResequenceProjects={resequenceProjects}
           onToggleAreaDone={toggleAreaDeliverableDone}
+          onSetProjectStatus={setProjectStatus}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
           focusGoal={focusGoal}

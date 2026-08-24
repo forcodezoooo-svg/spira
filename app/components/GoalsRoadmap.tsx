@@ -267,12 +267,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const enterLevel = (r: Row) => { setSelectedKey(r.key); setScrollTarget(r.start ?? r.end ?? null); };
 
   // ── 트리 → 행 ──
-  const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
+  const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
   const dlPeriod = (p: CalProgram, dl: Deadline) => { if (!dl.date) { const ts = dl.todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = dl.todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
   const rows: Row[] = [];
   for (const p of programs) {
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
-    const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false);
+    const dls = (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done);
     const pp = progPeriod(p);
     rows.push({ key: pgKey, level: 0, kind: 'program', name: p.name, start: pp.start, end: pp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, pgKey });
     if (!isOpen(pgKey, 0)) continue;
@@ -365,6 +365,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   for (const p of programs) {
     if (kbScope.program && kbScope.program.id !== p.id) continue;
     for (const dl of (p.deadlines ?? [])) {
+      if (dl.done) continue; // 완료 처리한 프로젝트(데드라인)는 숨김
       if (kbScope.deadlineId && kbScope.deadlineId !== dl.id) continue;
       for (const t of dl.todos) {
         if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
@@ -754,7 +755,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const width = placed ? wOf(r.start!, r.end!) : 0;
               const dragging = calDrag?.key === r.key;
               return (
-                <div key={r.key} data-rm-row={r.key} className="flex" style={{ height: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
+                <div key={r.key} data-rm-row={r.key} className="flex" style={{ minHeight: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div
                     onClick={() => (selMode ? toggleSel(rowSel(r)) : enterLevel(r))}
                     className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
@@ -768,7 +769,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                     ) : <span className="w-4 flex-shrink-0" />}
                     <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />
-                    <span className="truncate flex-1 min-w-0" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
+                    <span className="line-clamp-2 break-words flex-1 min-w-0 py-1 leading-snug" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
                     {!placed && r.level > 0 && <span className="text-[9px] flex-shrink-0" style={{ color: '#C4A24A' }}>미배치</span>}
                     <button onClick={e => { e.stopPropagation(); delRow(r); }} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
                   </div>

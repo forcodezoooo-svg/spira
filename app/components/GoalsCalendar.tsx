@@ -314,7 +314,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
     void dlPeriod; void resolveProject; void calLevel;
     for (const p of programs) {
       const pColor = businessColor(p.wsId);
-      for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false)) {
+      for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done)) {
         for (const t of dl.todos) {
           for (const s of (t.subtasks ?? [])) {
             if (s.done) continue;

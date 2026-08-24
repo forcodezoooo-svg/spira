@@ -347,7 +347,7 @@ export default function Home() {
     for (const p of entry.programs) {
       if (!p.fromPlan) continue;
       for (const dl of p.deadlines ?? []) {
-        if (dl.enabled === false || !dl.date || dl.date < dateStr) continue;
+        if (dl.enabled === false || dl.done || !dl.date || dl.date < dateStr) continue;
         upcoming.push({ key: `d-${dl.id}`, name: dl.name, date: dl.date, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '데드라인', wsName: entry.workspace.name });
       }
     }
