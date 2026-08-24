@@ -11,8 +11,10 @@ import TodoEditModal from '../components/TodoEditModal';
 import MusicTimer from '../components/MusicTimer';
 import GoalsCalendar from '../components/GoalsCalendar';
 import WorkHoursPanel from '../components/WorkHoursPanel';
+import ReplanProposalModal from '../components/ReplanProposalModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
+import { computeDayCapacity, computeWeekCapacity, proposeReplan, fmtMin, fmtHours, ReplanProposal, WeekLoadStatus } from '../lib/capacity';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -36,6 +38,7 @@ export default function Home() {
   const [homeOrder, setHomeOrder] = useState<string[]>([]);
   const [showYesterday, setShowYesterday] = useState(false);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null); // 캘린더에서 클릭한 날짜(그 날짜 업무 목록)
+  const [replanOpen, setReplanOpen] = useState(false); // 재배치 제안 모달
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -117,9 +120,7 @@ export default function Home() {
   const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true });
   // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
   const toggleSubtaskDone = (t: SubtaskTask) => {
-    const prog = store.allWorkspacesEntries.find(e => e.workspace.id === t.wsId)?.programs.find(p => p.id === t.programId);
-    if (!prog) return;
-    store.updateProgramInWs(t.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== t.deadlineId ? dl : { ...dl, todos: dl.todos.map(td => td.id !== t.todoId ? td : { ...td, subtasks: (td.subtasks ?? []).map(s => s.id !== t.subtaskId ? s : { ...s, done: !s.done, status: (!s.done ? 'done' : 'todo') as 'todo' | 'done' }) }) }) });
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: !t.done, status: !t.done ? 'done' : 'todo' });
   };
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
@@ -151,6 +152,29 @@ export default function Home() {
   };
   const thisWeekStart = weekStartOf(today);
   const currentWeekAreas = weekAreas(thisWeekStart).areas; // 오늘 업무 그룹 정렬용(이번 주 기준)
+
+  // ── Time Management: 오늘/이번 주 가용시간(Capacity) ──
+  const entries = store.allWorkspacesEntries;
+  const dayCap = computeDayCapacity(entries, store.workSchedule, store.capacity, dateStr);
+  const weekCap = computeWeekCapacity(entries, store.workSchedule, store.capacity, localDateStr(thisWeekStart));
+  const capPct = dayCap.availableProjectMin > 0 ? Math.min(1, dayCap.plannedProjectMin / dayCap.availableProjectMin) : (dayCap.plannedProjectMin > 0 ? 1 : 0);
+  const weekStatusMeta: Record<WeekLoadStatus, { label: string; bg: string; fg: string }> = {
+    light: { label: '여유 있음', bg: '#DFF9C4', fg: '#3E6B1F' },
+    ok: { label: '적정', bg: '#DFF9C4', fg: '#3E6B1F' },
+    tight: { label: '거의 가득 참', bg: '#FBE7C6', fg: '#96631A' },
+    over: { label: '초과', bg: '#FFE1E1', fg: '#C0392B' },
+  };
+  // 재배치 제안 (초과일 때만 계산)
+  const replanProposal: ReplanProposal | null = dayCap.overMin > 0 ? proposeReplan(entries, store.workSchedule, store.capacity, dateStr) : null;
+  const applyReplan = (p: ReplanProposal) => {
+    for (const m of p.move) {
+      const patch: Partial<import('../lib/types').ProgramSubtask> = { date: m.toDate };
+      // 기한이 이동일보다 앞서면 기한도 함께 이동 (안 그러면 그날 목록에서 사라짐)
+      if (!m.task.deadline || m.task.deadline < m.toDate) patch.deadline = m.toDate;
+      store.updateProgramSubtask(m.task.wsId, m.task.programId, m.task.deadlineId, m.task.todoId, m.task.subtaskId, patch);
+    }
+    setReplanOpen(false);
+  };
   const focusArea = currentWeekAreas[0] ?? null; // 이번 주 가장 집중해야 할 업무 영역
   const areaReason = (a: WeekArea) => (a.minDday < 0 ? '기한 지남' : a.minDday === 0 ? '오늘 마감' : a.minDday <= 7 ? `D-${a.minDday} 임박` : `업무 ${a.count}개`) + (a.minDday <= 7 ? ` · 업무 ${a.count}개` : '');
 
@@ -529,6 +553,30 @@ export default function Home() {
           </div>
         )}
 
+        {/* 오늘의 가용시간 (Time Management) */}
+        {dayCap.baseMin > 0 && (
+          <div className="mb-4 rounded-[20px] border p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: dayCap.overMin > 0 ? '#F3C7C7' : 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+            <div className="flex items-center justify-between mb-2.5 flex-wrap gap-x-4 gap-y-1">
+              <span className="text-[13px] font-black" style={{ color: '#16211E' }}>오늘 가용시간</span>
+              <div className="flex items-center gap-3 text-[12px]">
+                <span style={{ color: '#5B6560' }}>가용 <b className="tabular-nums" style={{ color: '#16211E' }}>{fmtMin(dayCap.availableProjectMin)}</b></span>
+                <span style={{ color: '#5B6560' }}>계획 <b className="tabular-nums" style={{ color: dayCap.overMin > 0 ? '#C0392B' : '#3E7A2E' }}>{fmtMin(dayCap.plannedProjectMin)}</b></span>
+                <span style={{ color: '#9AA39D' }}>Buffer <span className="tabular-nums">{fmtMin(dayCap.bufferMin)}</span></span>
+              </div>
+            </div>
+            {/* 진행 막대 */}
+            <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: '#F0F0EA' }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(capPct * 100)}%`, backgroundColor: dayCap.overMin > 0 ? '#FF696C' : '#9DFE3B' }} />
+            </div>
+            {dayCap.overMin > 0 && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: '#FFF1F1' }}>
+                <span className="text-[12px] font-semibold" style={{ color: '#C0392B' }}>오늘 {fmtMin(dayCap.overMin)} 초과예요</span>
+                <button onClick={() => setReplanOpen(true)} className="text-[12px] font-bold rounded-full px-3 py-1 transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>재배치 제안 보기</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 완료 카운트 + 전체보기 */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -638,6 +686,29 @@ export default function Home() {
         {/* 주간 업무시간 타임테이블 */}
         <WorkHoursPanel />
 
+        {/* 이번 주 가용시간 (Time Management) */}
+        {weekCap.baseMin > 0 && (
+          <div className="bg-white border rounded-2xl p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[13px] font-black" style={{ color: '#16211E' }}>이번 주</span>
+              <span className="text-[11px] font-bold rounded-full px-2.5 py-0.5" style={{ backgroundColor: weekStatusMeta[weekCap.status].bg, color: weekStatusMeta[weekCap.status].fg }}>{weekStatusMeta[weekCap.status].label}</span>
+            </div>
+            <div className="flex items-end justify-between mb-2">
+              <span className="text-[22px] font-black tabular-nums" style={{ color: weekCap.status === 'over' ? '#C0392B' : '#16211E' }}>{fmtHours(weekCap.plannedProjectMin)}<span className="text-[13px] font-bold" style={{ color: '#9AA39D' }}> / {fmtHours(weekCap.availableProjectMin)}h</span></span>
+              <span className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>계획 / 가용</span>
+            </div>
+            <div className="h-2 rounded-full overflow-hidden mb-3" style={{ backgroundColor: '#F0F0EA' }}>
+              <div className="h-full rounded-full" style={{ width: `${Math.min(100, weekCap.availableProjectMin > 0 ? Math.round(weekCap.plannedProjectMin / weekCap.availableProjectMin * 100) : (weekCap.plannedProjectMin > 0 ? 100 : 0))}%`, backgroundColor: weekCap.status === 'over' ? '#FF696C' : weekCap.status === 'tight' ? '#E0A73C' : '#9DFE3B' }} />
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+              <span style={{ color: '#5B6560' }}>업무시간 <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.baseMin)}h</b></span>
+              <span style={{ color: '#5B6560' }}>루틴 <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.routineMin)}h</b></span>
+              <span style={{ color: '#5B6560' }}>고정 <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.fixedMin)}h</b></span>
+              <span style={{ color: '#5B6560' }}>Buffer <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.bufferMin)}h</b></span>
+            </div>
+          </div>
+        )}
+
         {/* 타이머 pill */}
         <MusicTimer compact />
 
@@ -708,6 +779,10 @@ export default function Home() {
           onSave={patch => store.updateProgramTodo(editTodoTarget.wsId, editTodoTarget.programId, editTodoTarget.deadlineId, editTodoTarget.todoId, patch)}
           onClose={() => setEditTodoTarget(null)}
         />
+      )}
+
+      {replanOpen && replanProposal && (
+        <ReplanProposalModal proposal={replanProposal} onApply={applyReplan} onClose={() => setReplanOpen(false)} />
       )}
     </div>
   );

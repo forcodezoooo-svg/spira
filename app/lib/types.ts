@@ -191,15 +191,24 @@ export interface ProgramUnit {      // 세부 작업 — 카테고리 보드 tas
   date?: string;
   deadline?: string;
 }
+// Task 일정 유연성 (Time Management): fixed=고정 시간, due=기한 내 자유, flexible=이동 자유
+export type TaskSchedulingType = 'fixed' | 'due' | 'flexible';
 export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위 task — 카테고리 보드로 관리
   id: string;
   name: string;
   done: boolean;
   status?: 'todo' | 'doing' | 'done'; // 칸반 컬럼 (없으면 done 기준)
-  durationMin?: number; // 예상 소요 시간(분)
+  durationMin?: number; // 예상 소요 시간(분) — Time Management의 Estimated Duration으로 재사용
   date?: string;     // 시작 날짜 YYYY-MM-DD
   deadline?: string; // 완수 기한 YYYY-MM-DD
   units?: ProgramUnit[]; // 하위 세부 작업 (체크리스트)
+  // ── Time Management(실행/배분 레이어) — 값이 있으면 사용, 없으면 기존 동작 ──
+  schedulingType?: TaskSchedulingType; // 없으면 flexible로 취급
+  startTime?: string;   // fixed 업무의 시작 시각 "HH:MM"
+  splittable?: boolean; // 여러 날로 분할 가능 여부
+  priority?: number;    // 우선순위 (클수록 중요, 없으면 0)
+  dependsOn?: string[]; // 선행 task id 목록 (Dependency, P1에서 활용)
+  actualMin?: number;   // 실제 소요 시간(분) — 완료 시 기록 (P2)
 }
 export interface ProgramTodo {
   id: string;
@@ -260,6 +269,7 @@ export interface RoutineTask {
   name: string;
   days: number[];
   deadline: string; // YYYY-MM-DD
+  durationMin?: number; // 예상 소요 시간(분) — Capacity에서 루틴 차감용
 }
 
 export interface Topic {
@@ -305,6 +315,11 @@ export interface QuickTask {
   starred?: boolean; // 중요 표시 (별표)
   light?: boolean; // 가벼운 작업 여부
   startTime?: string; // 시작 예정 시각 "HH:MM"
+  // ── Time Management (§11 긴급/ad-hoc + 오늘 워크로드 합산) ──
+  durationMin?: number; // 예상 소요 시간(분)
+  deadline?: string;    // 완수 기한 YYYY-MM-DD
+  priority?: number;    // 우선순위 (클수록 중요)
+  schedulingType?: TaskSchedulingType; // 없으면 flexible
 }
 
 // 캘린더에 직접 추가하는 외부 일정/이벤트
@@ -396,6 +411,13 @@ export interface AppData {
   calendarMemos?: Record<string, string>; // 월별("YYYY-MM") 간단 메모
   journeyFlags?: JourneyFlag[]; // 나의 여정 지도 — 달성한 영역 목표 깃발 (전 비즈니스 통합)
   workSchedule?: WorkSchedule; // 주간 업무시간 타임테이블 (요일별 근무 가능 시간)
+  capacity?: CapacitySettings; // Time Management: Buffer 비율 + 날짜별 Capacity 예외
+}
+
+// Time Management — 가용시간(Capacity) 관련 사용자 설정 (사용자 전체 공통)
+export interface CapacitySettings {
+  bufferPercent?: number;                 // 하루 Capacity 대비 Buffer 비율 (0~1, 기본 0.15)
+  dateOverrides?: Record<string, number>; // "YYYY-MM-DD" -> 그 날 총 가용시간(시간). 있으면 요일 업무시간보다 우선
 }
 
 // 주간 업무시간 — 요일(0=일 ~ 6=토)별로 근무 여부 + 시작·종료 시각("HH:MM")

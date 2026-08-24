@@ -158,6 +158,8 @@ export interface SubtaskTask {
   date?: string;
   deadline?: string;
   durationMin?: number;
+  schedulingType?: 'fixed' | 'due' | 'flexible';
+  priority?: number;
 }
 
 // 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
@@ -182,6 +184,7 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               wsId: e.workspace.id, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id,
               name: s.name, done: !!s.done, color: workspaceColor(entries, e.workspace.id),
               programName: p.name, deliverableName: t.name, date: s.date, deadline: s.deadline, durationMin: s.durationMin,
+              schedulingType: s.schedulingType, priority: s.priority,
             });
           }
         }

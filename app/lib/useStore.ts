@@ -134,6 +134,17 @@ export function useStore() {
       return { ...d, workSchedule: base.map((wd, i) => (i === day ? { ...wd, ...patch } : wd)) };
     });
 
+  // Time Management — 가용시간(Capacity) 설정 (Buffer 비율 + 날짜별 예외)
+  const capacity = appData.capacity ?? {};
+  const setBufferPercent = (p: number) =>
+    update(d => ({ ...d, capacity: { ...(d.capacity ?? {}), bufferPercent: Math.min(0.5, Math.max(0, p)) } }));
+  const setDateCapacityOverride = (date: string, hours: number | null) =>
+    update(d => {
+      const ov = { ...(d.capacity?.dateOverrides ?? {}) };
+      if (hours === null) delete ov[date]; else ov[date] = Math.max(0, hours);
+      return { ...d, capacity: { ...(d.capacity ?? {}), dateOverrides: ov } };
+    });
+
   // 업무 영역 표시 순서 (이름 기준). Goals에서 사용자가 조정
   const areaOrder = appData.areaOrder ?? [];
   const moveArea = (name: string, dir: -1 | 1) =>
@@ -240,6 +251,22 @@ export function useStore() {
         deadlines: (p.deadlines ?? []).map(d => d.id !== deadlineId ? d : {
           ...d,
           todos: d.todos.map(t => t.id === todoId ? { ...t, ...patch } : t),
+        }),
+      }),
+    }));
+
+  // Task(ProgramSubtask) 부분 수정 — Home 토글/Replanning 적용/actual 기록 공용
+  const updateProgramSubtask = (wsId: string, programId: string, deadlineId: string, todoId: string, subtaskId: string, patch: Partial<import('./types').ProgramSubtask>) =>
+    updateWorkspace(wsId, e => ({
+      ...e,
+      programs: e.programs.map(p => p.id !== programId ? p : {
+        ...p,
+        deadlines: (p.deadlines ?? []).map(d => d.id !== deadlineId ? d : {
+          ...d,
+          todos: d.todos.map(t => t.id !== todoId ? t : {
+            ...t,
+            subtasks: (t.subtasks ?? []).map(s => s.id === subtaskId ? { ...s, ...patch } : s),
+          }),
         }),
       }),
     }));
@@ -665,9 +692,10 @@ export function useStore() {
     addProgramToWs, updateProgramInWs, deleteProgramInWs, reorderProgramsInWs,
     setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, toggleDeadlineDone, shiftAllSchedulesAfter,
     journeyFlags: appData.journeyFlags ?? [],
-    setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo,
+    setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask,
     offDays, isOffDay, toggleOffDay,
     workSchedule, setWorkDay,
+    capacity, setBufferPercent, setDateCapacityOverride,
     areaOrder, moveArea, setAreaOrder,
     calendarMemos, setCalendarMemo,
     homeHiddenToday, hideTodoFromHome, unhideTodoFromHome,
