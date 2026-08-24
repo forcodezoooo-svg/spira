@@ -15,7 +15,7 @@ import ReplanProposalModal from '../components/ReplanProposalModal';
 import ActualTimeModal from '../components/ActualTimeModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, buildSubIndex, earliestFromDeps, estimateAccuracy, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove, WeekLoadStatus } from '../lib/capacity';
+import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, buildSubIndex, earliestFromDeps, estimateAccuracy, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove } from '../lib/capacity';
 import type { OperatingMode } from '../lib/types';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -169,12 +169,6 @@ export default function Home() {
   const dayCap = computeDayCapacity(entries, store.workSchedule, store.capacity, dateStr);
   const weekCap = computeWeekCapacity(entries, store.workSchedule, store.capacity, localDateStr(thisWeekStart));
   const capPct = dayCap.availableProjectMin > 0 ? Math.min(1, dayCap.plannedProjectMin / dayCap.availableProjectMin) : (dayCap.plannedProjectMin > 0 ? 1 : 0);
-  const weekStatusMeta: Record<WeekLoadStatus, { label: string; bg: string; fg: string }> = {
-    light: { label: '여유 있음', bg: '#DFF9C4', fg: '#3E6B1F' },
-    ok: { label: '적정', bg: '#DFF9C4', fg: '#3E6B1F' },
-    tight: { label: '거의 가득 참', bg: '#FBE7C6', fg: '#96631A' },
-    over: { label: '초과', bg: '#FFE1E1', fg: '#C0392B' },
-  };
   // 재배치 제안 (초과일 때만 계산). 규칙 기반이 기본, AI 제안이 있으면 그걸 표시
   const ruleReplan: ReplanProposal | null = dayCap.overMin > 0 ? proposeReplan(entries, store.workSchedule, store.capacity, dateStr) : null;
   const shownReplan = aiReplan?.proposal ?? ruleReplan;
@@ -759,29 +753,6 @@ export default function Home() {
       <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
         {/* 주간 업무시간 타임테이블 */}
         <WorkHoursPanel />
-
-        {/* 이번 주 가용시간 (Time Management) */}
-        {weekCap.baseMin > 0 && (
-          <div className="bg-white border rounded-2xl p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[13px] font-black" style={{ color: '#16211E' }}>이번 주</span>
-              <span className="text-[11px] font-bold rounded-full px-2.5 py-0.5" style={{ backgroundColor: weekStatusMeta[weekCap.status].bg, color: weekStatusMeta[weekCap.status].fg }}>{weekStatusMeta[weekCap.status].label}</span>
-            </div>
-            <div className="flex items-end justify-between mb-2">
-              <span className="text-[22px] font-black tabular-nums" style={{ color: weekCap.status === 'over' ? '#C0392B' : '#16211E' }}>{fmtHours(weekCap.plannedProjectMin)}<span className="text-[13px] font-bold" style={{ color: '#9AA39D' }}> / {fmtHours(weekCap.availableProjectMin)}h</span></span>
-              <span className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>계획 / 가용</span>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden mb-3" style={{ backgroundColor: '#F0F0EA' }}>
-              <div className="h-full rounded-full" style={{ width: `${Math.min(100, weekCap.availableProjectMin > 0 ? Math.round(weekCap.plannedProjectMin / weekCap.availableProjectMin * 100) : (weekCap.plannedProjectMin > 0 ? 100 : 0))}%`, backgroundColor: weekCap.status === 'over' ? '#FF696C' : weekCap.status === 'tight' ? '#E0A73C' : '#9DFE3B' }} />
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-              <span style={{ color: '#5B6560' }}>업무시간 <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.baseMin)}h</b></span>
-              <span style={{ color: '#5B6560' }}>루틴 <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.routineMin)}h</b></span>
-              <span style={{ color: '#5B6560' }}>고정 <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.fixedMin)}h</b></span>
-              <span style={{ color: '#5B6560' }}>Buffer <b className="tabular-nums float-right" style={{ color: '#16211E' }}>{fmtHours(weekCap.bufferMin)}h</b></span>
-            </div>
-          </div>
-        )}
 
         {/* 비즈니스별 배분 (Operating Mode) */}
         {allocations.length > 1 && weekCap.availableProjectMin > 0 && (

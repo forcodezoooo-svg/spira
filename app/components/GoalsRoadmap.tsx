@@ -5,7 +5,7 @@ import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import type { Program } from '../lib/types';
 import ActualTimeModal from './ActualTimeModal';
-import { areaFactor, expectedCompletion, daysBetweenDates, fmtMin as fmtMinCap } from '../lib/capacity';
+import { areaFactor } from '../lib/capacity';
 
 // Goals 간트 로드맵 — 좌측 트리(사업목표 › 프로젝트 › 영역별 산출물 › task)와 우측 타임라인을 1:1 정렬.
 // 가로 시간축은 연/월/주/일/시로 확대·축소하며 '연속 스크롤'(윈도우 제한 없음).
@@ -353,9 +353,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       }
     }
   }
-  // 같은 업무 영역이면 한 칸으로 묶고, 그 안에서 산출물별로 구분
-  const kbAreas: { area: string; wsId: string; cols: KbCol[] }[] = [];
-  for (const c of kbCols) { let g = kbAreas.find(x => x.area === c.area); if (!g) { g = { area: c.area, wsId: c.p.wsId, cols: [] }; kbAreas.push(g); } g.cols.push(c); }
   // 전체 task(subtask) 색인 — 선행(dependsOn) 이름/완료 표시용
   const subById = new Map<string, { name: string; done: boolean }>();
   for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) subById.set(s.id, { name: s.name, done: s.done });
@@ -368,36 +365,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     return out;
   };
   const isBlocked = (s: Sub) => !s.done && (s.dependsOn ?? []).some(id => { const p = subById.get(id); return p && !p.done; });
-
-  // ── 프로젝트(데드라인)별 시간 현황 (§16) — 카테고리 보드 상단 스트립 ──
-  type ProjOverview = { key: string; name: string; deadline?: string; totalMin: number; doneMin: number; remainMin: number; expDate: string | null; workDays: number; bufferDays: number | null; areas: { area: string; est: number; done: number }[] };
-  const projectOverviews: ProjOverview[] = (() => {
-    const seen = new Set<string>();
-    const out: ProjOverview[] = [];
-    for (const c of kbCols) {
-      const key = `${c.p.wsId}:${c.p.id}:${c.dlId}`;
-      if (seen.has(key)) continue; seen.add(key);
-      const prog = findProg(c.p.wsId, c.p.id); const dl = prog?.deadlines?.find(d => d.id === c.dlId); if (!dl) continue;
-      let totalMin = 0, doneMin = 0, remainMin = 0;
-      const areaMap = new Map<string, { est: number; done: number }>();
-      for (const t of dl.todos) {
-        const area = parseArea(t.name).area;
-        const g = areaMap.get(area) ?? { est: 0, done: 0 };
-        for (const s of (t.subtasks ?? [])) {
-          const est = s.durationMin ?? 0;
-          totalMin += est; g.est += est;
-          if (s.done) { doneMin += est; g.done += est; } else remainMin += est;
-        }
-        areaMap.set(area, g);
-      }
-      if (totalMin === 0) continue; // 시간 정보 없는 프로젝트는 스킵
-      const exp = expectedCompletion(store.allWorkspacesEntries, store.workSchedule, store.capacity, remainMin, todayStr);
-      const bufferDays = exp && dl.date ? daysBetweenDates(exp.date, dl.date) : null;
-      out.push({ key, name: dl.name, deadline: dl.date || undefined, totalMin, doneMin, remainMin, expDate: exp?.date ?? null, workDays: exp?.workDays ?? 0, bufferDays, areas: [...areaMap.entries()].map(([area, g]) => ({ area, ...g })) });
-    }
-    return out;
-  })();
-  const mdOf = (ds?: string | null) => { if (!ds) return '—'; const d = new Date(ds + 'T00:00:00'); return `${d.getMonth() + 1}/${d.getDate()}`; };
   // D-day 계산 + 배지 스타일
   const ddayOf = (d?: string) => { if (!d) return null; const diff = daysBetween(todayStr, d); if (diff > 0) return { label: `D-${diff}`, s: diff <= 3 ? 'urgent' : 'future' }; if (diff === 0) return { label: 'D-Day', s: 'urgent' }; return { label: `D+${-diff}`, s: 'over' }; };
   const DdayBadge = ({ d }: { d?: string }) => { const dd = ddayOf(d); if (!dd) return null; const st = dd.s === 'urgent' ? { color: '#fff', backgroundColor: '#FF696C' } : dd.s === 'over' ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }; return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={st}>{dd.label}</span>; };
@@ -559,75 +526,25 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         kbCols.length === 0 ? (
           <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
         ) : (
-        <div className="flex-1 min-h-0 flex flex-col gap-2">
-          {/* 프로젝트 시간 현황 스트립 (§16) */}
-          {projectOverviews.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-1 flex-shrink-0">
-              {projectOverviews.map(pv => {
-                const donePct = pv.totalMin > 0 ? Math.round(pv.doneMin / pv.totalMin * 100) : 0;
-                const late = pv.bufferDays !== null && pv.bufferDays < 0;
-                return (
-                  <div key={pv.key} className="flex-shrink-0 w-[240px] rounded-xl border p-3" style={{ borderColor: late ? '#F3C7C7' : 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <span className="text-[13px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{pv.name}</span>
-                      {pv.deadline && <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>~{mdOf(pv.deadline)}</span>}
-                    </div>
-                    {/* 시간 진행 */}
-                    <div className="flex items-center justify-between text-[11px] mb-1" style={{ color: '#5B6560' }}>
-                      <span>완료 <b style={{ color: '#16211E' }}>{fmtMinCap(pv.doneMin)}</b> / {fmtMinCap(pv.totalMin)}</span>
-                      <span style={{ color: '#9AA39D' }}>남음 {fmtMinCap(pv.remainMin)}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden mb-2" style={{ backgroundColor: '#F0F0EA' }}>
-                      <div className="h-full rounded-full" style={{ width: `${donePct}%`, backgroundColor: '#5EA63A' }} />
-                    </div>
-                    {/* 완료 예상 vs 마감 */}
-                    <div className="flex items-center gap-1.5 text-[10px] mb-2">
-                      <span style={{ color: '#5B6560' }}>완료 예상 <b style={{ color: '#16211E' }}>{mdOf(pv.expDate)}</b>{pv.workDays ? ` (${pv.workDays}일)` : ''}</span>
-                      {pv.bufferDays !== null && (
-                        <span className="ml-auto font-bold rounded-full px-1.5 py-0.5" style={late ? { backgroundColor: '#FFE1E1', color: '#C0392B' } : { backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>{late ? `${pv.bufferDays}일 지연` : `+${pv.bufferDays}일 여유`}</span>
-                      )}
-                    </div>
-                    {/* 업무영역별 예상/완료 */}
-                    <div className="space-y-0.5">
-                      {pv.areas.map(a => (
-                        <div key={a.area} className="flex items-center gap-1.5 text-[10px]">
-                          <span className="truncate flex-1 min-w-0" style={{ color: '#9AA39D' }}>{a.area}</span>
-                          <span className="tabular-nums flex-shrink-0" style={{ color: '#5B6560' }}>{fmtMinCap(a.done)} / {fmtMinCap(a.est)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
-          {kbAreas.map(grp => {
-            const total = grp.cols.reduce((n, c) => n + c.subtasks.length, 0);
-            const twoCol = grp.cols.length > 1; // 산출물이 여러 개면 2칼럼으로 가로 확장
-            return (
-            <div key={grp.area} className={`flex flex-col min-h-0 flex-shrink-0 rounded-xl border ${twoCol ? 'w-[524px]' : 'w-[264px]'}`} style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
-              {/* 업무 영역 헤더 */}
-              <div className="px-3 py-2 border-b flex items-center gap-1.5 min-w-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(grp.wsId) }} />
-                <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{grp.area}</span>
-                <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{total}</span>
+        <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
+          {kbCols.map(col => (
+            <div key={col.todoId} className="flex flex-col min-h-0 w-[264px] flex-shrink-0 rounded-xl border" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
+              onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
+              {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
+              <div className="px-3 py-2 border-b" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
+                  <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
+                  <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
+                </div>
+                {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
+                <div className="flex items-center gap-1.5 mt-1 ml-3.5">
+                  <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+                  <DdayBadge d={col.due} />
+                </div>
               </div>
-              {/* 산출물별 구분 (여러 개면 2칼럼 그리드) */}
-              <div className={`flex-1 min-h-0 overflow-y-auto p-2 ${twoCol ? 'grid grid-cols-2 gap-3 items-start' : 'space-y-3'}`}>
-                {grp.cols.map(col => (
-                  <div key={col.todoId} className="rounded-lg" onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
-                    {/* 산출물 소제목(전체 표시, 잘리지 않게 줄바꿈) + 기한 */}
-                    <div className="mb-1.5 px-0.5">
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-1 h-3.5 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: businessColor(col.p.wsId), opacity: 0.5 }} />
-                        <span className="text-[12px] font-bold flex-1 min-w-0 break-words leading-snug" style={{ color: '#5B6560' }}>{col.goalSub || col.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 pl-2.5">
-                        <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
-                        <DdayBadge d={col.due} />
-                      </div>
-                    </div>
+              {/* 태스크 */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-2">
                     <div className="space-y-2">
                       {col.subtasks.map(s => {
                         const units = s.units ?? [];
@@ -675,13 +592,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
               </div>
             </div>
-            );
-          })}
-          </div>
+          ))}
         </div>
         )
       ) : (
