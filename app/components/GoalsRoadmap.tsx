@@ -276,6 +276,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         const ts = t.date || t.deadline, te = t.deadline || t.date;
         rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
       }
+      // 산출물이 이미 있어도 '여기서 바로 추가' 행을 항상 노출 (프로젝트 아래에 산출물 직접 추가)
+      if (todos.length > 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
     }
   }
   const rowsDraw = rows.map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
@@ -300,6 +302,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     else if (prog?.name) qs.set('goalName', prog.name);
     const s = qs.toString();
     router.push(s ? `/plan?${s}` : '/plan');
+  };
+  // 로드맵에서 산출물(영역별 산출물)을 프로젝트 아래에 바로 추가
+  const addTodoInline = (r: Row) => {
+    const prog = findProg(r.wsId, r.programId); if (!prog) return;
+    const name = window.prompt('영역별 산출물 이름 (예: 디자인: 최종 UI 시안)')?.trim(); if (!name) return;
+    store.updateProgramInWs(r.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== r.deadlineId ? dl : { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] }) });
   };
   const delRow = (r: Row) => {
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
@@ -624,9 +632,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const pgIdx0 = pgOrder.get(r.pgKey) ?? 0;
               if (r.isAdd) return (
                 <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
-                  <div className="sticky left-0 z-20 flex items-center border-b" style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
-                    <button onClick={() => openInPlan(r.wsId, r.programId)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100" style={{ color: '#7C3AED' }} title={`Plan에서 ${CHILD_NAME[r.addKind!]} 추가`}>
-                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>Plan에서 {CHILD_NAME[r.addKind!]} 추가
+                  <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
+                    {r.addKind === 'todo' && (
+                      <button onClick={() => addTodoInline(r)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#3E7A2E' }} title="여기서 산출물 바로 추가">
+                        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>여기서 추가
+                      </button>
+                    )}
+                    <button onClick={() => openInPlan(r.wsId, r.programId)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#7C3AED' }} title={`Plan에서 ${CHILD_NAME[r.addKind!]} 추가`}>
+                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>Plan에서 추가
                     </button>
                   </div>
                   <div className="relative" style={{ width: contentWidth }} />
