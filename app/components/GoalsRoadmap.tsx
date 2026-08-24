@@ -616,7 +616,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   return (
     <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-      {/* 최상위 페이지 전환: 로드맵 / 카테고리 보드 + 선택/일괄수정 */}
+      {/* 최상위 페이지 전환: 로드맵 / 카테고리 보드 */}
       <div className="flex items-center gap-2 mb-3">
         <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#EDEDE7' }}>
           {([[false, '로드맵'], [true, '카테고리 보드']] as [boolean, string][]).map(([kb, label]) => (
@@ -624,7 +624,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ))}
         </div>
         {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
-        <button onClick={() => { setSelMode(m => !m); setSel(new Map()); }} className="rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-colors" style={selMode ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="여러 항목 선택해 일괄 수정">{selMode ? '선택 완료' : '선택'}</button>
       </div>
 
       {!kanban ? (
