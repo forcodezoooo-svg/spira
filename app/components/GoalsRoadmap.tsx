@@ -465,10 +465,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     for (const p of programs) {
       const prog = findProg(p.wsId, p.id); if (!prog) continue;
       let changed = false;
-      const deadlines = (prog.deadlines ?? []).map(dl => ({ ...dl, todos: dl.todos.map(t => ({ ...t, subtasks: (t.subtasks ?? []).map(s => { const nd = result.get(s.id); if (!nd) return s; changed = true; return { ...s, date: nd, deadline: nd }; }) })) }));
+      const deadlines = (prog.deadlines ?? []).map(dl => ({ ...dl, todos: dl.todos.map(t => ({ ...t, subtasks: (t.subtasks ?? []).map(s => { const nd = result.get(s.id); if (!nd || (s.date === nd && s.deadline === nd)) return s; changed = true; return { ...s, date: nd, deadline: nd }; }) })) }));
       if (changed) store.updateProgramInWs(p.wsId, { ...prog, deadlines });
     }
   };
+  // task가 새로 추가되면 자동으로 병행 배치 (프로젝트 시작일을 읽어 같은 시기 프로젝트는 동시 진행)
+  const allSubIdsSig = programs.flatMap(p => (p.deadlines ?? []).flatMap(dl => (dl.todos ?? []).flatMap(t => (t.subtasks ?? []).map(s => s.id)))).sort().join(',');
+  const prevSubIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const cur = new Set(allSubIdsSig ? allSubIdsSig.split(',') : []);
+    if (prevSubIdsRef.current === null) { prevSubIdsRef.current = cur; return; } // 최초 진입은 기존 일정 유지
+    const hasNew = [...cur].some(id => !prevSubIdsRef.current!.has(id));
+    prevSubIdsRef.current = cur;
+    if (hasNew) parallelReschedule(); // 새 task가 생겼을 때만 (날짜 변경/완료는 재배치 안 함)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSubIdsSig]);
   // D-day 계산 + 배지 스타일
   const ddayOf = (d?: string) => { if (!d) return null; const diff = daysBetween(todayStr, d); if (diff > 0) return { label: `D-${diff}`, s: diff <= 3 ? 'urgent' : 'future' }; if (diff === 0) return { label: 'D-Day', s: 'urgent' }; return { label: `D+${-diff}`, s: 'over' }; };
   const DdayBadge = ({ d }: { d?: string }) => { const dd = ddayOf(d); if (!dd) return null; const st = dd.s === 'urgent' ? { color: '#fff', backgroundColor: '#FF696C' } : dd.s === 'over' ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }; return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={st}>{dd.label}</span>; };
