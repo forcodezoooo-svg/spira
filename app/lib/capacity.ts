@@ -416,6 +416,42 @@ export function scheduleTasksByCapacity(
   return dates;
 }
 
+// ── 병행 배치: 여러 프로젝트의 task를 라운드로빈으로 교차한 뒤 가용시간에 채워 넣기 ──
+// 시작일이 같은 프로젝트들은 같은 날의 남은 용량을 나눠 써 '병행' 진행되고,
+// 시작일이 늦은 프로젝트의 task는 그 시작일 이후로만 배치된다(자연스럽게 순차).
+export interface ParallelTask { subtaskId: string; dur: number; deadline?: string; earliest: string }
+export interface ParallelGroup { tasks: ParallelTask[] } // 프로젝트(데드라인) 단위, tasks는 진행 순서
+export function scheduleParallel(
+  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined,
+  fromDate: string, groups: ParallelGroup[],
+): Map<string, string> {
+  const allIds = new Set(groups.flatMap(g => g.tasks.map(t => t.subtaskId)));
+  // 라운드로빈 인터리브: 각 프로젝트의 i번째 task를 번갈아 뽑아 하나의 순서로
+  const order: ParallelTask[] = [];
+  const maxLen = groups.reduce((m, g) => Math.max(m, g.tasks.length), 0);
+  for (let i = 0; i < maxLen; i++) for (const g of groups) if (g.tasks[i]) order.push(g.tasks[i]);
+  const extra = new Map<string, number>();
+  const cache = new Map<string, { avail: number; other: number }>();
+  const dayInfo = (ds: string) => {
+    let v = cache.get(ds);
+    if (!v) { v = { avail: computeDayCapacity(entries, schedule, capacity, ds).availableProjectMin, other: plannedProjectMinForDateExcluding(entries, ds, allIds) }; cache.set(ds, v); }
+    return v;
+  };
+  const free = (ds: string) => { const d = dayInfo(ds); return Math.max(0, d.avail - d.other - (extra.get(ds) ?? 0)); };
+  const result = new Map<string, string>();
+  for (const t of order) {
+    const dur = t.dur > 0 ? t.dur : SCHEDULE_DEFAULT_TASK_MIN;
+    const start = t.earliest > fromDate ? t.earliest : fromDate;
+    const cap = t.deadline && t.deadline >= start ? t.deadline : undefined;
+    let day = start, chosen: string | null = null;
+    for (let i = 0; i < 365; i++) { if (cap && day > cap) { chosen = cap; break; } if (dayInfo(day).avail > 0 && free(day) >= dur) { chosen = day; break; } day = addDays(day, 1); }
+    if (chosen === null) { let d2 = start; for (let i = 0; i < 365; i++) { if (cap && d2 > cap) { d2 = cap; break; } if (dayInfo(d2).avail > 0) break; d2 = addDays(d2, 1); } chosen = d2; }
+    result.set(t.subtaskId, chosen);
+    extra.set(chosen, (extra.get(chosen) ?? 0) + dur);
+  }
+  return result;
+}
+
 // ── 주간 업무 재배치 (그 주 스케줄 변경 시 배당된 업무를 새 가용시간에 맞춰 이동) ──
 export interface WeekRedistributeMove { task: SubtaskTask; toDate: string }
 export function redistributeWeekTasks(
