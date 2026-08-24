@@ -15,8 +15,7 @@ import ReplanProposalModal from '../components/ReplanProposalModal';
 import ActualTimeModal from '../components/ActualTimeModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, computeWeekCapacity, proposeReplan, businessAllocations, buildSubIndex, earliestFromDeps, estimateAccuracy, MODE_META, fmtMin, fmtHours, ReplanProposal, ReplanMove } from '../lib/capacity';
-import type { OperatingMode } from '../lib/types';
+import { computeDayCapacity, proposeReplan, buildSubIndex, earliestFromDeps, estimateAccuracy, fmtMin, ReplanProposal, ReplanMove } from '../lib/capacity';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -136,6 +135,9 @@ export default function Home() {
   // 다른 날짜의 task를 오늘로 옮기기
   const moveSubtaskToToday = (t: SubtaskTask) =>
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: dateStr, deadline: dateStr });
+  // 오늘 task를 내일로 옮기기
+  const moveSubtaskToTomorrow = (t: SubtaskTask) =>
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: tomorrowStr, deadline: tomorrowStr });
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
   // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
@@ -167,10 +169,9 @@ export default function Home() {
   const thisWeekStart = weekStartOf(today);
   const currentWeekAreas = weekAreas(thisWeekStart).areas; // 오늘 업무 그룹 정렬용(이번 주 기준)
 
-  // ── Time Management: 오늘/이번 주 가용시간(Capacity) ──
+  // ── Time Management: 오늘 가용시간(Capacity) ──
   const entries = store.allWorkspacesEntries;
   const dayCap = computeDayCapacity(entries, store.workSchedule, store.capacity, dateStr);
-  const weekCap = computeWeekCapacity(entries, store.workSchedule, store.capacity, localDateStr(thisWeekStart));
   const capPct = dayCap.availableProjectMin > 0 ? Math.min(1, dayCap.plannedProjectMin / dayCap.availableProjectMin) : (dayCap.plannedProjectMin > 0 ? 1 : 0);
   // 재배치 제안 (초과일 때만 계산). 규칙 기반이 기본, AI 제안이 있으면 그걸 표시
   const ruleReplan: ReplanProposal | null = dayCap.overMin > 0 ? proposeReplan(entries, store.workSchedule, store.capacity, dateStr) : null;
@@ -228,8 +229,6 @@ export default function Home() {
     finally { setAiReplanBusy(false); }
   };
 
-  // ── Operating Mode: 비즈니스별 Capacity 배분 ──
-  const allocations = businessAllocations(entries, weekCap.availableProjectMin, localDateStr(thisWeekStart), id => workspaceColor(entries, id));
   // ── 예상 vs 실제 학습 (§15) ──
   const accuracy = estimateAccuracy(entries).filter(a => a.count >= 2);
   const saveActual = (t: SubtaskTask, min: number) => {
@@ -334,9 +333,9 @@ export default function Home() {
   type Upcoming = { key: string; name: string; date: string; color: string; kind: '데드라인'; wsName: string };
   const upcoming: Upcoming[] = [];
   for (const entry of store.allWorkspacesEntries) {
-    // 전체 비즈니스의 '데드라인' 항목을 표시(제목 = 데드라인 이름). 별(마커) 색 = 비즈니스 색.
+    // Plan에서 가져온(=새로 만들어지는) 목표의 프로젝트 마감을 D-day로 표시 (로드맵/캘린더와 동일 소스)
     for (const p of entry.programs) {
-      if (!p.workAreaId) continue; // '미분류' 제외 (Goals와 정합)
+      if (!p.fromPlan) continue;
       for (const dl of p.deadlines ?? []) {
         if (dl.enabled === false || !dl.date || dl.date < dateStr) continue;
         upcoming.push({ key: `d-${dl.id}`, name: dl.name, date: dl.date, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '데드라인', wsName: entry.workspace.name });
@@ -536,6 +535,15 @@ export default function Home() {
           </span>
         )}
         <TaskTimerButton taskId={t.key} done={t.done} />
+        {!t.done && (
+          <button
+            onClick={() => moveSubtaskToTomorrow(t)}
+            className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
+            title="내일 이어서 하기"
+          >
+            내일 ↪
+          </button>
+        )}
       </li>
     );
   };
@@ -754,45 +762,11 @@ export default function Home() {
 
       {/* ── 오른쪽: 대시보드 (모바일에서는 숨김) ── */}
       <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
-        {/* 주간 업무시간 타임테이블 */}
-        <WorkHoursPanel />
-
-        {/* 비즈니스별 배분 (Operating Mode) */}
-        {allocations.length > 1 && weekCap.availableProjectMin > 0 && (
-          <div className="bg-white border rounded-2xl p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[13px] font-black" style={{ color: '#16211E' }}>비즈니스별 배분</span>
-              <span className="text-[11px]" style={{ color: '#9AA39D' }}>이번 주 {fmtHours(weekCap.availableProjectMin)}h</span>
-            </div>
-            <p className="text-[11px] mb-3 leading-relaxed" style={{ color: '#9AA39D' }}>각 사업의 운영 상태(모드)에 따라 주간 가용시간을 추천 배분해요. 직접 시간을 정하면 그 값이 우선돼요.</p>
-            <div className="space-y-3">
-              {allocations.map(a => {
-                const planPct = a.allocatedMin > 0 ? Math.min(100, Math.round(a.plannedMin / a.allocatedMin * 100)) : (a.plannedMin > 0 ? 100 : 0);
-                const over = a.plannedMin > a.allocatedMin && a.allocatedMin > 0;
-                return (
-                  <div key={a.wsId}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
-                      <span className="text-[12px] font-bold truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{a.wsName}</span>
-                      <span className="text-[11px] font-semibold tabular-nums flex-shrink-0" style={{ color: over ? '#C0392B' : '#5B6560' }}>{fmtHours(a.plannedMin)}/{fmtHours(a.allocatedMin)}h</span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden mb-1.5" style={{ backgroundColor: '#F0F0EA' }}>
-                      <div className="h-full rounded-full" style={{ width: `${planPct}%`, backgroundColor: over ? '#FF696C' : a.color }} />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {(['development', 'update', 'management'] as OperatingMode[]).map(m => (
-                        <button key={m} onClick={() => store.setOperatingMode(a.wsId, m)} className="text-[10px] font-bold rounded-full px-2 py-0.5 transition-colors" style={a.mode === m ? { backgroundColor: MODE_META[m].bg, color: MODE_META[m].fg } : { backgroundColor: '#F6F6F2', color: '#B4BCB4' }}>{MODE_META[m].label}</button>
-                      ))}
-                      <span className="flex-1" />
-                      <input type="number" min={0} step={0.5} value={a.isUserSet ? fmtHours(a.allocatedMin) : ''} placeholder={`추천 ${fmtHours(a.recommendedMin)}`} onChange={e => store.setWeeklyCapacityHours(a.wsId, e.target.value === '' ? null : Number(e.target.value))} className="w-20 text-[11px] tabular-nums bg-white border rounded-lg px-1.5 py-1 outline-none focus:border-violet-400 text-right" style={{ borderColor: 'var(--spira-border)' }} title="주간 배분 시간(비우면 추천값)" />
-                      <span className="text-[10px]" style={{ color: '#9AA39D' }}>h</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* 업무시간 설정 + 타이머 — 직사각형 타일 2개 가로 나열 */}
+        <div className="grid grid-cols-2 gap-4 items-stretch">
+          <WorkHoursPanel tile />
+          <MusicTimer tile />
+        </div>
 
         {/* 예상 vs 실제 (학습) */}
         {accuracy.length > 0 && (
@@ -820,9 +794,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-        {/* 타이머 pill */}
-        <MusicTimer compact />
 
         {/* Goals 캘린더 — 일정 배치·드래그 편집 (Goals 페이지와 동일). 날짜 클릭 시 그 날짜 업무 목록 표시 */}
         <GoalsCalendar

@@ -10,7 +10,7 @@ const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return (
 const dayHours = (start: string, end: string) => Math.max(0, toMin(end) - toMin(start)) / 60;
 const fmtH = (h: number) => (Number.isInteger(h) ? `${h}` : h.toFixed(1));
 
-export default function WorkHoursPanel() {
+export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
   const store = useStore();
   const schedule = store.workSchedule;
   const capacity = store.capacity;
@@ -30,7 +30,28 @@ export default function WorkHoursPanel() {
 
   return (
     <>
-      {/* 한 줄 요약 바 */}
+      {tile ? (
+        /* 직사각형 타일 */
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full h-full flex flex-col justify-between bg-white border rounded-2xl p-3.5 text-left transition-colors hover:brightness-[0.99]"
+          style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}
+        >
+          <div className="flex items-center gap-1.5">
+            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="none" style={{ color: '#5EA63A' }}><circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.6V8l2.4 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>업무시간</span>
+            <span className="ml-auto text-[11px] flex-shrink-0" style={{ color: '#9AA39D' }}>설정 ›</span>
+          </div>
+          <div className="mt-2">
+            <div className="text-[22px] font-black tabular-nums leading-none" style={{ color: '#16211E' }}>{fmtH(totalH)}<span className="text-[13px] font-bold" style={{ color: '#9AA39D' }}> 시간/주</span></div>
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <span className="text-[10px] font-semibold rounded-full px-1.5 py-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>Buffer {Math.round(bufferPct * 100)}%</span>
+              <span className="text-[11px] truncate min-w-0" style={{ color: '#5B6560' }}>{onDays.length ? onDays.join('·') : '휴무'}</span>
+            </div>
+          </div>
+        </button>
+      ) : (
+      /* 한 줄 요약 바 */
       <button
         onClick={() => setOpen(true)}
         className="w-full flex items-center gap-2.5 bg-white border rounded-2xl px-4 py-2.5 text-left transition-colors hover:brightness-[0.99]"
@@ -45,6 +66,7 @@ export default function WorkHoursPanel() {
         </span>
         <span className="ml-auto text-[12px] flex-shrink-0" style={{ color: '#9AA39D' }}>설정 ›</span>
       </button>
+      )}
 
       {/* 상세 설정 모달 */}
       {open && (

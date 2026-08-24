@@ -55,7 +55,7 @@ function localDateStr(d = new Date()): string {
 
 const FOCUS_ID = '__focus__';
 
-export default function MusicTimer({ compact = false }: { compact?: boolean }) {
+export default function MusicTimer({ compact = false, tile = false }: { compact?: boolean; tile?: boolean }) {
   const { stopAll, anyActive, activeTaskIds, toggleTaskTimer, getDayTotalSeconds } = useTimer();
   const store = useStore();
   // 상단 버튼: 진행 중인 타이머가 있으면 전체 정지, 없으면 '일반 작업 세션' 시작.
@@ -224,6 +224,47 @@ export default function MusicTimer({ compact = false }: { compact?: boolean }) {
   };
 
   // ── 컴팩트 pill (홈 우측 대시보드용) ─────────────────────────────────────────
+  if (tile) {
+    return (
+      <div className="relative h-full">
+        <div className="flex flex-col justify-between h-full bg-white border border-neutral-200 rounded-2xl p-3.5" style={{ boxShadow: 'var(--spira-shadow)' }}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onToggle}
+              className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${isRunning ? 'bg-violet-600 hover:bg-violet-500' : 'bg-neutral-100 hover:bg-neutral-200 border border-neutral-300'}`}
+            >
+              {isRunning ? (
+                <svg className="w-4 h-4 text-neutral-900" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="3.5" height="12" rx="1" /><rect x="9.5" y="2" width="3.5" height="12" rx="1" /></svg>
+              ) : (
+                <svg className="w-4 h-4 text-neutral-900 ml-0.5" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5l10 5.5-10 5.5V2.5z" /></svg>
+              )}
+            </button>
+            <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>타이머</span>
+            <button onClick={() => setExpanded(e => !e)} className="ml-auto flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-800 transition-colors flex-shrink-0" title="음악 · Spotify">
+              <span className={`w-1.5 h-1.5 rounded-full ${spotifyToken ? 'bg-green-500' : 'bg-neutral-300'}`} />음악
+            </button>
+          </div>
+          <div className="mt-2">
+            <p className={`text-[22px] font-mono font-black tabular-nums tracking-tight leading-none ${anyActive ? 'text-neutral-900' : 'text-neutral-400'}`}>{formatSeconds(totalToday)}</p>
+            <p className="text-[10px] font-medium mt-1 truncate" style={{ color: runningTaskName ? '#44543C' : '#9AA39D' }}>{runningTaskName ? `▶ ${runningTaskName}` : '오늘 작업 시간'}</p>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-neutral-200 rounded-2xl shadow-lg p-3 z-30 space-y-3">
+            <div className="flex gap-1.5 items-center">
+              <svg className="w-3.5 h-3.5 text-neutral-500 flex-shrink-0" viewBox="0 0 16 16" fill="none"><path d="M6 12V4l8-2v8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2" /><circle cx="12" cy="10" r="2" stroke="currentColor" strokeWidth="1.2" /></svg>
+              <input className="flex-1 bg-neutral-100 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 placeholder-neutral-400 outline-none focus:border-violet-500 transition-colors" placeholder="YouTube / MP3 URL" value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLoad()} />
+              <button onClick={handleLoad} disabled={!urlInput.trim()} className="text-xs text-neutral-600 hover:text-neutral-500 disabled:opacity-30 transition-colors">설정</button>
+              {activeUrl && <button onClick={() => setShowEmbed(s => !s)} className="text-xs text-neutral-500 hover:text-neutral-700 transition-colors">{showEmbed ? '닫기' : '열기'}</button>}
+            </div>
+            <p className="text-[11px] text-neutral-400 leading-relaxed">음악·Spotify 설정은 상단 바에서도 열 수 있어요.</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (compact) {
     return (
       <div className="relative">
