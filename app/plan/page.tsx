@@ -1785,11 +1785,13 @@ function GoalsSection({
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
   onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects,
-  aiBusyId, aiEnabled,
+  aiBusyId, aiEnabled, focusGoal, onFocusHandled,
 }: {
   goals: Goal[];
   projectsOfGoal: (goalId: string) => Project[];
   workAreas: string[];
+  focusGoal?: { id?: string; name?: string } | null;
+  onFocusHandled?: () => void;
   onAddGoal: (name: string) => void;
   onUpdateGoal: (id: string, patch: Partial<Goal>) => void;
   onRemoveGoal: (id: string) => void;
@@ -1811,6 +1813,18 @@ function GoalsSection({
   const [editVal, setEditVal] = useState('');
   const [chartGoals, setChartGoals] = useState<Set<string>>(new Set()); // 그래프 탭 켜진 목표
   const [chartFocus, setChartFocus] = useState<Record<string, string | null>>({}); // 목표별 포커스 지표
+  // Goals 로드맵 '내용 수정'으로 진입 시(?goal=/?goalName=) 해당 목표를 펼치고 스크롤
+  useEffect(() => {
+    if (!focusGoal) return;
+    const g = focusGoal.id ? goals.find(x => x.id === focusGoal.id) : goals.find(x => x.name === focusGoal.name);
+    if (!g) { onFocusHandled?.(); return; }
+    setOpenGoals(prev => new Set(prev).add(g.id));
+    requestAnimationFrame(() => {
+      document.getElementById(`plan-goal-${g.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      onFocusHandled?.();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusGoal, goals]);
   const toggle = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
     setFn(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const startEdit = (id: string, cur: string) => { setEditId(id); setEditVal(cur); };
@@ -1885,7 +1899,7 @@ function GoalsSection({
           const prog = projects.length ? doneCount / projects.length : null; // 진행도 = 완료한 프로젝트 비율
           const st = GOAL_STATUS_META[g.status ?? 'active'];
           return (
-            <div key={g.id} className="border border-neutral-200 rounded-2xl bg-white">
+            <div key={g.id} id={`plan-goal-${g.id}`} className="border border-neutral-200 rounded-2xl bg-white scroll-mt-24">
               {/* Goal 헤더 (기본 노출) */}
               <div className="px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -2401,6 +2415,7 @@ export default function PlanPage() {
   const [goalPlanOpen, setGoalPlanOpen] = useState(false); // AI 목표 설계 팝업(대화형)
   const [reviseGoalId, setReviseGoalId] = useState<string | null>(null); // AI 프로젝트 수정 팝업(대화형)
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
+  const [focusGoal, setFocusGoal] = useState<{ id?: string; name?: string } | null>(null); // Goals 로드맵 '내용 수정'으로 진입 시 포커스할 목표
   const migratedRef = useRef<Set<string>>(new Set()); // bizGoals→goals 마이그레이션 1회 가드
   const [flagAward, setFlagAward] = useState<{ flagSrc: string; heading: string; sub: string } | null>(null); // 성장 단계 달성 깃발 오버레이
   const chat = useChatContext();
@@ -2473,6 +2488,19 @@ export default function PlanPage() {
     setSelectedWsId(wsId);
     const entry = store.allWorkspacesEntries.find(e => e.workspace.id === wsId);
     setPlan(entry ? { ...entry.plan } : store.data.plan);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.ready]);
+
+  // Goals 로드맵 '내용 수정'으로 ?ws=&goal=(또는 goalName=) 파라미터와 함께 진입 시: 해당 사업으로 전환 + 목표 포커스
+  useEffect(() => {
+    if (!store.ready) return;
+    const params = new URLSearchParams(window.location.search);
+    const ws = params.get('ws');
+    const goal = params.get('goal');
+    const goalName = params.get('goalName');
+    if (ws && store.allWorkspacesEntries.some(e => e.workspace.id === ws)) setSelectedWsId(ws);
+    if (goal || goalName) setFocusGoal({ id: goal ?? undefined, name: goalName ?? undefined });
+    if (ws || goal || goalName) history.replaceState(null, '', window.location.pathname); // 파라미터 정리(재진입 방지)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.ready]);
 
@@ -3088,6 +3116,8 @@ export default function PlanPage() {
           onReviseProjects={reviseProjects}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
+          focusGoal={focusGoal}
+          onFocusHandled={() => setFocusGoal(null)}
         />
       </div>
 

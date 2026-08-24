@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import type { Program } from '../lib/types';
@@ -25,7 +26,6 @@ const ROW_H = 34;
 const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const SCALES: [Scale, string][] = [['year', '연'], ['month', '월'], ['week', '주']];
-const DEPTH_NAME: Record<Scale, string> = { year: '사업목표', month: '프로젝트', week: '영역별 산출물' };
 const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
@@ -39,6 +39,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0' }, ref,
 ) {
   const store = useStore();
+  const router = useRouter();
   const schedule = store.workSchedule;
   const now = new Date();
   const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -284,32 +285,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             for (const u of (s.units ?? [])) if (key === `u-${u.id}`) return { program: p, deadlineId: dl.id, todoId: t.id, subtaskId: s.id }; } } } }
     return {};
   };
-  const addAtScale = () => {
-    const L = scale === 'year' ? 0 : scale === 'month' ? 1 : 2;
-    const chain = resolveChain(selectedKey);
-    if (L === 0) { const name = window.prompt('사업목표 이름')?.trim(); if (!name) return; const wsId = store.data.workspace?.id; if (!wsId) return; store.addProgramToWs(wsId, { name, goal: name, color: businessColor(wsId), fromPlan: true, deadlines: [] }); return; }
-    const prog = chain.program ?? programs[0];
-    if (!prog) { window.alert('먼저 사업목표를 추가하세요.'); return; }
-    if (L === 1) { const name = window.prompt('프로젝트 이름')?.trim(); if (!name) return; store.updateProgramInWs(prog.wsId, { ...prog, deadlines: [...(prog.deadlines ?? []), { id: uid(), name, date: '', todos: [], enabled: true }] }); return; }
-    const dlId = chain.deadlineId ?? prog.deadlines?.[0]?.id;
-    if (!dlId) { window.alert('먼저 프로젝트를 추가하세요.'); return; }
-    const name = window.prompt('영역별 산출물 이름')?.trim(); if (!name) return;
-    store.updateProgramInWs(prog.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id === dlId ? { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] } : dl) });
-  };
-  // 빈 상위 노드의 인라인 '추가' (그 자리에 하위 항목 생성)
-  const addSpecific = (r: Row) => {
-    const prog = findProg(r.wsId, r.programId); if (!prog) return;
-    const name = window.prompt(`${CHILD_NAME[r.addKind!] ?? '항목'} 이름`)?.trim(); if (!name) return;
-    if (r.addKind === 'deadline') { store.updateProgramInWs(r.wsId, { ...prog, deadlines: [...(prog.deadlines ?? []), { id: uid(), name, date: '', todos: [], enabled: true }] }); return; }
-    store.updateProgramInWs(r.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => {
-      if (dl.id !== r.deadlineId) return dl;
-      if (r.addKind === 'todo') return { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] };
-      return { ...dl, todos: dl.todos.map(t => {
-        if (t.id !== r.todoId) return t;
-        if (r.addKind === 'subtask') return { ...t, subtasks: [...(t.subtasks ?? []), { id: uid(), name, done: false }] };
-        return { ...t, subtasks: (t.subtasks ?? []).map(s => s.id === r.subtaskId ? { ...s, units: [...(s.units ?? []), { id: uid(), name, done: false }] } : s) };
-      }) };
-    }) });
+  // 로드맵에서는 내용을 직접 추가/편집하지 않고 Plan의 해당 사업목표로 이동해 수정·추가한다.
+  const openInPlan = (wsId?: string, programId?: string) => {
+    const prog = programId ? programs.find(p => p.id === programId) : undefined;
+    const qs = new URLSearchParams();
+    if (wsId) qs.set('ws', wsId);
+    if (prog?.planGoalId) qs.set('goal', prog.planGoalId);
+    else if (prog?.name) qs.set('goalName', prog.name);
+    const s = qs.toString();
+    router.push(s ? `/plan?${s}` : '/plan');
   };
   const delRow = (r: Row) => {
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
@@ -481,8 +465,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               <button onClick={() => scrollByScreen(1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="다음"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
               <span className="text-[15px] font-bold ml-1 truncate" style={{ color: '#16211E' }}>{visLabel}</span>
             </div>
-            <button onClick={addAtScale} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={`${DEPTH_NAME[scale]} 추가${selectedKey ? ' (선택 항목 계보에)' : ''}`}>
-              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>{DEPTH_NAME[scale]} 추가
+            <button onClick={() => { const c = resolveChain(selectedKey); openInPlan(c.program?.wsId, c.program?.id); }} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={selectedKey ? '선택한 목표를 Plan에서 수정' : 'Plan에서 목표·프로젝트·산출물 수정'}>
+              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>내용 수정
             </button>
           </div>
           <div className="flex items-center gap-2 mb-3">
@@ -532,12 +516,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               <div className={`flex-1 min-h-0 overflow-y-auto p-2 ${twoCol ? 'grid grid-cols-2 gap-3 items-start' : 'space-y-3'}`}>
                 {grp.cols.map(col => (
                   <div key={col.todoId} className="rounded-lg" onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
-                    {/* 산출물 소제목 + 기한 */}
-                    <div className="flex items-center gap-1.5 mb-1.5 px-0.5">
-                      <span className="w-1 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId), opacity: 0.5 }} />
-                      <span className="text-[12px] font-bold truncate flex-1 min-w-0" style={{ color: '#5B6560' }}>{col.goalSub || col.name}</span>
-                      <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
-                      <DdayBadge d={col.due} />
+                    {/* 산출물 소제목(전체 표시, 잘리지 않게 줄바꿈) + 기한 */}
+                    <div className="mb-1.5 px-0.5">
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-1 h-3.5 rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: businessColor(col.p.wsId), opacity: 0.5 }} />
+                        <span className="text-[12px] font-bold flex-1 min-w-0 break-words leading-snug" style={{ color: '#5B6560' }}>{col.goalSub || col.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 pl-2.5">
+                        <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+                        <DdayBadge d={col.due} />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {col.subtasks.map(s => {
@@ -611,14 +599,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               {todayStr >= rangeStart && daysBetween(rangeStart, todayStr) < span && <div className="absolute top-0 bottom-0 w-px" style={{ left: todayX, backgroundColor: '#9DFE3B' }} />}
             </div>
             {rowsDraw.length === 0 ? (
-              <div className="flex"><div className="sticky left-0 bg-white" style={{ width: LABEL_W }} /><p className="text-[12px] py-8 px-4" style={{ color: '#9AA39D' }}>항목이 없어요. 오른쪽 위 ‘추가’로 만들어보세요.</p></div>
+              <div className="flex"><div className="sticky left-0 bg-white" style={{ width: LABEL_W }} /><p className="text-[12px] py-8 px-4" style={{ color: '#9AA39D' }}>항목이 없어요. 오른쪽 위 ‘내용 수정’으로 Plan에서 만들어보세요.</p></div>
             ) : rowsDraw.map(r => {
               const pgIdx0 = pgOrder.get(r.pgKey) ?? 0;
               if (r.isAdd) return (
                 <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div className="sticky left-0 z-20 flex items-center border-b" style={{ width: LABEL_W, paddingLeft: 8 + r.level * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
-                    <button onClick={() => addSpecific(r)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }} title={`${CHILD_NAME[r.addKind!]} 추가`}>
-                      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>{CHILD_NAME[r.addKind!]} 추가
+                    <button onClick={() => openInPlan(r.wsId, r.programId)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100" style={{ color: '#7C3AED' }} title={`Plan에서 ${CHILD_NAME[r.addKind!]} 추가`}>
+                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>Plan에서 {CHILD_NAME[r.addKind!]} 추가
                     </button>
                   </div>
                   <div className="relative" style={{ width: contentWidth }} />
