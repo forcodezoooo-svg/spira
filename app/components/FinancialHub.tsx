@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useStore } from '../lib/useStore';
 import CategoryPicker from './CategoryPicker';
 import { workspaceColor } from '../lib/goalTasks';
-import type { ResourceEntry, Subscription, Project } from '../lib/types';
+import type { ResourceEntry, Subscription } from '../lib/types';
 
 const won = (n: number) => `${n < 0 ? '−' : ''}₩${Math.abs(Math.round(n)).toLocaleString('ko-KR')}`;
 const currentYM = () => new Date().toISOString().slice(0, 7);
@@ -16,7 +16,6 @@ const ACCENT = '#9DFE3B'; // 활성 버튼 강조색 (브랜드 라임)
 type Section = 'income' | 'fixed' | 'invest' | 'reserve';
 type Store = ReturnType<typeof useStore>;
 type Res = ResourceEntry & { wsId: string };
-type Proj = Project & { wsId: string };
 const dateFor = (month: string) => (month === currentYM() ? new Date().toISOString().slice(0, 10) : `${month}-01`);
 const prevYM = (ym: string) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const subActive = (s: Subscription, month: string) => (!s.startMonth || s.startMonth <= month) && (!s.endMonth || month <= s.endMonth);
@@ -24,7 +23,6 @@ const subActive = (s: Subscription, month: string) => (!s.startMonth || s.startM
 // 전 비즈니스(워크스페이스) 합산 — 기존 Resources와 동일하게 모든 사업의 거래를 함께 본다
 const allRes = (store: Store): Res[] => store.allWorkspacesEntries.flatMap(e => (e.resources ?? []).map(r => ({ ...r, wsId: e.workspace.id })));
 const allSubs = (store: Store): (Subscription & { wsId: string })[] => store.allWorkspacesEntries.flatMap(e => (e.subscriptions ?? []).map(s => ({ ...s, wsId: e.workspace.id })));
-const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap(e => (e.plan?.projects ?? []).map(p => ({ ...p, wsId: e.workspace.id })));
 const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
 
 // 카테고리 보드와 동일 소스: Plan에서 가져온(fromPlan) 프로그램의, 진행 중 데드라인(프로젝트) 아래 완료 안 된 산출물
@@ -99,7 +97,7 @@ export default function FinancialHub({ month }: { month: string }) {
       {/* 재무 도식 */}
       <div className="rounded-[22px] border p-4" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9', boxShadow: 'var(--spira-shadow)' }}>
         <div className="flex items-stretch gap-1.5 flex-wrap">
-          <Box id="income" label="순이익" value={income} />
+          <Box id="income" label="수익" value={income} />
           <div className="flex items-center"><Op ch="−" /></div>
           <Box id="fixed" label="고정 비용" value={fixed} />
           <div className="flex items-center"><Op ch="−" /></div>
@@ -268,31 +266,49 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
 // ── 비상금(%) + 미래 프로젝트 배정 ──
 function ReserveSection() {
   const store = useStore();
-  const projects = allProjects(store);
   const marks = store.reserveEarmarks;
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
-  const setMark = (id: string, p: Partial<{ projectId: string; amount: number }>) => store.setReserveEarmarks(marks.map(m => m.id === id ? { ...m, ...p } : m));
+  const setMark = (id: string, p: Partial<typeof marks[number]>) => store.setReserveEarmarks(marks.map(m => m.id === id ? { ...m, ...p } : m));
+  // 모든 비즈니스의 Plan 목표·프로젝트 (Goals 로드맵 배치 여부와 무관하게 plan에 있는 것 전부)
+  const targets = store.allWorkspacesEntries.flatMap(e => [
+    ...(e.plan?.goals ?? []).map(g => ({ kind: 'goal' as const, wsId: e.workspace.id, wsName: e.workspace.name, id: g.id, name: g.name })),
+    ...(e.plan?.projects ?? []).map(p => ({ kind: 'project' as const, wsId: e.workspace.id, wsName: e.workspace.name, id: p.id, name: p.name })),
+  ]);
+  const valOf = (m: typeof marks[number]) => m.goalId ? `g:${m.goalId}` : m.projectId ? `p:${m.projectId}` : '';
+  const setTarget = (id: string, v: string) => {
+    const t = targets.find(x => `${x.kind === 'goal' ? 'g' : 'p'}:${x.id}` === v);
+    setMark(id, { wsId: t?.wsId, goalId: t?.kind === 'goal' ? t.id : undefined, projectId: t?.kind === 'project' ? t.id : undefined });
+  };
   return (
     <Card title="비상금 설정">
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px]" style={{ color: '#5B6560' }}>순이익의</span>
+        <span className="text-[13px]" style={{ color: '#5B6560' }}>수익의</span>
         <input type="number" min={0} max={100} value={store.emergencyFundPct || ''} onChange={e => store.setEmergencyFundPct(Number(e.target.value) || 0)} placeholder="0" className="w-16 text-[14px] tabular-nums text-center bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
         <span className="text-[13px]" style={{ color: '#5B6560' }}>%를 비상금으로 남겨둡니다.</span>
       </div>
-      <p className="text-[12px] font-semibold mb-1.5" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 프로젝트/방향</p>
+      <p className="text-[12px] font-semibold mb-1.5" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 목표/프로젝트 <span className="font-normal" style={{ color: '#9AA39D' }}>· 모든 비즈니스</span></p>
       <div className="space-y-1.5">
         {marks.map(m => (
           <div key={m.id} className="flex items-center gap-2">
-            <select value={m.projectId} onChange={e => setMark(m.id, { projectId: e.target.value })} className="flex-1 min-w-0 text-[12px] rounded-lg border px-2 py-1.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>
-              <option value="">프로젝트 선택</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            <select value={valOf(m)} onChange={e => setTarget(m.id, e.target.value)} className="flex-1 min-w-0 text-[12px] rounded-lg border px-2 py-1.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>
+              <option value="">목표/프로젝트 선택</option>
+              {store.allWorkspacesEntries.map(e => {
+                const gs = e.plan?.goals ?? []; const ps = e.plan?.projects ?? [];
+                if (gs.length === 0 && ps.length === 0) return null;
+                return (
+                  <optgroup key={e.workspace.id} label={e.workspace.name}>
+                    {gs.map(g => <option key={`g${g.id}`} value={`g:${g.id}`}>목표 · {g.name}</option>)}
+                    {ps.map(p => <option key={`p${p.id}`} value={`p:${p.id}`}>프로젝트 · {p.name}</option>)}
+                  </optgroup>
+                );
+              })}
             </select>
             <input type="number" value={m.amount || ''} onChange={e => setMark(m.id, { amount: Number(e.target.value) || 0 })} placeholder="필요액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
             <button onClick={() => store.setReserveEarmarks(marks.filter(x => x.id !== m.id))} className="w-5 text-neutral-300 hover:text-red-500 text-sm">×</button>
           </div>
         ))}
       </div>
-      <button onClick={() => store.setReserveEarmarks([...marks, { id: uid(), projectId: '', amount: 0 }])} className="mt-2 text-[11px] font-semibold" style={{ color: '#5B6560' }}>+ 미래 프로젝트 추가</button>
+      <button onClick={() => store.setReserveEarmarks([...marks, { id: uid(), amount: 0 }])} className="mt-2 text-[11px] font-semibold" style={{ color: '#5B6560' }}>+ 미래 목표/프로젝트 추가</button>
     </Card>
   );
 }

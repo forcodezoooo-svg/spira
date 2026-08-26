@@ -600,7 +600,7 @@ export function useStore() {
     updateActive(e => ({ ...e, emergencyFundPct: Math.min(100, Math.max(0, pct)) }));
   const setProjectInvest = (projectId: string, amount: number | null) =>
     updateActive(e => { const m = { ...(e.projectInvestPlan ?? {}) }; if (amount === null || !amount) delete m[projectId]; else m[projectId] = amount; return { ...e, projectInvestPlan: m }; });
-  const setReserveEarmarks = (list: { id: string; projectId: string; amount: number }[]) =>
+  const setReserveEarmarks = (list: { id: string; wsId?: string; projectId?: string; goalId?: string; amount: number }[]) =>
     updateActive(e => ({ ...e, reserveEarmarks: list }));
 
   // 수익원(수익 수단) 카테고리 — 금액 입력과 별개로 먼저 정의
