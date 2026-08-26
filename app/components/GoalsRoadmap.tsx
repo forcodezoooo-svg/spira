@@ -336,6 +336,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     updateVisLabel(el);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 시작일이 지난 프로젝트(카테고리)는 자동으로 '진행중'으로 승격 (예정/미지정 → 진행중; 완료·보류·이미 진행중은 유지)
+  const autoActiveSig = programs.flatMap(p => (p.deadlines ?? []).filter(dl => dl.projectId && !dl.done).map(dl => `${p.wsId}:${dl.projectId}:${resolveProject(p.wsId, dl.projectId!)?.status ?? 'planned'}:${(dlPeriod(p, dl).start ?? '') && (dlPeriod(p, dl).start ?? '') <= todayStr ? 'S' : 'F'}`)).join('|');
+  useEffect(() => {
+    for (const p of programs) {
+      for (const dl of (p.deadlines ?? [])) {
+        if (!dl.projectId || dl.done) continue;
+        const st = resolveProject(p.wsId, dl.projectId)?.status;
+        if (st && st !== 'planned') continue; // 진행중/완료/보류는 그대로 둠
+        const start = dlPeriod(p, dl).start;
+        if (start && start <= todayStr) store.updateProject(p.wsId, dl.projectId, { status: 'active' });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoActiveSig]);
   // 리스트 항목 클릭 등으로 scrollTarget이 잡히면 그 위치로 스무스 스크롤 (완료 후 초기화 — 오늘로 되돌아가지 않음)
   useEffect(() => {
     if (!scrollTarget) return;
