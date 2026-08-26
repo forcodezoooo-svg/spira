@@ -31,6 +31,7 @@ export interface SendOptions {
   hideUser?: boolean;  // 사용자 말풍선 없이 조용히 요청
   intro?: string;      // 답변 문구를 이 문구로 고정 (모델 산문 대신)
   autoApply?: boolean; // 응답에 반영 액션이 있으면 버튼 없이 바로 반영 (시작 칩용)
+  financeMode?: boolean; // 재무 계획 상담 — §25 CORE INSTRUCTION 적용
 }
 
 export interface ChatSession {
@@ -399,7 +400,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, appContext: appContextRef.current, reviseTarget: reviseTargetRef.current }),
+        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, financeMode: opts?.financeMode, appContext: appContextRef.current, reviseTarget: reviseTargetRef.current }),
       });
 
       if (res.status === 429) {

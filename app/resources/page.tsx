@@ -11,8 +11,9 @@ import { ResourceType } from '../lib/types';
 import { todayStr } from '../lib/store';
 import CategoryPicker from '../components/CategoryPicker';
 import FinancialPlanPanel from '../components/FinancialPlanPanel';
+import FinancialOverview from '../components/FinancialOverview';
 
-type Tab = ResourceType | 'manage' | 'plan';
+type Tab = ResourceType | 'manage' | 'plan' | 'overview';
 
 const COLORS = ['#ccff00','#a78bfa','#60a5fa','#34d399','#fb923c','#f472b6','#e879f9','#38bdf8'];
 const RECURRING_CAT = '구독료'; // 이 비용 카테고리로 추가하면 매월 반복(구독)으로 처리
@@ -57,7 +58,7 @@ export default function ResourcesPage() {
   const router = useRouter();
   const chat = useChatContext();
   const { openChat } = useUI();
-  const [tab, setTab] = useState<Tab>('plan');
+  const [tab, setTab] = useState<Tab>('overview');
   const [month, setMonth] = useState(currentYM());
   const [bizFilter, setBizFilter] = useState<string | null>(null);
 
@@ -251,6 +252,7 @@ export default function ResourcesPage() {
   };
 
   const TABS: { key: Tab; label: string; active: string }[] = [
+    { key: 'overview', label: '개요',   active: '' },
     { key: 'plan',    label: '재무계획', active: '' },
     { key: 'income',  label: '수익',   active: '' },
     { key: 'expense', label: '비용',   active: '' },
@@ -347,6 +349,9 @@ export default function ResourcesPage() {
             >{t.label}</button>
           ))}
         </div>
+
+        {/* ── 개요 (Financial Overview) ── */}
+        {tab === 'overview' && <FinancialOverview onGoPlan={() => setTab('plan')} />}
 
         {/* ── 재무계획 (Financial Resource Planning) ── */}
         {tab === 'plan' && <FinancialPlanPanel />}

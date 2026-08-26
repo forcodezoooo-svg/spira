@@ -4,6 +4,8 @@ import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import { computeFinancialSummary, planOperating, revenueTargetOf, periodActuals, projectActualCost } from '../lib/finance';
 import type { FinancialPlan, FinRevenueSource, OperatingBudgetItem, BudgetAllocation } from '../lib/types';
+import { useChatContext } from '../lib/ChatContext';
+import { useUI } from '../lib/UIContext';
 
 const won = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -12,6 +14,8 @@ const addMonthsStr = (ds: string, m: number) => { const d = new Date(ds + 'T00:0
 // P0-Stage1: 재무계획(기간·보유자금·수익·운영비·Reserve) + Investment Capacity
 export default function FinancialPlanPanel() {
   const store = useStore();
+  const chat = useChatContext();
+  const { openChat } = useUI();
   const plans: FinancialPlan[] = store.financialPlans;
   const bizName = store.data.workspace?.name ?? '내 비즈니스';
   const goals = store.data.plan.goals ?? [];
@@ -66,6 +70,30 @@ export default function FinancialPlanPanel() {
   };
   const actual = periodActuals(entries, plan.startDate, plan.endDate); // 이 기간 실제 수입/지출
   const revProgress = s.target > 0 ? Math.round((actual.income / s.target) * 100) : 0;
+
+  // AI 재무 재조정 상담 — 현재 재무상태 + 프로젝트 우선순위/상태를 컨텍스트로 전달(§25 원칙 적용, 자동 변경 없음)
+  const askAI = () => {
+    if (!chat) return;
+    const lines = ['[재무 재조정 상담 요청]', `비즈니스: ${bizName} · 기간 ${plan.startDate}~${plan.endDate}`];
+    lines.push(`보유자금 ${won(s.startingFunds)} / 확정수익 ${won(s.confirmed)} / 예상수익 ${won(s.expected)} / 목표수익 ${won(s.target)}`);
+    lines.push(`운영비 ${won(s.operating)} / Reserve ${won(s.reserve)}`);
+    lines.push(`지금 안전 투자여력(Safe) ${won(s.safeToAllocate)} / 미배정 ${won(s.unallocated)}${s.unallocated < 0 ? ' (과배정)' : ''} / 예상실현시 추가 +${won(s.potentialAdditional)}`);
+    lines.push(`기간말 예상 보유자금 ${won(s.forecastEndingCash)} / 이 기간 실제 수익 ${won(actual.income)}·실제 지출 ${won(actual.expense)}`);
+    if (allocs.length) {
+      lines.push('■ 투자 배분 & 프로젝트 상태');
+      for (const a of allocs) {
+        const proj = a.projectId ? projects.find(p => p.id === a.projectId) : null;
+        const goal = a.goalId ? goals.find(g => g.id === a.goalId) : null;
+        const tgt = proj ? `프로젝트 "${proj.name}"(상태 ${proj.status ?? 'planned'}${proj.importance ? `, 중요도 ${proj.importance}` : ''})` : goal ? `목표 "${goal.name}"` : '기타(공통)';
+        const spent = a.projectId ? projectActualCost(entries, a.projectId, plan.startDate, plan.endDate) : 0;
+        lines.push(`- ${tgt}: 배정 ${won(a.plannedAmount)}${a.projectId ? ` · 실지출 ${won(spent)}` : ''}`);
+      }
+    }
+    lines.push('');
+    lines.push('운영비와 Reserve를 보호하면서 현재 투자계획을 유지할 수 있는지 판단하고, 부족하거나 조정이 필요하면 프로젝트 우선순위·상태를 고려한 재조정안(유지/예산조정/시점이동 등)을 제시해줘. 임의로 확정하지 말고 제안 형태로.');
+    openChat();
+    chat.sendMessage(lines.join('\n'), 'AI에게 현재 재무 상황 기준 재조정 상담 받기', { financeMode: true });
+  };
 
   const numInput = "w-28 text-[13px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400";
   const label = "text-[11px] font-semibold";
@@ -191,6 +219,10 @@ export default function FinancialPlanPanel() {
         <div className="rounded-xl px-3 py-2 mt-1" style={{ backgroundColor: '#fff', border: '1px solid #E4EFD4' }}>
           <p className="text-[12px]" style={{ color: '#16211E' }}>현재 계획대로라면 <b>{plan.endDate.slice(0, 7)}</b> 예상 보유자금 <b className="tabular-nums">{won(s.forecastEndingCash)}</b></p>
         </div>
+        <button onClick={askAI} className="w-full flex items-center justify-center gap-1.5 rounded-full py-2.5 text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#16211E', color: '#fff' }}>
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3z" /></svg>
+          AI 재무 재조정 상담
+        </button>
       </div>
 
       {/* 배분 (Budget Allocation) */}
