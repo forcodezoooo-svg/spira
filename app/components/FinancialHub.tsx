@@ -24,27 +24,30 @@ const allSubs = (store: Store): (Subscription & { wsId: string })[] => store.all
 const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap(e => (e.plan?.projects ?? []).map(p => ({ ...p, wsId: e.workspace.id })));
 const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
 
-// 카테고리 보드에서 '진행중'인 데드라인(프로젝트) 아래 완료 안 된 산출물만
-type Category = { wsId: string; wsName: string; todoId: string; name: string; projectName: string; projectId?: string };
+// 카테고리 보드와 동일 소스: Plan에서 가져온(fromPlan) 프로그램의, 진행 중 데드라인(프로젝트) 아래 완료 안 된 산출물
+type Category = { wsId: string; wsName: string; todoId: string; area: string; content: string; projectName: string; projectId?: string };
+const parseArea = (name: string) => { const m = name.match(/^(.*?)\s*[:：]\s*(.*)$/); return { area: (m ? m[1] : name).trim(), content: m ? m[2].trim() : '' }; };
 const allCategories = (store: Store): Category[] => {
   const out: Category[] = [];
+  const today = todayStr();
   for (const e of store.allWorkspacesEntries) {
     const projs = e.plan?.projects ?? [];
     for (const prog of e.programs ?? []) {
+      if (prog.fromPlan !== true) continue; // 카테고리 보드와 동일하게 Plan에서 가져온 프로그램만
       for (const dl of prog.deadlines ?? []) {
         if (dl.enabled === false || dl.done) continue;
         const proj = dl.projectId ? projs.find(p => p.id === dl.projectId) : undefined;
         if (proj?.status === 'done' || proj?.status === 'onhold') continue;
         // '진행중' = 현재 진행 기간 안: 시작일이 지났고(있으면) + 마감일이 아직 안 지남(있으면)
-        const today = todayStr();
         const tds = (dl.todos ?? []).map(t => t.date).filter((x): x is string => !!x).sort();
-        const start = dl.startDate || tds[0];               // 없으면 시작 조건 통과
-        const end = dl.date || (tds.length ? tds[tds.length - 1] : undefined); // 없으면 종료 조건 통과
+        const start = dl.startDate || tds[0];
+        const end = dl.date || (tds.length ? tds[tds.length - 1] : undefined);
         const inWindow = (!start || start <= today) && (!end || end >= today);
         if (!inWindow) continue;
         for (const t of dl.todos ?? []) {
           if (t.done) continue;
-          out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, name: t.name, projectName: proj?.name || dl.name, projectId: dl.projectId });
+          const { area, content } = parseArea(t.name);
+          out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, area, content, projectName: proj?.name || dl.name, projectId: dl.projectId });
         }
       }
     }
@@ -208,7 +211,10 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
     return (
       <div key={c.todoId} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{c.name}</span>
+          <span className="min-w-0">
+            <span className="text-[13px] font-bold block truncate" style={{ color: '#16211E' }}>{c.area}</span>
+            {c.content && <span className="text-[11px] block truncate" style={{ color: '#5B6560' }}>{c.content}</span>}
+          </span>
           <button onClick={() => { setSpendFor(spendFor === c.todoId ? null : c.todoId); setSpName(''); setSpAmt(''); }} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>지출 추가</button>
         </div>
         <div className="flex items-center gap-3 mt-2">
