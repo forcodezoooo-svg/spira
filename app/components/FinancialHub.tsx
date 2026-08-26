@@ -34,13 +34,14 @@ const allCategories = (store: Store): Category[] => {
       for (const dl of prog.deadlines ?? []) {
         if (dl.enabled === false || dl.done) continue;
         const proj = dl.projectId ? projs.find(p => p.id === dl.projectId) : undefined;
-        if (proj?.status === 'done') continue;
-        // 진행중 판정: 프로젝트 status active 이거나, (완료·보류 아님 + 시작일이 지남)
-        const started = dl.startDate || dl.date || (dl.todos ?? []).map(t => t.date).filter((x): x is string => !!x).sort()[0];
-        const running = proj
-          ? (proj.status === 'active' || (proj.status !== 'onhold' && !!started && started <= today))
-          : (!!started && started <= today);
-        if (!running) continue;
+        const status = proj?.status;
+        if (status === 'done' || status === 'onhold') continue;
+        // 진행중 = status가 active로 명시됐거나, '현재 진행 기간 안'(시작일 지남 + 마감일 안 지남)
+        const todoDates = (dl.todos ?? []).map(t => t.date).filter((x): x is string => !!x).sort();
+        const start = dl.startDate || todoDates[0] || dl.date;
+        const end = dl.date || dl.startDate;
+        const inWindow = !!start && start <= today && (!end || end >= today);
+        if (!(status === 'active' || inWindow)) continue;
         for (const t of dl.todos ?? []) {
           if (t.done) continue;
           out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, name: t.name, projectName: proj?.name || dl.name, projectId: dl.projectId });
