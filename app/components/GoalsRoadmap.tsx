@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
@@ -105,6 +105,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const dragPayloadRef = useRef<Payload | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null); // 로드맵 본문(막대 영역) — 연결선 좌표 측정용
+  const [connLines, setConnLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
 
   const cfg = CFG[gran]; // buffer/minSpan만 gran에서, pxPerDay는 연속 줌 값 사용
 
@@ -411,11 +413,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   } else {
   for (const p of roadmapPrograms) {
     const pColor = businessColor(p.wsId); const pgKey = `p-${p.id}`;
-    const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl));
+    const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl))
+      .sort((a, b) => (dlPeriod(p, a).start || a.date || '9999-99-99').localeCompare(dlPeriod(p, b).start || b.date || '9999-99-99')); // 시작일 순
     // 사업목표(program, level 0) 행은 로드맵에 표시하지 않고, 프로젝트(deadline)를 최상위로 보여준다.
     if (dls.length === 0) rows.push({ key: `add-${pgKey}`, level: 1, kind: 'deadline', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, pgKey, isAdd: true, addKind: 'deadline' });
     for (const dl of dls) {
-      const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl); const todos = dl.todos.filter(t => !t.done);
+      const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl);
+      const todos = dl.todos.filter(t => !t.done).sort((a, b) => ((a.date || a.deadline || '9999-99-99').localeCompare(b.date || b.deadline || '9999-99-99'))); // 산출물도 시작일 순
       rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
       if (!isOpen(dKey, 1)) continue;
       if (todos.length === 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
@@ -753,7 +757,27 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 산출물 날짜/연결이 바뀔 때마다 전파 (수렴 — 후행이 이미 뒤면 변화 없음)
   const linkSig = programs.flatMap(p => (p.deadlines ?? []).flatMap(dl => (dl.todos ?? []).map(t => `${t.id}:${t.date ?? ''}:${t.deadline ?? ''}:${t.dependsOn ?? ''}`))).join('|');
   const dependentIds = new Set<string>(); // 선행에 연결된(따라 밀리는) 산출물
-  for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) if (t.dependsOn) dependentIds.add(t.id);
+  const dependsMap = new Map<string, string>(); // 후행 todoId -> 선행 todoId
+  for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) if (t.dependsOn) { dependentIds.add(t.id); dependsMap.set(t.id, t.dependsOn); }
+  // 연결선 좌표 측정 (막대 y는 DOM으로, x는 xOf로) — 접기/정렬/줌/스크롤 후에도 정확
+  const rowKeysSig = rowsDraw.map(r => r.key).join(',');
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body || dependsMap.size === 0) { setConnLines(prev => (prev.length ? [] : prev)); return; }
+    const bRect = body.getBoundingClientRect();
+    const yOf = (todoId: string) => { const el = body.querySelector(`[data-rm-bar="t-${todoId}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return r.top - bRect.top + r.height / 2; };
+    const rowOf = (todoId: string) => rowsDraw.find(r => r.todoId === todoId);
+    const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    for (const [succId, predId] of dependsMap) {
+      const succ = rowOf(succId), pred = rowOf(predId);
+      if (!succ?.start || !pred?.start || !pred.end) continue;
+      const y1 = yOf(predId), y2 = yOf(succId);
+      if (y1 == null || y2 == null) continue;
+      lines.push({ x1: xOf(pred.start) + wOf(pred.start, pred.end), y1, x2: xOf(succ.start), y2 });
+    }
+    setConnLines(lines);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowKeysSig, linkSig, pxPerDay, gran, sortMode, kanban]);
   useEffect(() => {
     propagateLinks();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1128,9 +1152,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             </div>
           </div>
           {/* 본문 */}
-          <div className="relative">
+          <div ref={bodyRef} className="relative">
             {/* 배경: 그리드/오늘 (타임라인 영역) */}
             <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: LABEL_W, width: contentWidth }}>
+              {/* 막대 연결선 (의존성) */}
+              {connLines.length > 0 && (
+                <svg className="absolute top-0 left-0 pointer-events-none" width={contentWidth} height="100%" style={{ overflow: 'visible', zIndex: 5 }}>
+                  {connLines.map((l, i) => { const mx = (l.x1 + l.x2) / 2; return (
+                    <g key={i}>
+                      <path d={`M ${l.x1} ${l.y1} C ${mx} ${l.y1}, ${mx} ${l.y2}, ${l.x2} ${l.y2}`} fill="none" stroke="#2B62C4" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
+                      <circle cx={l.x2} cy={l.y2} r={2.5} fill="#2B62C4" opacity={0.7} />
+                    </g>
+                  ); })}
+                </svg>
+              )}
               {dayLines.map((x, i) => <div key={`d${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#EEEEE8' }} />)}
               {strongLines.map((x, i) => <div key={`s${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#E2E2DA' }} />)}
               {/* 오프(휴무) 밴드 */}
