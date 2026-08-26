@@ -664,7 +664,30 @@ export default function Home() {
         {dayCap.baseMin > 0 && (
           <div className="mb-4 rounded-[20px] border p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: dayCap.overMin > 0 ? '#F3C7C7' : 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
             <div className="flex items-center justify-between mb-2.5 flex-wrap gap-x-4 gap-y-1">
-              <span className="text-[13px] font-black" style={{ color: '#16211E' }}>오늘 가용시간</span>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="text-[13px] font-black" style={{ color: '#16211E' }}>오늘 가용시간</span>
+                {/* 출근 / 퇴근 */}
+                {(() => {
+                  const att = store.attendance[dateStr] ?? {};
+                  const hhmm = (ms?: number) => ms ? new Date(ms).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+                  return (
+                    <div className="flex items-center gap-1.5">
+                      {att.in ? (
+                        <span className="text-[11px] font-bold rounded-full px-2 py-0.5 tabular-nums" style={{ backgroundColor: '#E4F5E0', color: '#3E6B1F' }} title="출근 시각 (눌러서 취소)"
+                          onClick={() => window.confirm('출근 기록을 취소할까요?') && store.setClock(dateStr, 'in', null)} role="button">출근 {hhmm(att.in)}</span>
+                      ) : (
+                        <button onClick={() => store.setClock(dateStr, 'in', Date.now())} className="text-[11px] font-bold rounded-full px-2.5 py-0.5 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>출근</button>
+                      )}
+                      {att.out ? (
+                        <span className="text-[11px] font-bold rounded-full px-2 py-0.5 tabular-nums" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }} title="퇴근 시각 (눌러서 취소)"
+                          onClick={() => window.confirm('퇴근 기록을 취소할까요?') && store.setClock(dateStr, 'out', null)} role="button">퇴근 {hhmm(att.out)}</span>
+                      ) : (
+                        <button onClick={() => store.setClock(dateStr, 'out', Date.now())} disabled={!att.in} className="text-[11px] font-bold rounded-full px-2.5 py-0.5 transition-transform hover:-translate-y-0.5 disabled:opacity-30" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>퇴근</button>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="flex items-center gap-3 text-[12px]">
                 <span style={{ color: '#5B6560' }}>가용 <b className="tabular-nums" style={{ color: '#16211E' }}>{fmtMin(dayCap.availableProjectMin)}</b></span>
                 <span style={{ color: '#5B6560' }}>계획 <b className="tabular-nums" style={{ color: dayCap.overMin > 0 ? '#C0392B' : '#3E7A2E' }}>{fmtMin(dayCap.plannedProjectMin)}</b></span>

@@ -136,6 +136,16 @@ export function useStore() {
 
   // Time Management — 가용시간(Capacity) 설정 (Buffer 비율 + 날짜별 예외)
   const capacity = appData.capacity ?? {};
+  // 출근/퇴근 (날짜별 시각 ms)
+  const attendance = appData.attendance ?? {};
+  const setClock = (date: string, field: 'in' | 'out', time: number | null) =>
+    update(d => {
+      const att = { ...(d.attendance ?? {}) };
+      const day = { ...(att[date] ?? {}) };
+      if (time === null) delete day[field]; else day[field] = time;
+      if (Object.keys(day).length === 0) delete att[date]; else att[date] = day;
+      return { ...d, attendance: att };
+    });
   const setBufferPercent = (p: number) =>
     update(d => ({ ...d, capacity: { ...(d.capacity ?? {}), bufferPercent: Math.min(0.5, Math.max(0, p)) } }));
   const setDateCapacityOverride = (date: string, hours: number | null) =>
@@ -751,6 +761,7 @@ export function useStore() {
     offDays, isOffDay, toggleOffDay,
     workSchedule, setWorkDay,
     capacity, setBufferPercent, setDateCapacityOverride, setOffPeriod, setWeekWorkDay, resetWeekSchedule,
+    attendance, setClock,
     boardTemplates, addBoardTemplate, deleteBoardTemplate,
     setOperatingMode, setWeeklyCapacityHours,
     areaOrder, moveArea, setAreaOrder,

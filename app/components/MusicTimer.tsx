@@ -64,8 +64,9 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
   // 상단 박스 시간 = 오늘 작업 시간(벽시계). 업무가 안 돌면 증가 멈춤.
   const totalToday = getDayTotalSeconds(localDateStr());
 
-  // 지금 타이머가 걸린 실제 업무 이름 (__focus__ 일반 세션은 제외) — 플레이바에 텍스트로 표시
-  const runningTaskName = (() => {
+  // 지금 타이머가 걸린 실제 업무 (__focus__ 일반 세션은 제외) — 이름 + (있으면) 상세업무(units)
+  type RunningTask = { name: string; wsId?: string; programId?: string; deadlineId?: string; todoId?: string; subtaskId?: string; units?: { id: string; name: string; done: boolean }[] };
+  const runningTask: RunningTask | null = (() => {
     if (!store.ready) return null;
     for (const id of activeTaskIds) {
       if (id === FOCUS_ID) continue;
@@ -73,27 +74,55 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
         const qid = id.slice(6);
         for (const e of store.allWorkspacesEntries) {
           const q = (e.quickTasks ?? []).find(x => x.id === qid);
-          if (q) return q.name;
+          if (q) return { name: q.name };
         }
-        return '추가 업무';
+        return { name: '추가 업무' };
       }
+      // 업무(subtask) 타이머: 's:wsId:programId:deadlineId:todoId:subtaskId'
+      if (id.startsWith('s:')) {
+        const [, wsId, pId, dlId, todoId, subtaskId] = id.split(':');
+        const e = store.allWorkspacesEntries.find(x => x.workspace.id === wsId);
+        if (e) for (const p of e.programs) for (const dl of p.deadlines ?? []) {
+          const t = (dl.todos ?? []).find(x => x.id === todoId);
+          const s = t?.subtasks?.find(x => x.id === subtaskId);
+          if (s) return { name: s.name, wsId, programId: pId, deadlineId: dlId, todoId, subtaskId, units: s.units ?? [] };
+        }
+        return { name: '업무' };
+      }
+      // 산출물(todo) 타이머: 'wsId:programId:deadlineId:todoId'
       const parts = id.split(':');
       if (parts.length === 4) {
         const [wsId, , , todoId] = parts;
         const e = store.allWorkspacesEntries.find(x => x.workspace.id === wsId);
-        if (e) {
-          for (const p of e.programs) {
-            for (const dl of p.deadlines ?? []) {
-              const t = (dl.todos ?? []).find(x => x.id === todoId);
-              if (t) return t.name;
-            }
-          }
+        if (e) for (const p of e.programs) for (const dl of p.deadlines ?? []) {
+          const t = (dl.todos ?? []).find(x => x.id === todoId);
+          if (t) return { name: t.name };
         }
-        return '업무';
+        return { name: '업무' };
       }
     }
     return null;
   })();
+  const runningTaskName = runningTask?.name ?? null;
+  const units = runningTask?.units ?? [];
+  const curUnit = units.find(u => !u.done) ?? null; // 현재(첫 미완료) 상세업무
+  const doneUnitCount = units.filter(u => u.done).length;
+  // 현재 상세업무 완료 → 다음으로 넘어감 (재렌더 시 curUnit이 다음 미완료로 갱신)
+  const completeCurUnit = () => {
+    if (!runningTask?.subtaskId || !curUnit) return;
+    store.updateProgramSubtask(runningTask.wsId!, runningTask.programId!, runningTask.deadlineId!, runningTask.todoId!, runningTask.subtaskId, { units: units.map(u => u.id === curUnit.id ? { ...u, done: true } : u) });
+  };
+  // 플레이바에 뜨는 '현재 상세업무 + 완료(다음으로)' 요소
+  const unitBar = curUnit ? (
+    <button onClick={completeCurUnit} title="이 상세업무 완료하고 다음으로 넘어가기"
+      className="group flex items-center gap-1.5 min-w-0 rounded-full pl-1 pr-2 py-0.5 transition-colors hover:brightness-95" style={{ backgroundColor: '#F3F0FF' }}>
+      <span className="w-4 h-4 rounded-full border-[1.5px] flex-shrink-0 flex items-center justify-center transition-colors group-hover:bg-[#7C3AED]" style={{ borderColor: '#7C3AED' }}>
+        <svg className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#7C3AED" className="group-hover:stroke-white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </span>
+      <span className="text-[11px] font-semibold truncate" style={{ color: '#5B3FC4' }}>{curUnit.name}</span>
+      {units.length > 1 && <span className="text-[10px] tabular-nums flex-shrink-0" style={{ color: '#9B8FD1' }}>{doneUnitCount}/{units.length}</span>}
+    </button>
+  ) : null;
 
   // 타이머 실행 중 브라우저 탭 타이틀에 시간 표시
   useEffect(() => {
@@ -247,6 +276,7 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
           <div className="mt-2">
             <p className={`text-[22px] font-mono font-black tabular-nums tracking-tight leading-none ${anyActive ? 'text-neutral-900' : 'text-neutral-400'}`}>{formatSeconds(totalToday)}</p>
             <p className="text-[10px] font-medium mt-1 truncate" style={{ color: runningTaskName ? '#44543C' : '#9AA39D' }}>{runningTaskName ? `▶ ${runningTaskName}` : '오늘 작업 시간'}</p>
+            {unitBar && <div className="mt-1.5 flex">{unitBar}</div>}
           </div>
         </div>
 
@@ -294,6 +324,7 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
               {runningTaskName ? `▶ ${runningTaskName}` : '오늘 작업 시간'}
             </p>
           </div>
+          {unitBar && <div className="max-w-[200px] min-w-0 ml-1">{unitBar}</div>}
           <div className="flex-1" />
           <button
             onClick={() => setExpanded(e => !e)}
@@ -425,11 +456,14 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
           <p className="text-[9px] text-neutral-400 font-medium -mt-0.5">오늘 작업 시간</p>
         </div>
 
-        {/* 지금 실행 중인 업무 */}
+        {/* 지금 실행 중인 업무 + 상세업무 진행 */}
         {runningTaskName && (
-          <div className="flex items-center gap-1.5 min-w-0 max-w-[240px] ml-2 pl-3 border-l border-neutral-200" title={runningTaskName}>
-            <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 12 12" fill="#44543C"><path d="M2 1.5l9 4.5-9 4.5V1.5z" /></svg>
-            <span className="text-xs font-medium truncate" style={{ color: '#44543C' }}>{runningTaskName}</span>
+          <div className="flex items-center gap-2 min-w-0 ml-2 pl-3 border-l border-neutral-200">
+            <div className="flex items-center gap-1.5 min-w-0 max-w-[200px]" title={runningTaskName}>
+              <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 12 12" fill="#44543C"><path d="M2 1.5l9 4.5-9 4.5V1.5z" /></svg>
+              <span className="text-xs font-medium truncate" style={{ color: '#44543C' }}>{runningTaskName}</span>
+            </div>
+            {unitBar && <div className="max-w-[240px] min-w-0">{unitBar}</div>}
           </div>
         )}
 

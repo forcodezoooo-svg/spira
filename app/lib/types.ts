@@ -433,6 +433,7 @@ export interface AppData {
   workSchedule?: WorkSchedule; // 주간 업무시간 타임테이블 (요일별 근무 가능 시간)
   capacity?: CapacitySettings; // Time Management: Buffer 비율 + 날짜별 Capacity 예외
   boardTemplates?: BoardTemplate[]; // 카테고리 보드 템플릿 (산출물+task 세트 저장·재사용)
+  attendance?: Record<string, { in?: number; out?: number }>; // 날짜별("YYYY-MM-DD") 출근/퇴근 시각(ms)
   updatedAt?: number; // 마지막 변경 시각(ms) — 새로고침 시 로컬/서버 중 최신본을 판별 (데이터 유실 방지)
 }
 
