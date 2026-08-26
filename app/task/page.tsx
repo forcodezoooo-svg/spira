@@ -6,7 +6,6 @@ import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState, SuccessState } from '../components/EmptyState';
 import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
-import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
@@ -502,9 +501,7 @@ export default function TaskPage() {
 
       {/* ── 오른쪽: 대시보드 ── */}
       <aside className="space-y-4 lg:sticky lg:top-8">
-        {/* 타이머 pill */}
-        <MusicTimer compact />
-
+        {/* 타이머는 우측 하단 floating 위젯으로 */}
         {/* 메모 (접이식) — 공통 컴포넌트 */}
         <MemoPanel />
       </aside>

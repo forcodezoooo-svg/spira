@@ -22,7 +22,6 @@ const IMPORTANCE_META: Record<number, { label: string; color: string; bg: string
 };
 import { uid } from '../lib/store';
 import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '../lib/ChatContext';
-import MusicTimer from '../components/MusicTimer';
 import MemoPanel from '../components/MemoPanel';
 import GoalsRoadmap, { GoalsRoadmapHandle } from '../components/GoalsRoadmap';
 import FlagAward from '../components/FlagAward';
@@ -1193,8 +1192,7 @@ export default function ProgramsPage() {
 
   const CalendarPanel = (
     <aside data-teach="calendar" className="hidden xl:flex flex-col flex-1 min-w-[360px] sticky top-8 gap-4 max-h-[calc(100vh-3rem)]">
-      {/* 플레이바 + 공용 메모 (Home·Task와 동일) */}
-      <div className="flex-shrink-0"><MusicTimer compact /></div>
+      {/* 공용 메모 (타이머는 우측 하단 floating 위젯으로) */}
       <div className="flex-shrink-0"><MemoPanel /></div>
 
       <div className="bg-white border rounded-[24px] p-6 flex-1 min-h-0 flex flex-col" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }} onDragEnter={() => setHtmlDragging(true)}>
