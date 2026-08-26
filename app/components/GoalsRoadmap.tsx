@@ -336,20 +336,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     updateVisLabel(el);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // 시작일이 지난 프로젝트(카테고리)는 자동으로 '진행중'으로 승격 (예정/미지정 → 진행중; 완료·보류·이미 진행중은 유지)
-  const autoActiveSig = programs.flatMap(p => (p.deadlines ?? []).filter(dl => dl.projectId && !dl.done).map(dl => `${p.wsId}:${dl.projectId}:${resolveProject(p.wsId, dl.projectId!)?.status ?? 'planned'}:${(dlPeriod(p, dl).start ?? '') && (dlPeriod(p, dl).start ?? '') <= todayStr ? 'S' : 'F'}`)).join('|');
-  useEffect(() => {
-    for (const p of programs) {
-      for (const dl of (p.deadlines ?? [])) {
-        if (!dl.projectId || dl.done) continue;
-        const st = resolveProject(p.wsId, dl.projectId)?.status;
-        if (st && st !== 'planned') continue; // 진행중/완료/보류는 그대로 둠
-        const start = dlPeriod(p, dl).start;
-        if (start && start <= todayStr) store.updateProject(p.wsId, dl.projectId, { status: 'active' });
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoActiveSig]);
   // 리스트 항목 클릭 등으로 scrollTarget이 잡히면 그 위치로 스무스 스크롤 (완료 후 초기화 — 오늘로 되돌아가지 않음)
   useEffect(() => {
     if (!scrollTarget) return;
@@ -391,7 +377,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 완료 처리된 프로젝트 숨김: 데드라인 done 또는 Plan 프로젝트 상태가 done
   const dlVisible = (wsId: string, dl: Deadline) => dl.enabled !== false && !dl.done && !(dl.projectId && resolveProject(wsId, dl.projectId)?.status === 'done');
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl)); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
-  const dlPeriod = (p: CalProgram, dl: Deadline) => { if (!dl.date) { const ts = dl.todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = dl.todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
+  const dlPeriod = (p: CalProgram, dl: Deadline) => { const todos = dl.todos ?? []; if (!dl.date) { const ts = todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
   void progPeriod; // 사업목표 행 숨김으로 미사용
   // 로드맵 정렬: 디데이순(가까운 마감 먼저) / 비즈니스별(같은 사업끼리)
   const progNearestDue = (p: CalProgram) => { const ds = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl) && dl.date).map(dl => dl.date); return ds.length ? [...ds].sort()[0] : '9999-99-99'; };
@@ -530,7 +516,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           (a.done ? 1 : 0) - (b.done ? 1 : 0)
           || (((b.days?.length ?? 0) > 0 ? 1 : 0) - ((a.days?.length ?? 0) > 0 ? 1 : 0))
           || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
-        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs, projectId: dl.projectId, status: dl.projectId ? (resolveProject(p.wsId, dl.projectId)?.status ?? 'planned') : undefined });
+        const startStr = t.date || dl.startDate || '';
+        const rawStatus = dl.projectId ? (resolveProject(p.wsId, dl.projectId)?.status ?? 'planned') : undefined;
+        // 시작일이 지난(예정) 프로젝트는 표시상 '진행중'으로 (데이터 변경 없이 파생)
+        const status = rawStatus === 'planned' && startStr && startStr <= todayStr ? 'active' : rawStatus;
+        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: startStr, due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs, projectId: dl.projectId, status });
       }
     }
   }
