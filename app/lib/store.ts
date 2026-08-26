@@ -32,8 +32,12 @@ function collapseToAreas(
 
   // 정의된 모든 영역에 컨테이너 보장(빈 영역에도 데드라인을 추가할 수 있도록)
   for (const a of areas) containerFor(a.id);
-  // 기존 프로그램의 데드라인을 소속 영역 컨테이너로 이관
+  // 기존 프로그램의 데드라인을 소속 영역 컨테이너로 이관.
+  // 단, Plan에서 '가져온 목표 프로그램'(fromPlan)은 흡수하지 않고 자기 정체성을 유지한다.
+  // (안 그러면 로드할 때마다 미분류로 뭉개져 가져온 프로젝트가 사라지는 것처럼 보임)
+  const fromPlanPrograms: Program[] = [];
   for (const p of programs) {
+    if (p.fromPlan) { fromPlanPrograms.push(p); continue; }
     const c = containerFor(p.workAreaId);
     remap.set(p.id, c.id);
     c.deadlines = [...(c.deadlines ?? []), ...(p.deadlines ?? [])];
@@ -42,10 +46,11 @@ function collapseToAreas(
   const newRoutines = routineSystems.map(rs =>
     rs.programId && remap.has(rs.programId) ? { ...rs, programId: remap.get(rs.programId)! } : rs,
   );
-  // 영역 정의 순서대로, 미분류는 마지막
+  // 영역 정의 순서대로, 미분류는 마지막, 가져온 목표 프로그램은 그 뒤에 원형 유지
   const ordered: Program[] = [];
   for (const a of areas) { const c = containers.get(a.id); if (c) ordered.push(c); }
   const none = containers.get(NONE); if (none) ordered.push(none);
+  for (const p of fromPlanPrograms) ordered.push(p);
   return { programs: ordered, routineSystems: newRoutines };
 }
 
