@@ -288,7 +288,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }, [calDrag?.key, calDrag?.mode]);
   useEffect(() => { if (!notPlaced) return; const t = setTimeout(() => setNotPlaced(null), 2800); return () => clearTimeout(t); }, [notPlaced]);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
-  useEffect(() => { if (kanban && boardRef.current) boardRef.current.scrollLeft = 0; setSel(new Map()); setSelMode(false); }, [kanban]);
+  // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
+  useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
 
   // 선택 항목들에 일괄 패치 적용 (레벨별로 올바른 필드에)
   const applyBulkPatches = (upList: { key: string; patch: BulkPatch }[]) => {
@@ -329,7 +330,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   useEffect(() => {
     if (!scrollTarget) return;
     const el = scrollRef.current; if (!el) return;
-    el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - el.clientWidth / 2), behavior: 'smooth' });
+    // 클릭한 항목을 라벨 열 바로 오른쪽(왼쪽 가까이)에 배치 — 중앙 정렬 대신 살짝 여백만
+    el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - 32), behavior: 'smooth' });
     updateVisLabel(el);
     setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
