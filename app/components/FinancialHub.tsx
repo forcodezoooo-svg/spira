@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useStore } from '../lib/useStore';
 import CategoryPicker from './CategoryPicker';
+import { workspaceColor } from '../lib/goalTasks';
 import type { ResourceEntry, Subscription, Project } from '../lib/types';
 
 const won = (n: number) => `${n < 0 ? '−' : ''}₩${Math.abs(Math.round(n)).toLocaleString('ko-KR')}`;
@@ -198,11 +199,11 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');
   const addSpend = (c: Category) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResourceInWs(c.wsId, { type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), todoId: c.todoId, ...(c.projectId ? { projectId: c.projectId } : {}) }); setSpName(''); setSpAmt(''); setSpendFor(null); };
   // 비즈니스 · 프로젝트 단위로 묶어서 표시
-  const groups: { key: string; wsName: string; projectName: string; items: Category[] }[] = [];
+  const groups: { key: string; wsId: string; wsName: string; projectName: string; items: Category[] }[] = [];
   for (const c of cats) {
     const key = `${c.wsId}::${c.projectName}`;
     let g = groups.find(x => x.key === key);
-    if (!g) { g = { key, wsName: c.wsName, projectName: c.projectName, items: [] }; groups.push(g); }
+    if (!g) { g = { key, wsId: c.wsId, wsName: c.wsName, projectName: c.projectName, items: [] }; groups.push(g); }
     g.items.push(c);
   }
   const catRow = (c: Category) => {
@@ -238,15 +239,19 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
     <Card title="프로젝트 투자비">
       {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 카테고리가 없어요. Goals 카테고리 보드에서 진행 중인 프로젝트·산출물을 만들어보세요.</p> : (
         <div className="space-y-4">
-          {groups.map(g => (
-            <div key={g.key}>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>{g.wsName}</span>
-                <span className="text-[13px] font-black truncate" style={{ color: '#16211E' }}>{g.projectName}</span>
+          {groups.map(g => {
+            const color = workspaceColor(store.allWorkspacesEntries, g.wsId);
+            return (
+              <div key={g.key}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-[11px] font-bold" style={{ color }}>{g.wsName}</span>
+                  <span className="text-[13px] font-black truncate" style={{ color: '#16211E' }}>{g.projectName}</span>
+                </div>
+                <div className="space-y-2">{g.items.map(catRow)}</div>
               </div>
-              <div className="space-y-2">{g.items.map(catRow)}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>
