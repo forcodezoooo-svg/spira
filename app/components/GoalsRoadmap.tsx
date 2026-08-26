@@ -57,6 +57,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const gran: Scale = pxPerDay < 8 ? 'year' : pxPerDay < 40 ? 'month' : 'week'; // 줌 정도에 따라 눈금/라벨 밀도만 결정
   const [kanban, setKanban] = useState(false); // 칸반 탭 여부
   const [sortMode, setSortMode] = useState<'dday' | 'business'>('business'); // 로드맵 정렬: 디데이순 / 비즈니스별
+  const [ctxMenu, setCtxMenu] = useState<{ r: Row; x: number; y: number; days: number } | null>(null); // 우클릭 소요일 입력
+  const [editingKey, setEditingKey] = useState<string | null>(null); // 리스트 이름 인라인 편집 중인 행
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
   const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -136,10 +138,69 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     let s = start; if (min && s < min) s = min; if (max && s > max) s = max; return { start: s, end };
   };
 
+  // 막대 기간 적용(공용): 프로젝트(deadline)는 원래 범위→새 범위로 하위 산출물/task를 비례 스케일(이동·축소·확대 함께),
+  // 산출물(todo)은 자기 기간만 바꾸고 상위 프로젝트를 전체 범위로 자동 확장. (드래그·우클릭 소요일 입력 공용)
+  const applyBarRange = (
+    t: { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string },
+    newStart: string, newEnd: string, origStart: string, origEnd: string,
+  ) => {
+    const prog = findProg(t.wsId, t.programId); if (!prog) return;
+    const oSpan = daysBetween(origStart, origEnd);
+    const nSpan = daysBetween(newStart, newEnd);
+    const mapDate = (x?: string) => {
+      if (!x) return x;
+      if (oSpan <= 0) return addDaysStr(x, daysBetween(origStart, newStart)); // 폭 0이면 단순 이동
+      const off = daysBetween(origStart, x);
+      return addDaysStr(newStart, Math.round((off * nSpan) / oSpan));
+    };
+    const deadlines = (prog.deadlines ?? []).map(dl => {
+      if (dl.id !== t.deadlineId) return dl;
+      if (t.level === 'deadline') {
+        return { ...dl, startDate: newStart, date: newEnd, todos: dl.todos.map(td => ({ ...td, date: mapDate(td.date), deadline: mapDate(td.deadline), subtasks: (td.subtasks ?? []).map(s => ({ ...s, date: mapDate(s.date), deadline: mapDate(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: mapDate(u.date), deadline: mapDate(u.deadline) })) })) })) };
+      }
+      const newTodos = dl.todos.map(td => {
+        if (td.id !== t.todoId) return td;
+        if (t.level === 'todo') return { ...td, date: newStart, deadline: newEnd };
+        return { ...td, subtasks: (td.subtasks ?? []).map(s => {
+          if (s.id !== t.subtaskId) return s;
+          if (t.level === 'subtask') return { ...s, date: newStart, deadline: newEnd };
+          return { ...s, units: (s.units ?? []).map(u => u.id === t.unitId ? { ...u, date: newStart, deadline: newEnd } : u) };
+        }) };
+      });
+      if (t.level === 'todo') {
+        const tds = newTodos.flatMap(x => [x.date, x.deadline]).filter((x): x is string => !!x);
+        if (tds.length) { const minT = tds.reduce((a, b) => (a < b ? a : b)); const maxT = tds.reduce((a, b) => (a > b ? a : b)); return { ...dl, startDate: minT, date: maxT, todos: newTodos }; }
+      }
+      return { ...dl, todos: newTodos };
+    });
+    store.updateProgramInWs(t.wsId, { ...prog, deadlines });
+  };
+
+  // 우클릭 → 소요 일수(N일) 입력: 시작일 고정, 완료일 = 시작일 + (N-1). 프로젝트면 하위도 함께 스케일.
+  const setBarDuration = (r: Row, days: number) => {
+    if (!r.start) return;
+    const newEnd = addDaysStr(r.start, Math.max(0, Math.round(days) - 1));
+    applyBarRange({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, r.start, newEnd, r.start, r.end ?? r.start);
+  };
+
+  // 리스트에서 프로젝트(데드라인)·산출물(todo) 이름 변경
+  const renameRow = (r: Row, name: string) => {
+    const nm = name.trim(); if (!nm) return;
+    const prog = findProg(r.wsId, r.programId); if (!prog) return;
+    const deadlines = (prog.deadlines ?? []).map(dl => {
+      if (dl.id !== r.deadlineId) return dl;
+      if (r.kind === 'deadline') return { ...dl, name: nm };
+      return { ...dl, todos: dl.todos.map(td => td.id === r.todoId ? { ...td, name: nm } : td) };
+    });
+    store.updateProgramInWs(r.wsId, { ...prog, deadlines });
+  };
+
   const commitCalDrag = () => {
     const d = calDragRef.current; setCalDrag(null);
     if (!d || (d.start === d.origStart && d.end === d.origEnd)) return;
     const prog = findProg(d.wsId, d.programId); if (!prog) return;
+    // 프로젝트·산출물 막대: 공용 적용(프로젝트는 하위 비례 스케일로 함께 이동/축소)
+    if (d.level === 'deadline' || d.level === 'todo') { applyBarRange(d, d.start, d.end, d.origStart, d.origEnd); return; }
     const delta = daysBetween(d.origEnd, d.end);
     const shift = (x?: string) => (x ? addDaysStr(x, delta) : x);
     const shSub = (s: NonNullable<Deadline['todos'][number]['subtasks']>[number]) => ({ ...s, date: shift(s.date), deadline: shift(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: shift(u.date), deadline: shift(u.deadline) })) });
@@ -170,6 +231,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(d.wsId, { ...prog, deadlines });
   };
   const startCalDrag = (r: Row, mode: 'move' | 'resize-start' | 'resize-end', e: React.MouseEvent) => {
+    if (e.button !== 0) return; // 우클릭(소요일 입력) 등은 드래그 시작 안 함
     if (!r.start || !r.end) return;
     e.preventDefault(); e.stopPropagation();
     movedRef.current = false;
@@ -874,6 +936,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const left = placed ? xOf(r.start!) : 0;
               const width = placed ? wOf(r.start!, r.end!) : 0;
               const dragging = calDrag?.key === r.key;
+              const bl = sortMode === 'dday' ? 2 : r.level; // 시작일순에서는 산출물 막대를 비즈니스별 산출물(2단계) 디자인과 동일하게
               return (
                 <div key={r.key} data-rm-row={r.key} className="flex" style={{ minHeight: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div
@@ -890,29 +953,38 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     ) : <span className="w-4 flex-shrink-0" />}
                     <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />
                     <span className="flex-1 min-w-0 py-1 leading-snug">
-                      <span className="line-clamp-2 break-words block" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
+                      {editingKey === r.key ? (
+                        <input autoFocus defaultValue={r.name} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
+                          onKeyDown={e => { if (e.key === 'Enter') { renameRow(r, (e.target as HTMLInputElement).value); setEditingKey(null); } else if (e.key === 'Escape') setEditingKey(null); }}
+                          onBlur={e => { renameRow(r, e.target.value); setEditingKey(null); }}
+                          className="w-full text-[12px] px-1.5 py-1 rounded-md bg-white outline-none" style={{ border: `1.5px solid ${r.color}` }} />
+                      ) : (
+                        <span className="line-clamp-2 break-words block cursor-text" onDoubleClick={e => { e.stopPropagation(); setEditingKey(r.key); }} title="더블클릭하여 이름 수정" style={{ fontSize: r.level === 0 ? 13 : 12, fontWeight: r.level === 0 ? 800 : r.level === 1 ? 600 : 400, color: r.level >= 2 ? '#5B6560' : '#16211E' }}>{r.name}</span>
+                      )}
                       {r.subName && <span className="truncate block text-[10px]" style={{ color: '#9AA39D' }}>{r.subName}</span>}
                     </span>
                     {!placed && r.level > 0 && <span className="text-[9px] flex-shrink-0" style={{ color: '#C4A24A' }}>미배치</span>}
+                    {r.level > 0 && editingKey !== r.key && <button onClick={e => { e.stopPropagation(); setEditingKey(r.key); }} className="text-neutral-300 hover:text-violet-500 text-[11px] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="이름 수정">✎</button>}
                     <button onClick={e => { e.stopPropagation(); delRow(r); }} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
+                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); if (r.level > 0 && r.start && r.end) setCtxMenu({ r, x: e.clientX, y: e.clientY, days: daysBetween(r.start, r.end) + 1 }); }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer overflow-hidden"
                         style={{
-                          left, width: Math.max(width, r.level === 1 ? 14 : 6), height: barH(r.level),
+                          left, width: Math.max(width, bl === 1 ? 14 : 6), height: barH(bl),
                           // 위계: 프로젝트=진한 단색(흰 글씨), 산출물=연한 채움+테두리
-                          backgroundColor: r.level === 1 ? r.color : `${r.color}33`,
-                          border: r.level === 1 ? `1px solid ${r.color}` : `1.5px solid ${r.color}`,
-                          borderRadius: r.level === 1 ? 8 : 6,
+                          backgroundColor: bl === 1 ? r.color : `${r.color}33`,
+                          border: bl === 1 ? `1px solid ${r.color}` : `1.5px solid ${r.color}`,
+                          borderRadius: bl === 1 ? 8 : 6,
                           opacity: dragging ? 0.95 : 1,
-                          boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : (r.level === 1 ? '0 2px 5px rgba(0,0,0,0.15)' : 'none'),
-                          zIndex: hl ? 6 : r.level === 1 ? 4 : 1,
+                          boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : (bl === 1 ? '0 2px 5px rgba(0,0,0,0.15)' : 'none'),
+                          zIndex: hl ? 6 : bl === 1 ? 4 : 1,
                         }}
-                        title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동 · 양끝: 기간 조절`}>
-                        {r.level >= 2 && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: r.color }} />}
-                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: r.level === 1 ? 12 : 10, fontWeight: r.level === 1 ? 800 : 600, color: r.level === 1 ? '#fff' : '#16211E', textShadow: r.level === 1 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
+                        title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동 · 양끝: 기간 조절 · 우클릭: 소요일 입력`}>
+                        {bl >= 2 && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: r.color }} />}
+                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: bl === 1 ? 12 : 10, fontWeight: bl === 1 ? 800 : 600, color: bl === 1 ? '#fff' : '#16211E', textShadow: bl === 1 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
                         {r.level > 0 && <>
                           <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                           <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
@@ -926,6 +998,26 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       </div>
+      )}
+
+      {/* 우클릭: 막대 소요 일수 입력 */}
+      {ctxMenu && (
+        <>
+          <div className="fixed inset-0 z-[59]" onClick={() => setCtxMenu(null)} onContextMenu={e => { e.preventDefault(); setCtxMenu(null); }} />
+          <div className="fixed z-[60] rounded-xl bg-white shadow-xl p-3" style={{ left: Math.min(ctxMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 210), top: ctxMenu.y + 6, border: '1px solid #E7E7E1', width: 196 }} onClick={e => e.stopPropagation()}>
+            <div className="text-[11px] font-bold mb-1.5 truncate" style={{ color: '#16211E' }}>{ctxMenu.r.kind === 'deadline' ? '프로젝트' : '산출물'} 소요 일수</div>
+            <div className="text-[10px] mb-2 truncate" style={{ color: '#9AA39D' }}>{ctxMenu.r.name}</div>
+            <div className="flex items-center gap-1.5">
+              <input type="number" min={1} autoFocus value={ctxMenu.days}
+                onChange={e => setCtxMenu(c => c ? { ...c, days: Math.max(1, Number(e.target.value) || 1) } : c)}
+                onKeyDown={e => { if (e.key === 'Enter') { setBarDuration(ctxMenu.r, ctxMenu.days); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
+                className="w-16 text-[13px] px-2 py-1.5 rounded-lg outline-none tabular-nums text-center" style={{ border: '1.5px solid #C9D6C2' }} />
+              <span className="text-[12px]" style={{ color: '#5B6560' }}>일</span>
+              <button onClick={() => { setBarDuration(ctxMenu.r, ctxMenu.days); setCtxMenu(null); }} className="ml-auto text-[12px] font-bold rounded-lg px-3 py-1.5 text-white" style={{ backgroundColor: '#3E6B1F' }}>적용</button>
+            </div>
+            {ctxMenu.r.kind === 'deadline' && <div className="text-[10px] mt-2 leading-snug" style={{ color: '#9AA39D' }}>시작일 고정 · 하위 산출물도 함께 조정</div>}
+          </div>
+        </>
       )}
 
       {/* 완료 시 실제 소요시간 입력 */}
