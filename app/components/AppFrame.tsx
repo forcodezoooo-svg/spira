@@ -7,6 +7,7 @@ import MobileHeader from './MobileHeader';
 import MainShell from './MainShell';
 import AppContextBridge from './AppContextBridge';
 import AIChatButton from './AIChatButton';
+import AskAboutOverlay from './AskAboutOverlay';
 import Onboarding from './Onboarding';
 import Teaching from './Teaching';
 import FeedbackSurvey from './FeedbackSurvey';
@@ -30,6 +31,7 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
       <MainShell>{children}</MainShell>
       <AppContextBridge />
       <AIChatButton />
+      <AskAboutOverlay />
       <Onboarding />
       <Teaching />
       <FeedbackSurvey />

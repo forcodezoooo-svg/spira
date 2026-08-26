@@ -860,7 +860,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ) : (
           <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbCols.map(col => (
-            <div key={col.todoId} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
+            <div key={col.todoId} data-ask data-ask-label={`카테고리 · ${col.area}`} data-ask-content={col.goalSub ? `${col.area}: ${col.goalSub}` : col.area} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
               <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
@@ -891,6 +891,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         const units = s.units ?? [];
                         return (
                           <div key={s.id} draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
+                            data-ask data-ask-label={`task · ${col.area}`} data-ask-content={s.name}
                             className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.5 : 1 }}>
                             <div className="flex items-start gap-1.5">
                               {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
@@ -1022,6 +1023,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <div key={r.key} data-rm-row={r.key} className="flex" style={{ minHeight: ROW_H, backgroundColor: pgIdx % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div
                     onClick={() => (selMode ? toggleSel(rowSel(r)) : enterLevel(r))}
+                    data-ask data-ask-label={`${r.kind === 'deadline' ? '프로젝트' : '산출물'} · ${r.name}`} data-ask-content={r.subName ? `${r.name} (${r.subName})` : r.name}
                     className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
                     style={{ width: LABEL_W, paddingLeft: 8 + (r.level - 1) * 15, borderColor: '#F4F4F0', backgroundColor: checked ? '#F3F0FF' : hl ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
                     draggable={!selMode && r.level > 0 && !placed}
