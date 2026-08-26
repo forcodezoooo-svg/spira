@@ -27,21 +27,14 @@ const mergedInvest = (store: Store): Record<string, number> => Object.assign({},
 type Category = { wsId: string; wsName: string; todoId: string; name: string; projectName: string; projectId?: string };
 const allCategories = (store: Store): Category[] => {
   const out: Category[] = [];
-  const today = new Date().toISOString().slice(0, 10);
   for (const e of store.allWorkspacesEntries) {
     const projs = e.plan?.projects ?? [];
     for (const prog of e.programs ?? []) {
       for (const dl of prog.deadlines ?? []) {
         if (dl.enabled === false || dl.done) continue;
         const proj = dl.projectId ? projs.find(p => p.id === dl.projectId) : undefined;
-        const status = proj?.status;
-        if (status === 'done' || status === 'onhold') continue;
-        // 진행중 = status가 active로 명시됐거나, '현재 진행 기간 안'(시작일 지남 + 마감일 안 지남)
-        const todoDates = (dl.todos ?? []).map(t => t.date).filter((x): x is string => !!x).sort();
-        const start = dl.startDate || todoDates[0] || dl.date;
-        const end = dl.date || dl.startDate;
-        const inWindow = !!start && start <= today && (!end || end >= today);
-        if (!(status === 'active' || inWindow)) continue;
+        // '진행중'으로 명시된 프로젝트만 (Plan/카테고리 보드 상태 선택기로 직접 지정)
+        if (proj?.status !== 'active') continue;
         for (const t of dl.todos ?? []) {
           if (t.done) continue;
           out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, name: t.name, projectName: proj?.name || dl.name, projectId: dl.projectId });
