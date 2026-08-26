@@ -268,17 +268,26 @@ function ReserveSection() {
   const store = useStore();
   const marks = store.reserveEarmarks;
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
-  const setMark = (id: string, p: Partial<typeof marks[number]>) => store.setReserveEarmarks(marks.map(m => m.id === id ? { ...m, ...p } : m));
-  // 모든 비즈니스의 Plan 목표·프로젝트 (Goals 로드맵 배치 여부와 무관하게 plan에 있는 것 전부)
-  const targets = store.allWorkspacesEntries.flatMap(e => [
-    ...(e.plan?.goals ?? []).map(g => ({ kind: 'goal' as const, wsId: e.workspace.id, wsName: e.workspace.name, id: g.id, name: g.name })),
-    ...(e.plan?.projects ?? []).map(p => ({ kind: 'project' as const, wsId: e.workspace.id, wsName: e.workspace.name, id: p.id, name: p.name })),
-  ]);
-  const valOf = (m: typeof marks[number]) => m.goalId ? `g:${m.goalId}` : m.projectId ? `p:${m.projectId}` : '';
-  const setTarget = (id: string, v: string) => {
-    const t = targets.find(x => `${x.kind === 'goal' ? 'g' : 'p'}:${x.id}` === v);
-    setMark(id, { wsId: t?.wsId, goalId: t?.kind === 'goal' ? t.id : undefined, projectId: t?.kind === 'project' ? t.id : undefined });
+  const wsColor = (wsId: string) => workspaceColor(store.allWorkspacesEntries, wsId);
+  // 모든 비즈니스의 Plan 목표·프로젝트를 자동으로 목록화 (Goals 로드맵 배치 여부 무관)
+  const amountFor = (kind: 'goal' | 'project', id: string) => marks.find(m => kind === 'goal' ? m.goalId === id : m.projectId === id)?.amount ?? 0;
+  const setAmount = (kind: 'goal' | 'project', wsId: string, id: string, amount: number) => {
+    const exist = marks.find(m => kind === 'goal' ? m.goalId === id : m.projectId === id);
+    let next = marks;
+    if (exist) next = amount > 0 ? marks.map(m => m === exist ? { ...m, amount } : m) : marks.filter(m => m !== exist);
+    else if (amount > 0) next = [...marks, { id: uid(), wsId, ...(kind === 'goal' ? { goalId: id } : { projectId: id }), amount }];
+    store.setReserveEarmarks(next);
   };
+  const groups = store.allWorkspacesEntries
+    .map(e => ({ wsId: e.workspace.id, wsName: e.workspace.name, goals: e.plan?.goals ?? [], projects: e.plan?.projects ?? [] }))
+    .filter(g => g.goals.length > 0 || g.projects.length > 0);
+  const row = (kind: 'goal' | 'project', wsId: string, id: string, name: string) => (
+    <div key={`${kind}${id}`} className="flex items-center gap-2">
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: kind === 'goal' ? '#EAF3FF' : '#F0F0EA', color: kind === 'goal' ? '#2B62C4' : '#5B6560' }}>{kind === 'goal' ? '목표' : '프로젝트'}</span>
+      <span className="text-[12px] truncate min-w-0 flex-1" style={{ color: '#16211E' }}>{name}</span>
+      <input type="number" value={amountFor(kind, id) || ''} onChange={e => setAmount(kind, wsId, id, Number(e.target.value) || 0)} placeholder="필요액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400 flex-shrink-0" style={{ borderColor: 'var(--spira-border)' }} />
+    </div>
+  );
   return (
     <Card title="비상금 설정">
       <div className="flex items-center gap-2 mb-3">
@@ -286,29 +295,23 @@ function ReserveSection() {
         <input type="number" min={0} max={100} value={store.emergencyFundPct || ''} onChange={e => store.setEmergencyFundPct(Number(e.target.value) || 0)} placeholder="0" className="w-16 text-[14px] tabular-nums text-center bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
         <span className="text-[13px]" style={{ color: '#5B6560' }}>%를 비상금으로 남겨둡니다.</span>
       </div>
-      <p className="text-[12px] font-semibold mb-1.5" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 목표/프로젝트 <span className="font-normal" style={{ color: '#9AA39D' }}>· 모든 비즈니스</span></p>
-      <div className="space-y-1.5">
-        {marks.map(m => (
-          <div key={m.id} className="flex items-center gap-2">
-            <select value={valOf(m)} onChange={e => setTarget(m.id, e.target.value)} className="flex-1 min-w-0 text-[12px] rounded-lg border px-2 py-1.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>
-              <option value="">목표/프로젝트 선택</option>
-              {store.allWorkspacesEntries.map(e => {
-                const gs = e.plan?.goals ?? []; const ps = e.plan?.projects ?? [];
-                if (gs.length === 0 && ps.length === 0) return null;
-                return (
-                  <optgroup key={e.workspace.id} label={e.workspace.name}>
-                    {gs.map(g => <option key={`g${g.id}`} value={`g:${g.id}`}>목표 · {g.name}</option>)}
-                    {ps.map(p => <option key={`p${p.id}`} value={`p:${p.id}`}>프로젝트 · {p.name}</option>)}
-                  </optgroup>
-                );
-              })}
-            </select>
-            <input type="number" value={m.amount || ''} onChange={e => setMark(m.id, { amount: Number(e.target.value) || 0 })} placeholder="필요액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-            <button onClick={() => store.setReserveEarmarks(marks.filter(x => x.id !== m.id))} className="w-5 text-neutral-300 hover:text-red-500 text-sm">×</button>
-          </div>
-        ))}
-      </div>
-      <button onClick={() => store.setReserveEarmarks([...marks, { id: uid(), amount: 0 }])} className="mt-2 text-[11px] font-semibold" style={{ color: '#5B6560' }}>+ 미래 목표/프로젝트 추가</button>
+      <p className="text-[12px] font-semibold mb-2" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 목표/프로젝트에 필요액을 적어두세요 <span className="font-normal" style={{ color: '#9AA39D' }}>· 모든 비즈니스</span></p>
+      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>Plan/Goals에서 만든 목표·프로젝트가 여기에 떠요.</p> : (
+        <div className="space-y-4">
+          {groups.map(g => (
+            <div key={g.wsId}>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: wsColor(g.wsId) }} />
+                <span className="text-[12px] font-bold" style={{ color: wsColor(g.wsId) }}>{g.wsName}</span>
+              </div>
+              <div className="space-y-1.5">
+                {g.goals.map(x => row('goal', g.wsId, x.id, x.name))}
+                {g.projects.map(x => row('project', g.wsId, x.id, x.name))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
