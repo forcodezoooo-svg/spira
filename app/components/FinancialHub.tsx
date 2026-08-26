@@ -281,7 +281,10 @@ function ReserveSection() {
   const groups = store.allWorkspacesEntries
     .map(e => {
       const goalName = new Map((e.plan?.goals ?? []).map(g => [g.id, g.name] as const));
-      const projects = (e.plan?.projects ?? []).map(p => ({ id: p.id, name: p.name, goalName: p.goalId ? goalName.get(p.goalId) : undefined }));
+      // 현재 목표에 소속된 프로젝트만 (옛/끊긴 데이터 제외 — 지금 Plan 구조의 프로젝트만)
+      const projects = (e.plan?.projects ?? [])
+        .filter(p => p.goalId && goalName.has(p.goalId))
+        .map(p => ({ id: p.id, name: p.name, goalName: goalName.get(p.goalId!) }));
       return { wsId: e.workspace.id, wsName: e.workspace.name, projects };
     })
     .filter(g => g.projects.length > 0);
