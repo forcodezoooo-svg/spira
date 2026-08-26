@@ -522,6 +522,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }
   // '우선' 먼저, 그 다음 시작일 빠른 순
   kbCols.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.start || '9999-99-99').localeCompare(b.start || '9999-99-99'));
+  // 최근 완료: 완료된 프로젝트(데드라인)를 완료 후 RETAIN_DAYS일간 되살릴 수 있게 보관, 이후 보드에서 사라짐
+  const RETAIN_DAYS = 14;
+  const recentDone: { p: CalProgram; dl: Deadline; daysLeft: number }[] = [];
+  for (const p of programs) {
+    if (kbScope.program && kbScope.program.id !== p.id) continue;
+    for (const dl of (p.deadlines ?? [])) {
+      if (!dl.done || !dl.doneAt) continue;
+      const since = Math.floor((Date.now() - new Date(dl.doneAt).getTime()) / 86400000);
+      if (since < 0 || since >= RETAIN_DAYS) continue;
+      recentDone.push({ p, dl, daysLeft: RETAIN_DAYS - since });
+    }
+  }
+  recentDone.sort((a, b) => (b.dl.doneAt || '').localeCompare(a.dl.doneAt || '')); // 최근 완료 먼저
   // 전체 task(subtask) 색인 — 선행(dependsOn) 이름/완료 표시용
   const subById = new Map<string, { name: string; done: boolean }>();
   for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) subById.set(s.id, { name: s.name, done: s.done });
@@ -646,6 +659,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       });
       if (changed) store.updateProgramInWs(col.p.wsId, { ...pg, deadlines });
     }
+  };
+  // 완료된 프로젝트(데드라인) 되살리기 — done 해제 + 프로젝트 상태 진행중으로
+  const kbRestoreDeadline = (p: CalProgram, dlId: string, projectId?: string) => {
+    const prog = findProg(p.wsId, p.id); if (!prog) return;
+    store.updateProgramInWs(p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, done: false, doneAt: undefined } : d) });
+    if (projectId) store.updateProject(p.wsId, projectId, { status: 'active' });
   };
   const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); setFormDays([]); };
   const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); setFormDays(s.days ?? []); };
@@ -832,7 +851,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </button>
             )}
           </div>
-          {kbCols.length === 0 ? (
+          {kbCols.length === 0 && recentDone.length === 0 ? (
             <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
           ) : (
           <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
@@ -922,6 +941,29 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             </div>
           ))}
+            {/* 최근 완료: 완료 후 2주간 되살리기 가능, 이후 사라짐 */}
+            {recentDone.length > 0 && (
+              <div className="flex flex-col min-h-0 w-[280px] flex-shrink-0 rounded-xl border-2 border-dashed" style={{ borderColor: '#D8D8D0', backgroundColor: '#FAFAF7' }}>
+                <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                  <div className="text-[13px] font-black" style={{ color: '#5B6560' }}>최근 완료 · {recentDone.length}</div>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#9AA39D' }}>완료 후 {RETAIN_DAYS}일간 되살릴 수 있어요</p>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                  {recentDone.map(({ p, dl, daysLeft }) => (
+                    <div key={dl.id} className="bg-white border rounded-lg p-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
+                        <span className="text-[12px] font-bold flex-1 min-w-0 line-clamp-2" style={{ color: '#16211E' }}>{dl.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-[10px] font-semibold" style={{ color: daysLeft <= 3 ? '#C0392B' : '#9AA39D' }}>{daysLeft}일 후 사라짐</span>
+                        <button onClick={() => kbRestoreDeadline(p, dl.id, dl.projectId)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#E4F5E0', color: '#3E6B1F' }}>되살리기</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           )}
         </div>
