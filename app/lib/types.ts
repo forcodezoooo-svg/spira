@@ -315,6 +315,7 @@ export interface ResourceEntry {
   // ── Financial Resource Planning 연결 (모두 선택, 강제 안 함) ──
   financialPlanId?: string; // 소속 재무계획
   projectId?: string;       // 연결된 프로젝트(plan.projects[].id) — 프로젝트 실지출 집계용
+  todoId?: string;          // 연결된 산출물(카테고리 보드 항목=ProgramTodo id) — 산출물별 실지출 집계용
   revenueClass?: 'confirmed' | 'expected'; // income일 때 확정/예상 구분(없으면 실현 실적)
 }
 

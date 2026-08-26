@@ -16,13 +16,32 @@ type Proj = Project & { wsId: string };
 const dateFor = (month: string) => (month === currentYM() ? new Date().toISOString().slice(0, 10) : `${month}-01`);
 const prevYM = (ym: string) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const subActive = (s: Subscription, month: string) => (!s.startMonth || s.startMonth <= month) && (!s.endMonth || month <= s.endMonth);
-const todayStr = () => new Date().toISOString().slice(0, 10);
 
 // 전 비즈니스(워크스페이스) 합산 — 기존 Resources와 동일하게 모든 사업의 거래를 함께 본다
 const allRes = (store: Store): Res[] => store.allWorkspacesEntries.flatMap(e => (e.resources ?? []).map(r => ({ ...r, wsId: e.workspace.id })));
 const allSubs = (store: Store): (Subscription & { wsId: string })[] => store.allWorkspacesEntries.flatMap(e => (e.subscriptions ?? []).map(s => ({ ...s, wsId: e.workspace.id })));
 const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap(e => (e.plan?.projects ?? []).map(p => ({ ...p, wsId: e.workspace.id })));
 const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
+
+// 카테고리 보드에 뜨는 항목들 = 표시되는 데드라인(진행) 아래 완료 안 된 산출물(업무영역별 산출물)
+type Category = { wsId: string; todoId: string; name: string; dlName: string; projectId?: string };
+const allCategories = (store: Store): Category[] => {
+  const out: Category[] = [];
+  for (const e of store.allWorkspacesEntries) {
+    const projs = e.plan?.projects ?? [];
+    for (const prog of e.programs ?? []) {
+      for (const dl of prog.deadlines ?? []) {
+        if (dl.enabled === false || dl.done) continue;
+        if (dl.projectId && projs.find(p => p.id === dl.projectId)?.status === 'done') continue;
+        for (const t of dl.todos ?? []) {
+          if (t.done) continue;
+          out.push({ wsId: e.workspace.id, todoId: t.id, name: t.name, dlName: dl.name, projectId: dl.projectId });
+        }
+      }
+    }
+  }
+  return out;
+};
 
 // 통합 재무 페이지 — 도식(순이익 − 고정비용 − 프로젝트투자비 − 비상금% = 개인순이익) + 항목별 입력
 export default function FinancialHub({ month }: { month: string }) {
@@ -36,13 +55,14 @@ export default function FinancialHub({ month }: { month: string }) {
 
   const income = incomeEntries.reduce((s, e) => s + e.amount, 0);
   const subTotal = subs.reduce((s, x) => s + x.amount, 0);
-  const projInvest = expenseEntries.filter(e => e.projectId).reduce((s, e) => s + e.amount, 0);
-  const fixed = expenseEntries.filter(e => !e.projectId).reduce((s, e) => s + e.amount, 0) + subTotal;
+  const isInvest = (e: Res) => !!(e.todoId || e.projectId); // 산출물/프로젝트에 연결된 지출 = 투자비
+  const projInvest = expenseEntries.filter(isInvest).reduce((s, e) => s + e.amount, 0);
+  const fixed = expenseEntries.filter(e => !isInvest(e)).reduce((s, e) => s + e.amount, 0) + subTotal;
   const pct = store.emergencyFundPct;
   const reserve = Math.round(income * pct / 100);
   const personal = income - fixed - projInvest - reserve;
 
-  const projSpent = (pid: string) => expenseEntries.filter(e => e.projectId === pid).reduce((s, e) => s + e.amount, 0);
+  const catSpent = (todoId: string) => expenseEntries.filter(e => e.todoId === todoId).reduce((s, e) => s + e.amount, 0);
 
   const Box = ({ id, label, value }: { id: Section; label: string; value: number }) => {
     const on = section === id;
@@ -80,7 +100,7 @@ export default function FinancialHub({ month }: { month: string }) {
 
       {section === 'income' && <IncomeSection month={month} />}
       {section === 'fixed' && <FixedSection month={month} />}
-      {section === 'invest' && <InvestSection month={month} projSpent={projSpent} />}
+      {section === 'invest' && <InvestSection month={month} catSpent={catSpent} />}
       {section === 'reserve' && <ReserveSection />}
     </div>
   );
@@ -117,7 +137,7 @@ function FixedSection({ month }: { month: string }) {
     store.updateSubscriptionInWs(s.wsId, { id: s.id, name: s.name, amount: s.amount, startMonth: s.startMonth, endMonth: when === 'now' ? prevYM(cm) : cm });
   };
   const cats = Array.from(new Set(store.allWorkspacesEntries.flatMap(e => e.expenseCategories ?? []))).filter(c => c !== RECURRING_CAT);
-  const list = allRes(store).filter(e => e.type === 'expense' && !e.projectId && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
+  const list = allRes(store).filter(e => e.type === 'expense' && !e.projectId && !e.todoId && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
   const subs = allSubs(store).filter(s => subActive(s, month));
   const add = () => {
     const n = Number(amt.replace(/,/g, '')); if (!n || !name.trim()) return;
@@ -157,51 +177,42 @@ function FixedSection({ month }: { month: string }) {
   );
 }
 
-// ── 프로젝트 투자비 입력 (전 비즈니스 프로젝트) ──
-function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: string) => number }) {
+// ── 프로젝트 투자비 입력 — 카테고리 보드의 각 산출물(카테고리) 단위 ──
+function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: string) => number }) {
   const store = useStore();
-  // 카테고리보드와 동일한 '진행중' 판정: 상태 active이거나, (완료·보류 아님 + 프로젝트/로드맵 데드라인 시작일이 지남)
-  const projStart = (p: Proj) => {
-    let earliest = p.startDate;
-    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === p.wsId);
-    for (const prog of ws?.programs ?? []) for (const dl of prog.deadlines ?? []) {
-      if (dl.projectId !== p.id) continue;
-      const st = dl.startDate || dl.date;
-      if (st && (!earliest || st < earliest)) earliest = st;
-    }
-    return earliest;
-  };
-  const isRunning = (p: Proj) => p.status === 'active' || (p.status !== 'done' && p.status !== 'onhold' && !!projStart(p) && projStart(p)! <= todayStr());
-  const projects = allProjects(store).filter(isRunning); // 진행중(파생 포함) 프로젝트만
-  const investPlan = mergedInvest(store);
+  const cats = allCategories(store);
+  const investPlan = mergedInvest(store); // todoId -> 투자 예정액
   const [spendFor, setSpendFor] = useState<string | null>(null);
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');
-  const addSpend = (p: Proj) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResourceInWs(p.wsId, { type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), projectId: p.id }); setSpName(''); setSpAmt(''); setSpendFor(null); };
+  const addSpend = (c: Category) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResourceInWs(c.wsId, { type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), todoId: c.todoId, ...(c.projectId ? { projectId: c.projectId } : {}) }); setSpName(''); setSpAmt(''); setSpendFor(null); };
   return (
     <Card title="프로젝트 투자비">
-      {projects.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 프로젝트가 없어요. Plan/Goals에서 프로젝트를 만들어보세요.</p> : (
+      {cats.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>카테고리 보드에 표시되는 산출물이 없어요. Goals에서 프로젝트·산출물을 만들어보세요.</p> : (
         <div className="space-y-2">
-          {projects.map(p => {
-            const spent = projSpent(p.id);
-            const planned = investPlan[p.id] ?? 0;
+          {cats.map(c => {
+            const spent = catSpent(c.todoId);
+            const planned = investPlan[c.todoId] ?? 0;
             return (
-              <div key={p.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+              <div key={c.todoId} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{p.name}</span>
-                  <button onClick={() => { setSpendFor(spendFor === p.id ? null : p.id); setSpName(''); setSpAmt(''); }} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>지출 추가</button>
+                  <span className="min-w-0">
+                    <span className="text-[13px] font-bold block truncate" style={{ color: '#16211E' }}>{c.name}</span>
+                    <span className="text-[10px] block truncate" style={{ color: '#9AA39D' }}>{c.dlName}</span>
+                  </span>
+                  <button onClick={() => { setSpendFor(spendFor === c.todoId ? null : c.todoId); setSpName(''); setSpAmt(''); }} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>지출 추가</button>
                 </div>
                 <div className="flex items-center gap-3 mt-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px]" style={{ color: '#9AA39D' }}>투자 예정</span>
-                    <input type="number" value={planned || ''} onChange={e => store.setProjectInvestInWs(p.wsId, p.id, Number(e.target.value) || 0)} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
+                    <input type="number" value={planned || ''} onChange={e => store.setProjectInvestInWs(c.wsId, c.todoId, Number(e.target.value) || 0)} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
                   </div>
                   <span className="text-[11px] ml-auto" style={{ color: spent > planned && planned > 0 ? '#C0392B' : '#9AA39D' }}>사용 <b className="tabular-nums">{won(spent)}</b></span>
                 </div>
-                {spendFor === p.id && (
+                {spendFor === c.todoId && (
                   <div className="flex items-center gap-1.5 mt-2">
                     <input value={spName} onChange={e => setSpName(e.target.value)} placeholder="지출 내용" className="flex-1 min-w-0 text-[12px] bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
                     <input type="number" value={spAmt} onChange={e => setSpAmt(e.target.value)} placeholder="금액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-                    <button onClick={() => addSpend(p)} className="text-[12px] font-bold rounded-lg px-3 py-1.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>추가</button>
+                    <button onClick={() => addSpend(c)} className="text-[12px] font-bold rounded-lg px-3 py-1.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>추가</button>
                   </div>
                 )}
               </div>
