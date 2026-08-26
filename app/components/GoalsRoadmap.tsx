@@ -5,7 +5,6 @@ import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import type { Program } from '../lib/types';
 import ActualTimeModal from './ActualTimeModal';
-import { useChatContext } from '../lib/ChatContext';
 import { areaFactor, scheduleTasksByCapacity, scheduleParallel, ParallelGroup, ParallelTask } from '../lib/capacity';
 
 // Goals 간트 로드맵 — 좌측 트리(사업목표 › 프로젝트 › 영역별 산출물 › task)와 우측 타임라인을 1:1 정렬.
@@ -42,7 +41,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 ) {
   const store = useStore();
   const router = useRouter();
-  const chat = useChatContext();
   const schedule = store.workSchedule;
   const now = new Date();
   const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -813,7 +811,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ) : (
           <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbCols.map(col => (
-            <div key={col.todoId} className="flex flex-col min-h-0 w-[264px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
+            <div key={col.todoId} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
               <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
@@ -850,7 +848,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                               {s.schedulingType && s.schedulingType !== 'flexible' && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: s.schedulingType === 'fixed' ? '#E7F0FF' : '#FBF3E0', color: s.schedulingType === 'fixed' ? '#2B62C4' : '#96631A' }}>{s.schedulingType === 'fixed' ? '고정' : '기한'}</span>}
                               {s.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(s.durationMin)}</span> : null}
                               {!s.done && <DdayBadge d={s.deadline} />}
-                              <button onClick={() => chat?.openWithTarget(`task: ${s.name} (${col.area})`, s.name, text => updateSub(col, s.id, { name: text }))} title="AI와 이 task를 다듬기" className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg></button>
                               <button onClick={() => kbDel(col, s.id)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
                             </div>
                             <div className="mt-1 ml-6">
