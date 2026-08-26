@@ -576,6 +576,18 @@ export function useStore() {
   const setRevenueTarget = (target: RevenueTarget | undefined) =>
     updateActive(e => ({ ...e, revenueTarget: target }));
 
+  // ── Financial Resource Planning (활성 비즈니스의 재무계획) ──
+  const financialPlans = activeEntry?.financialPlans ?? [];
+  const addFinancialPlan = (plan: Omit<import('./types').FinancialPlan, 'id'>) => {
+    const id = uid();
+    updateActive(e => ({ ...e, financialPlans: [...(e.financialPlans ?? []), { ...plan, id }] }));
+    return id;
+  };
+  const updateFinancialPlan = (id: string, patch: Partial<import('./types').FinancialPlan>) =>
+    updateActive(e => ({ ...e, financialPlans: (e.financialPlans ?? []).map(p => p.id === id ? { ...p, ...patch } : p) }));
+  const deleteFinancialPlan = (id: string) =>
+    updateActive(e => ({ ...e, financialPlans: (e.financialPlans ?? []).filter(p => p.id !== id) }));
+
   // 수익원(수익 수단) 카테고리 — 금액 입력과 별개로 먼저 정의
   const addRevenueSource = (name: string) =>
     updateActive(e => {
@@ -775,6 +787,7 @@ export function useStore() {
     addResource, deleteResource, deleteResourceInWs,
     addSubscription, deleteSubscription, updateSubscription, deleteSubscriptionInWs, updateSubscriptionInWs,
     setRevenueTarget, addRevenueSource, deleteRevenueSource, setRevenueSourceBiz,
+    financialPlans, addFinancialPlan, updateFinancialPlan, deleteFinancialPlan,
     setRevenueSourceTarget, addExpenseCategory, deleteExpenseCategory, setExpenseCategoryTarget,
     addQuickTask, addUrgentTask, toggleQuickTask, toggleQuickTaskStar, toggleQuickTaskLight, setQuickTaskTime, deleteQuickTask, getQuickTasksForDate,
     addEvent, deleteEvent, getEventsForDate,

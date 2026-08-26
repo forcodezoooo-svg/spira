@@ -312,6 +312,60 @@ export interface ResourceEntry {
   description: string;
   date: string;
   source?: string; // 수익원(수익 수단) — income 항목에만 사용, 월별 추이 집계용
+  // ── Financial Resource Planning 연결 (모두 선택, 강제 안 함) ──
+  financialPlanId?: string; // 소속 재무계획
+  projectId?: string;       // 연결된 프로젝트(plan.projects[].id) — 프로젝트 실지출 집계용
+  revenueClass?: 'confirmed' | 'expected'; // income일 때 확정/예상 구분(없으면 실현 실적)
+}
+
+// ── Financial Resource Planning (§3~§14) — 전부 WorkspaceEntry(비즈니스) 안에 저장, migration 불필요 ──
+// 재무계획 내 수익원: 이름은 기존 revenueSources와 자유 연결. 확정/예상/목표 금액을 구분해 관리.
+export interface FinRevenueSource {
+  id: string;
+  name: string;
+  confirmed?: number; // 이미 계약·확정된 수익
+  expected?: number;  // 현재 사업 기준 예상 수익
+  target?: number;    // 이 소스의 목표 수익
+}
+// 운영비 항목 (반복=fixed는 기존 subscriptions로 자동 합산 가능, 여기선 추가 항목만)
+export interface OperatingBudgetItem {
+  id: string;
+  name: string;
+  amount: number;
+  kind: 'fixed' | 'variable';
+}
+// 예산 배분 (§11) — P0-2에서 사용. Goal/Project에 투자 여력을 배정.
+export interface BudgetAllocation {
+  id: string;
+  goalId?: string;
+  projectId?: string;
+  category?: string;      // 목표/프로젝트 없이 공통 비용일 수 있음
+  plannedAmount: number;  // 계획한 배정액
+}
+// 기간 단위 재무계획 (§3)
+export interface FinancialPlan {
+  id: string;
+  name: string;              // 예: "2026 Q4 Financial Plan"
+  startDate: string;         // YYYY-MM-DD
+  endDate: string;
+  startingFunds: number;     // 시작 시점 실제 보유 자금 (Target과 절대 동일 취급 안 함)
+  // Revenue Target: Goal 지표(metric criterion) 연결 우선, 없으면 직접 입력
+  linkedGoalId?: string;
+  linkedCriterionId?: string;
+  revenueTargetAmount?: number; // 연결 없을 때 직접 입력한 목표수익
+  revenueSources?: FinRevenueSource[];
+  includeFixedSubscriptions?: boolean; // 고정 운영비를 구독(subscriptions) 합계로 자동 포함 (기본 true)
+  operatingItems?: OperatingBudgetItem[];
+  reserveTarget?: number;    // 안전하게 남겨둘 자금 (Reserve) — AI가 기본 보호
+  allocations?: BudgetAllocation[]; // P0-2
+  status?: 'active' | 'draft' | 'closed';
+}
+
+export interface Subscription {
+  id: string;
+  name: string;
+  amount: number; // monthly amount
+  startMonth?: string; // 구독 시작 월 "YYYY-MM" — 이 달부터 매월 비용에 반영(이전 달엔 미반영)
 }
 
 export interface Subscription {
@@ -397,6 +451,7 @@ export interface WorkspaceEntry {
   expenseCategories?: string[]; // 비용 카테고리 (수익 카테고리와 별개, '관리'에서 관리)
   expenseCategoryTargets?: Record<string, number>; // 비용 카테고리 목표 비중(%)
   revenueTarget?: RevenueTarget;
+  financialPlans?: FinancialPlan[]; // Financial Resource Planning — 기간별 재무계획(비즈니스별)
   annualGoals?: Record<string, string>; // "2026" -> 연간 목표 텍스트
   growthStageIndex?: number; // 현재 진행 중인 사업 성장 단계(plan.growthStages) 인덱스. 달성 시 +1
   achievedAreaGoals?: string[]; // 달성 처리한 업무 영역(workArea) id 목록
