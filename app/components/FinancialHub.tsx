@@ -279,13 +279,19 @@ function ReserveSection() {
     store.setReserveEarmarks(next);
   };
   const groups = store.allWorkspacesEntries
-    .map(e => ({ wsId: e.workspace.id, wsName: e.workspace.name, goals: e.plan?.goals ?? [], projects: e.plan?.projects ?? [] }))
-    .filter(g => g.goals.length > 0 || g.projects.length > 0);
-  const row = (kind: 'goal' | 'project', wsId: string, id: string, name: string) => (
-    <div key={`${kind}${id}`} className="flex items-center gap-2">
-      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: kind === 'goal' ? '#EAF3FF' : '#F0F0EA', color: kind === 'goal' ? '#2B62C4' : '#5B6560' }}>{kind === 'goal' ? '목표' : '프로젝트'}</span>
-      <span className="text-[12px] truncate min-w-0 flex-1" style={{ color: '#16211E' }}>{name}</span>
-      <input type="number" value={amountFor(kind, id) || ''} onChange={e => setAmount(kind, wsId, id, Number(e.target.value) || 0)} placeholder="필요액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400 flex-shrink-0" style={{ borderColor: 'var(--spira-border)' }} />
+    .map(e => {
+      const goalName = new Map((e.plan?.goals ?? []).map(g => [g.id, g.name] as const));
+      const projects = (e.plan?.projects ?? []).map(p => ({ id: p.id, name: p.name, goalName: p.goalId ? goalName.get(p.goalId) : undefined }));
+      return { wsId: e.workspace.id, wsName: e.workspace.name, projects };
+    })
+    .filter(g => g.projects.length > 0);
+  const row = (wsId: string, p: { id: string; name: string; goalName?: string }) => (
+    <div key={p.id} className="flex items-center gap-2">
+      <span className="min-w-0 flex-1">
+        <span className="text-[12px] truncate block" style={{ color: '#16211E' }}>{p.name}</span>
+        {p.goalName && <span className="text-[10px] truncate block" style={{ color: '#9AA39D' }}>목표 · {p.goalName}</span>}
+      </span>
+      <input type="number" value={amountFor('project', p.id) || ''} onChange={e => setAmount('project', wsId, p.id, Number(e.target.value) || 0)} placeholder="필요액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400 flex-shrink-0" style={{ borderColor: 'var(--spira-border)' }} />
     </div>
   );
   return (
@@ -295,8 +301,8 @@ function ReserveSection() {
         <input type="number" min={0} max={100} value={store.emergencyFundPct || ''} onChange={e => store.setEmergencyFundPct(Number(e.target.value) || 0)} placeholder="0" className="w-16 text-[14px] tabular-nums text-center bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
         <span className="text-[13px]" style={{ color: '#5B6560' }}>%를 비상금으로 남겨둡니다.</span>
       </div>
-      <p className="text-[12px] font-semibold mb-2" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 목표/프로젝트에 필요액을 적어두세요 <span className="font-normal" style={{ color: '#9AA39D' }}>· 모든 비즈니스</span></p>
-      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>Plan/Goals에서 만든 목표·프로젝트가 여기에 떠요.</p> : (
+      <p className="text-[12px] font-semibold mb-2" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 프로젝트에 필요액을 적어두세요 <span className="font-normal" style={{ color: '#9AA39D' }}>· 모든 비즈니스</span></p>
+      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>Plan/Goals에서 만든 프로젝트가 여기에 떠요.</p> : (
         <div className="space-y-4">
           {groups.map(g => (
             <div key={g.wsId}>
@@ -305,8 +311,7 @@ function ReserveSection() {
                 <span className="text-[12px] font-bold" style={{ color: wsColor(g.wsId) }}>{g.wsName}</span>
               </div>
               <div className="space-y-1.5">
-                {g.goals.map(x => row('goal', g.wsId, x.id, x.name))}
-                {g.projects.map(x => row('project', g.wsId, x.id, x.name))}
+                {g.projects.map(x => row(g.wsId, x))}
               </div>
             </div>
           ))}
