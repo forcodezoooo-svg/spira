@@ -9,6 +9,8 @@ const won = (n: number) => `${n < 0 ? '−' : ''}₩${Math.abs(Math.round(n)).to
 const currentYM = () => new Date().toISOString().slice(0, 7);
 const RECURRING_CAT = '구독료';
 const todayStr = () => new Date().toISOString().slice(0, 10);
+const addDaysStr = (ds: string, n: number) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const UPCOMING_DAYS = 30; // 약 한 달 내 시작 예정도 포함
 const ACCENT = '#9DFE3B'; // 활성 버튼 강조색 (브랜드 라임)
 
 type Section = 'income' | 'fixed' | 'invest' | 'reserve';
@@ -26,7 +28,7 @@ const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap
 const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
 
 // 카테고리 보드와 동일 소스: Plan에서 가져온(fromPlan) 프로그램의, 진행 중 데드라인(프로젝트) 아래 완료 안 된 산출물
-type Category = { wsId: string; wsName: string; todoId: string; area: string; content: string; projectName: string; projectId?: string };
+type Category = { wsId: string; wsName: string; todoId: string; area: string; content: string; projectName: string; projectId?: string; upcoming?: boolean };
 const parseArea = (name: string) => { const m = name.match(/^(.*?)\s*[:：]\s*(.*)$/); return { area: (m ? m[1] : name).trim(), content: m ? m[2].trim() : '' }; };
 const allCategories = (store: Store): Category[] => {
   const out: Category[] = [];
@@ -44,11 +46,13 @@ const allCategories = (store: Store): Category[] => {
         const start = dl.startDate || tds[0];
         const end = dl.date || (tds.length ? tds[tds.length - 1] : undefined);
         const inWindow = (!start || start <= today) && (!end || end >= today);
-        if (!inWindow) continue;
+        // 약 한 달 내 시작 예정(다가오는)도 포함
+        const upcoming = !!start && start > today && start <= addDaysStr(today, UPCOMING_DAYS);
+        if (!inWindow && !upcoming) continue;
         for (const t of dl.todos ?? []) {
           if (t.done) continue;
           const { area, content } = parseArea(t.name);
-          out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, area, content, projectName: proj?.name || dl.name, projectId: dl.projectId });
+          out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, area, content, projectName: proj?.name || dl.name, projectId: dl.projectId, upcoming });
         }
       }
     }
@@ -213,7 +217,10 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
       <div key={c.todoId} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
         <div className="flex items-center justify-between gap-2">
           <span className="min-w-0">
-            <span className="text-[13px] font-bold block truncate" style={{ color: '#16211E' }}>{c.area}</span>
+            <span className="text-[13px] font-bold flex items-center gap-1.5 min-w-0" style={{ color: '#16211E' }}>
+              <span className="truncate">{c.area}</span>
+              {c.upcoming && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FCF6EC', color: '#96631A' }}>곧 시작</span>}
+            </span>
             {c.content && <span className="text-[11px] block truncate" style={{ color: '#5B6560' }}>{c.content}</span>}
           </span>
           <button onClick={() => { setSpendFor(spendFor === c.todoId ? null : c.todoId); setSpName(''); setSpAmt(''); }} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>지출 추가</button>
