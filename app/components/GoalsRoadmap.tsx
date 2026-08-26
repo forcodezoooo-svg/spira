@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
+import { useToast } from '../lib/ToastContext';
 import { uid } from '../lib/store';
 import type { Program, ProjectStatus } from '../lib/types';
 import ActualTimeModal from './ActualTimeModal';
@@ -47,6 +48,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0' }, ref,
 ) {
   const store = useStore();
+  const { toast } = useToast();
   const router = useRouter();
   const schedule = store.workSchedule;
   const now = new Date();
@@ -643,7 +645,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allSubIdsSig]);
   // 딜레이 자동 반영: 시작 안 했는데 시작일 지나면 오늘로 밀고(기간 유지), 안 끝났는데 마감 지나면 마감을 오늘로 연장
-  const applyDelays = () => {
+  const applyDelays = (): number => {
+    let count = 0;
     for (const p of programs) {
       const prog = findProg(p.wsId, p.id); if (!prog) continue;
       let changed = false;
@@ -662,7 +665,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           }
           // 종료 지연: 아직 안 끝났는데 마감일이 지남 → 마감을 오늘로 연장
           if (nt.deadline && nt.deadline < todayStr) nt = { ...nt, deadline: todayStr };
-          if (nt !== t) dchanged = true;
+          if (nt !== t) { dchanged = true; count++; }
           return nt;
         });
         if (!dchanged) return dl;
@@ -673,11 +676,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       });
       if (changed) store.updateProgramInWs(p.wsId, { ...prog, deadlines });
     }
+    return count;
   };
+  // autoDelay가 켜진 채 로드맵에 진입하면 자동 적용 (토스트 없이)
   useEffect(() => {
     if (store.autoDelay) applyDelays();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.autoDelay]);
+  }, []);
+  const toggleAutoDelay = () => {
+    const on = !store.autoDelay;
+    store.setAutoDelay(on);
+    if (on) { const n = applyDelays(); toast(n > 0 ? `딜레이 자동 반영 켜짐 — ${n}개 일정을 밀거나 연장했어요` : '딜레이 자동 반영 켜짐 — 지금 밀거나 연장할 항목은 없어요', 'success'); }
+    else toast('딜레이 자동 반영 꺼짐', 'info');
+  };
 
   // ── 막대 연결(의존성) ──
   // toId 산출물이 fromId 산출물 뒤에 오도록 연결 (선행이 밀리면 같이 밀림). 자기 참조·순환은 무시.
@@ -948,7 +959,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <button key={m} onClick={() => setSortMode(m)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={sortMode === m ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>
               ))}
             </div>
-            <button onClick={() => store.setAutoDelay(!store.autoDelay)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={store.autoDelay ? { backgroundColor: '#E7F0FF', color: '#2B62C4' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="딜레이 자동 반영 — 시작 안 하면 막대를 오늘로 밀고, 마감 지나면 마감을 오늘로 연장">딜레이</button>
+            <button onClick={toggleAutoDelay} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={store.autoDelay ? { backgroundColor: '#E7F0FF', color: '#2B62C4' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="딜레이 자동 반영 — 시작 안 하면 막대를 오늘로 밀고, 마감 지나면 마감을 오늘로 연장">딜레이</button>
             <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>
           </div>
           {offOpen && (
