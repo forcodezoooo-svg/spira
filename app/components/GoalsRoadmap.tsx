@@ -319,10 +319,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   };
 
   const centerDateRef = useRef(todayStr); // 현재 화면 중앙 날짜 (줌 시 위치 유지용)
-  // 최초 진입 시 오늘로 중앙 정렬 (한 번만)
+  // 최초 진입 시: 제일 가까운(임박한) 프로젝트 시작일을 왼쪽에 배치 (없으면 오늘)
   useEffect(() => {
     const el = scrollRef.current; if (!el) return;
-    el.scrollLeft = Math.max(0, xOf(todayStr) - el.clientWidth / 2);
+    const starts: string[] = [];
+    for (const p of programs) for (const dl of (p.deadlines ?? [])) { if (!dlVisible(p.wsId, dl)) continue; const s = dlPeriod(p, dl).start; if (s) starts.push(s); }
+    const upcoming = starts.filter(s => s >= todayStr).sort();
+    const anchor = upcoming[0] ?? (starts.length ? [...starts].sort().slice(-1)[0] : todayStr);
+    el.scrollLeft = Math.max(0, xOf(anchor) - 32);
+    centerDateRef.current = anchor;
     updateVisLabel(el);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -507,8 +512,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       }
     }
   }
-  // '우선' 먼저, 그 다음 디데이(기한) 가까운 순
-  kbCols.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.due || '9999-99-99').localeCompare(b.due || '9999-99-99'));
+  // '우선' 먼저, 그 다음 시작일 빠른 순
+  kbCols.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.start || '9999-99-99').localeCompare(b.start || '9999-99-99'));
   // 전체 task(subtask) 색인 — 선행(dependsOn) 이름/완료 표시용
   const subById = new Map<string, { name: string; done: boolean }>();
   for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) subById.set(s.id, { name: s.name, done: s.done });
