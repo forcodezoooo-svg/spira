@@ -561,7 +561,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(catTarget.wsId, catTarget.programId); if (!prog) return;
     const dl = (prog.deadlines ?? []).find(d => d.id === catTarget.dlId); if (!dl) return;
     const start = dl.startDate || dl.date || todayStr;
-    const anchor = todayStr; // task는 오늘부터 가용시간에 맞춰 배치
+    const anchor = start > todayStr ? start : todayStr; // 프로젝트 시작일이 미래면 그 날부터, 아니면 오늘부터 배치
     const tasks = tplTasks ?? [];
     const nonRecDur = tasks.filter(t => !(t.days?.length)).map(t => t.durationMin ?? 0);
     const dates = nonRecDur.length ? scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, nonRecDur, anchor, dl.date || undefined, { spread: true }) : [];
@@ -591,10 +591,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     for (const p of programs) {
       for (const dl of (p.deadlines ?? [])) {
         if (!dlVisible(p.wsId, dl)) continue;
-        // 같은 프로젝트의 카테고리는 프로젝트 시작일(없으면 오늘)부터 함께 시작 → 병행
-        const earliest = dl.startDate && dl.startDate > todayStr ? dl.startDate : todayStr;
         for (const t of dl.todos) {
           if (t.done) continue; // 완료 산출물 제외
+          // 카테고리(산출물) 자체 시작일 우선 → 없으면 프로젝트 시작일 → 그것도 없으면 오늘부터
+          const catStart = t.date || dl.startDate;
+          const earliest = catStart && catStart > todayStr ? catStart : todayStr;
           const cap = t.deadline || dl.date || undefined; // 상한 = 산출물/프로젝트 실제 기한
           const tasks: ParallelTask[] = [];
           for (const s of (t.subtasks ?? [])) {
@@ -705,8 +706,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const factor = areaFactor(store.allWorkspacesEntries, col.p.name);
       const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
       const durMins = tasks.map(tk => adj(tk.durationMin) ?? 0);
-      // 오늘부터 가용시간에 맞춰 '하루 하나씩 펼쳐' 배치 → 시작일 같은 프로젝트들이 병행되도록
-      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, todayStr, col.due || undefined, { spread: true });
+      // 카테고리(프로젝트) 시작일이 미래면 그 날부터, 이미 시작했으면 오늘부터 가용시간에 맞춰 '하루 하나씩 펼쳐' 배치
+      const startAnchor = col.start && col.start > todayStr ? col.start : todayStr;
+      const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, startAnchor, col.due || undefined, { spread: true });
       store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = dates[i]; return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
     finally { setKbAiBusy(null); }
