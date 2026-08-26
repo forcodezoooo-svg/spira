@@ -325,7 +325,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     }
   };
 
-  const centerDateRef = useRef(todayStr); // 현재 화면 중앙 날짜 (줌 시 위치 유지용)
+  const centerDateRef = useRef(todayStr); // 현재 화면 중앙 날짜
+  const leftDateRef = useRef(todayStr); // 현재 화면 왼쪽 끝 날짜 (줌 시 이 날짜를 왼쪽에 고정)
   // 최초 진입 시: 제일 가까운(임박한) 프로젝트 시작일을 왼쪽에 배치 (없으면 오늘)
   useEffect(() => {
     const el = scrollRef.current; if (!el) return;
@@ -348,10 +349,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollTarget]);
-  // 줌 변경 시: 화면 중앙 날짜를 그대로 유지 (좌우로 튀지 않게)
+  // 줌 변경 시: 화면 왼쪽 끝 날짜를 그대로 왼쪽에 고정 (오른쪽으로 밀리지 않게)
   useEffect(() => {
     const el = scrollRef.current; if (!el) return;
-    el.scrollLeft = Math.max(0, xOf(centerDateRef.current) - el.clientWidth / 2);
+    el.scrollLeft = Math.max(0, xOf(leftDateRef.current));
     updateVisLabel(el);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pxPerDay]);
@@ -369,7 +370,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kanban]);
   const fmtVis = (d: string) => { const dd = new Date(d); return gran === 'year' ? `${dd.getFullYear()}년` : gran === 'week' ? `${dd.getFullYear()}년 ${dd.getMonth() + 1}월 ${dd.getDate()}일` : `${dd.getFullYear()}년 ${dd.getMonth() + 1}월`; };
-  const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / pxPerDay), 0, span - 1); const cd = addDaysStr(rangeStart, di); centerDateRef.current = cd; setVisLabel(fmtVis(cd)); };
+  const updateVisLabel = (el: HTMLDivElement) => { const centerX = el.scrollLeft + el.clientWidth / 2 - LABEL_W; const di = clampN(Math.floor(centerX / pxPerDay), 0, span - 1); const cd = addDaysStr(rangeStart, di); centerDateRef.current = cd; leftDateRef.current = addDaysStr(rangeStart, clampN(Math.round(el.scrollLeft / pxPerDay), 0, span - 1)); setVisLabel(fmtVis(cd)); };
   const scrollByScreen = (dir: -1 | 1) => { const el = scrollRef.current; if (!el) return; el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' }); };
   const scrollToToday = () => { const el = scrollRef.current; if (!el) return; el.scrollTo({ left: Math.max(0, xOf(todayStr) - el.clientWidth / 2), behavior: 'smooth' }); };
   // 라벨/막대 클릭 → 그 항목 선택 + 해당 시점으로 스크롤 (줌은 그대로 유지)
@@ -453,6 +454,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
     const name = window.prompt('영역별 산출물 이름 (예: 디자인: 최종 UI 시안)')?.trim(); if (!name) return;
     store.updateProgramInWs(r.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== r.deadlineId ? dl : { ...dl, todos: [...dl.todos, { id: uid(), name, done: false }] }) });
+  };
+  // 로드맵에서 특정 프로그램(목표) 아래에 프로젝트 바로 추가 (add-row용)
+  const addDeadlineInline = (r: Row) => {
+    const prog = findProg(r.wsId, r.programId); if (!prog) return;
+    const name = window.prompt('새 프로젝트 이름')?.trim(); if (!name) return;
+    store.updateProgramInWs(r.wsId, { ...prog, deadlines: [...(prog.deadlines ?? []), { id: uid(), name, startDate: todayStr, date: addDaysStr(todayStr, 7), todos: [], enabled: true }] });
   };
   // 프로젝트(데드라인) 바로 추가 — 선택한 목표(계보) 또는 첫 목표 아래에 오늘부터 1주짜리 기본 일정으로
   const addProjectInline = () => {
@@ -818,9 +825,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               <button onClick={addProjectInline} className="flex items-center gap-1 rounded-full px-3 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#EAF3FF', color: '#2B62C4' }} title="선택한 목표(또는 첫 목표) 아래에 새 프로젝트 추가">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>프로젝트 추가
               </button>
-              <button onClick={() => { const c = resolveChain(selectedKey); openInPlan(c.program?.wsId, c.program?.id); }} className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title={selectedKey ? '선택한 목표를 Plan에서 수정' : 'Plan에서 목표·프로젝트·산출물 수정'}>
-                <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>내용 수정
-              </button>
             </div>
           </div>
           <div className="flex items-center gap-2 mb-3">
@@ -1025,13 +1029,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               if (r.isAdd) return (
                 <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 8 + (r.level - 1) * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
-                    {r.addKind === 'todo' && (
-                      <button onClick={() => addTodoInline(r)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#3E7A2E' }} title="여기서 산출물 바로 추가">
-                        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>여기서 추가
-                      </button>
-                    )}
-                    <button onClick={() => openInPlan(r.wsId, r.programId)} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#7C3AED' }} title={`Plan에서 ${CHILD_NAME[r.addKind!]} 추가`}>
-                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none"><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>Plan에서 추가
+                    <button onClick={() => (r.addKind === 'todo' ? addTodoInline(r) : addDeadlineInline(r))} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#3E7A2E' }} title={`여기서 ${r.addKind === 'todo' ? '산출물' : '프로젝트'} 바로 추가`}>
+                      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>여기서 추가
                     </button>
                   </div>
                   <div className="relative" style={{ width: contentWidth }} />

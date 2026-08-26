@@ -9,8 +9,6 @@ import { useChatContext } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
 import { ResourceType } from '../lib/types';
 import { todayStr } from '../lib/store';
-import MusicTimer from '../components/MusicTimer';
-import MemoPanel from '../components/MemoPanel';
 import CategoryPicker from '../components/CategoryPicker';
 
 type Tab = ResourceType | 'manage';
@@ -693,10 +691,6 @@ export default function ResourcesPage() {
 
       {/* ── 오른쪽: 대시보드 ── */}
       <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
-        {/* 플레이바 + 공용 메모 (Home·Task·Goals와 동일) */}
-        <MusicTimer compact />
-        <MemoPanel />
-
         {/* 이번 달 수익/지출 */}
         <div className="bg-white rounded-[24px] border p-6" style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
           <div className="flex items-center gap-2.5 mb-5">

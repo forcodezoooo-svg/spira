@@ -55,7 +55,7 @@ function localDateStr(d = new Date()): string {
 
 const FOCUS_ID = '__focus__';
 
-export default function MusicTimer({ compact = false, tile = false }: { compact?: boolean; tile?: boolean }) {
+export default function MusicTimer({ compact = false, tile = false, floating = false }: { compact?: boolean; tile?: boolean; floating?: boolean }) {
   const { stopAll, anyActive, activeTaskIds, toggleTaskTimer, getDayTotalSeconds } = useTimer();
   const store = useStore();
   // 상단 버튼: 진행 중인 타이머가 있으면 전체 정지, 없으면 '일반 작업 세션' 시작.
@@ -253,10 +253,10 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
   };
 
   // ── 컴팩트 pill (홈 우측 대시보드용) ─────────────────────────────────────────
-  if (tile) {
+  if (tile || floating) {
     return (
-      <div className="relative h-full">
-        <div className="flex flex-col justify-between h-full bg-white border border-neutral-200 rounded-2xl p-3.5" style={{ boxShadow: 'var(--spira-shadow)' }}>
+      <div className={floating ? 'fixed z-40 w-60 bottom-4 right-[68px] lg:bottom-6 lg:right-[92px]' : 'relative h-full'}>
+        <div className={`flex flex-col ${floating ? 'shadow-xl' : 'justify-between h-full'} bg-white border border-neutral-200 rounded-2xl p-3.5`} style={{ boxShadow: floating ? undefined : 'var(--spira-shadow)' }}>
           <div className="flex items-center gap-2">
             <button
               onClick={onToggle}
@@ -281,7 +281,7 @@ export default function MusicTimer({ compact = false, tile = false }: { compact?
         </div>
 
         {expanded && (
-          <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-neutral-200 rounded-2xl shadow-lg p-3 z-30 space-y-3">
+          <div className={`absolute right-0 ${floating ? 'bottom-full mb-2' : 'top-full mt-2'} w-80 max-w-[calc(100vw-2rem)] bg-white border border-neutral-200 rounded-2xl shadow-lg p-3 z-30 space-y-3`}>
             <div className="flex gap-1.5 items-center">
               <svg className="w-3.5 h-3.5 text-neutral-500 flex-shrink-0" viewBox="0 0 16 16" fill="none"><path d="M6 12V4l8-2v8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><circle cx="4" cy="12" r="2" stroke="currentColor" strokeWidth="1.2" /><circle cx="12" cy="10" r="2" stroke="currentColor" strokeWidth="1.2" /></svg>
               <input className="flex-1 bg-neutral-100 border border-neutral-300 rounded-lg px-2.5 py-1.5 text-xs text-neutral-700 placeholder-neutral-400 outline-none focus:border-violet-500 transition-colors" placeholder="YouTube / MP3 URL" value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLoad()} />

@@ -38,8 +38,6 @@ import TargetCustomerModal, { Avatar } from '../components/TargetCustomerModal';
 import { uid } from '../lib/store';
 import { useChatContext } from '../lib/ChatContext';
 import { buildValuePropPrompt, buildSolutionsPrompt, buildRevenuePrompt, buildBrandingPrompt, buildPersonasPrompt, buildGrowthStagesPrompt, buildWorkAreasPrompt } from '../lib/ai/prompts';
-import MusicTimer from '../components/MusicTimer';
-import MemoPanel from '../components/MemoPanel';
 import FlagAward from '../components/FlagAward';
 import { usePlan } from '../lib/usePlan';
 import { useUpgrade } from '../lib/UpgradeContext';
@@ -3187,7 +3185,7 @@ export default function PlanPage() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
+    <div className="grid grid-cols-1 gap-8 items-start">
     {/* ── 왼쪽: 메인 ── */}
     <div className="min-w-0 pb-24">
       {/* 헤더 */}
@@ -3319,12 +3317,6 @@ export default function PlanPage() {
         currentProjects={projectsOfGoal(reviseGoalId).map(p => ({ name: p.name, finalDeliverable: p.finalDeliverable ?? '', areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ area: a.area, content: a.content })) }))}
         onApply={projs => applyRevisedProjects(reviseGoalId, projs)} onClose={() => setReviseGoalId(null)} />;
     })()}
-
-    {/* ── 오른쪽: 플레이바 + 공용 메모 ── */}
-    <aside className="hidden lg:block space-y-4 lg:sticky lg:top-8">
-      <MusicTimer compact />
-      <MemoPanel />
-    </aside>
 
     {flagAward && <FlagAward {...flagAward} onClose={() => setFlagAward(null)} />}
     </div>
