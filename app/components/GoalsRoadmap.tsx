@@ -864,11 +864,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbCols.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
               <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
+                {/* 어떤 비즈니스의 카테고리인지 */}
+                <div className="flex items-center gap-1 mb-1 min-w-0">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
+                  <span className="text-[10px] font-bold truncate" style={{ color: businessColor(col.p.wsId) }}>{col.p.wsName || '내 비즈니스'}</span>
+                </div>
                 <div className="group/col flex items-center gap-1.5 min-w-0">
                   <button onClick={() => kbTogglePin(col)} title={col.pinned ? '우선 해제' : '우선 표시 (맨 앞으로)'} className="flex-shrink-0 transition-transform hover:scale-110">
                     <svg className="w-4 h-4" viewBox="0 0 20 20" fill={col.pinned ? '#F0B429' : 'none'} stroke={col.pinned ? '#F0B429' : '#C7CEC7'} strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8L10 2z" strokeLinejoin="round" /></svg>
                   </button>
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} title={col.p.wsName ?? ''} />
                   <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
                   {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
