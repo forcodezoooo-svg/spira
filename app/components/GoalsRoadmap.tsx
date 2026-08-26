@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 're
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
-import type { Program } from '../lib/types';
+import type { Program, ProjectStatus } from '../lib/types';
 import ActualTimeModal from './ActualTimeModal';
 import { areaFactor, scheduleTasksByCapacity, scheduleParallel, ParallelGroup, ParallelTask } from '../lib/capacity';
 
@@ -25,6 +25,13 @@ interface Props { programs: CalProgram[]; businessColor: (wsId: string) => strin
 
 const LABEL_W = 240;
 const ROW_H = 34;
+// 프로젝트 상태 표시(예정/진행중/완료/보류)
+const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
+  planned: { label: '예정', bg: '#EEF1F4', color: '#5B6560' },
+  active: { label: '진행중', bg: '#E7F0FF', color: '#2B62C4' },
+  done: { label: '완료', bg: '#E4F5E0', color: '#3E6B1F' },
+  onhold: { label: '보류', bg: '#FBF3E0', color: '#96631A' },
+};
 const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
@@ -491,7 +498,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   // ── 카테고리 보드: 업무 영역을 '칸'으로, 그 안에서 산출물별로 구분, 하위 task 카드 ──
   type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
-  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; due: string; pinned: boolean; subtasks: Sub[] };
+  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; due: string; pinned: boolean; subtasks: Sub[]; projectId?: string; status?: string };
   const parseArea = (name: string) => { const m = name.match(/^(.*?)\s*[:：]\s*(.*)$/); return { area: (m ? m[1] : name).trim(), goalSub: m ? m[2].trim() : '' }; };
   const kbScope = resolveChain(selectedKey);
   const kbCols: KbCol[] = [];
@@ -509,7 +516,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           (a.done ? 1 : 0) - (b.done ? 1 : 0)
           || (((b.days?.length ?? 0) > 0 ? 1 : 0) - ((a.days?.length ?? 0) > 0 ? 1 : 0))
           || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
-        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs });
+        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs, projectId: dl.projectId, status: dl.projectId ? (resolveProject(p.wsId, dl.projectId)?.status ?? 'planned') : undefined });
       }
     }
   }
@@ -624,6 +631,22 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
   const kbTogglePin = (col: KbCol) => store.updateProgramTodo(col.p.wsId, col.p.id, col.dlId, col.todoId, { pinned: !col.pinned });
+  // 프로젝트 상태(예정/진행중/완료/보류) 변경 — Plan의 setProjectStatus와 동일하게 데드라인 done도 동기화
+  const kbSetStatus = (col: KbCol, status: string) => {
+    if (!col.projectId) return;
+    store.updateProject(col.p.wsId, col.projectId, { status: status as ProjectStatus });
+    const done = status === 'done';
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === col.p.wsId);
+    for (const pg of ws?.programs ?? []) {
+      let changed = false;
+      const deadlines = (pg.deadlines ?? []).map(dl => {
+        if (dl.projectId !== col.projectId || !!dl.done === done) return dl;
+        changed = true;
+        return { ...dl, done, doneAt: done ? new Date().toISOString() : undefined };
+      });
+      if (changed) store.updateProgramInWs(col.p.wsId, { ...pg, deadlines });
+    }
+  };
   const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); setFormDays([]); };
   const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); setFormDays(s.days ?? []); };
   const kbSubmitForm = () => {
@@ -831,6 +854,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <div className="flex items-center gap-1.5 mt-1 ml-3.5">
                   <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
                   <DdayBadge d={col.due} />
+                  {col.projectId && (() => { const meta = STATUS_META[col.status || 'planned'] ?? STATUS_META.planned; return (
+                    <select value={col.status || 'planned'} onChange={e => kbSetStatus(col, e.target.value)} title="프로젝트 상태" className="text-[10px] font-bold rounded-full pl-2 pr-1 py-0.5 border-0 outline-none cursor-pointer appearance-none flex-shrink-0 ml-auto" style={{ backgroundColor: meta.bg, color: meta.color }}>
+                      <option value="planned">예정</option><option value="active">진행중</option><option value="done">완료</option><option value="onhold">보류</option>
+                    </select>
+                  ); })()}
                 </div>
               </div>
               {/* 태스크 */}
