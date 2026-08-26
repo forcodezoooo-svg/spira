@@ -1,6 +1,6 @@
 // Financial Resource Planning 계산 (순수 함수) — capacity.ts와 동일 패턴.
 // 핵심 원칙: 현재 보유자금 · 확정수익 · 예상수익 · 목표수익을 절대 동일한 가용자금으로 취급하지 않는다.
-import type { FinancialPlan, Subscription, ResourceEntry, Goal } from './types';
+import type { FinancialPlan, Subscription, ResourceEntry, Goal, Program } from './types';
 
 const num = (n?: number) => (Number.isFinite(n) ? (n as number) : 0);
 
@@ -74,6 +74,16 @@ export function periodActuals(entries: ResourceEntry[], start: string, end: stri
 export function projectActualCost(entries: ResourceEntry[], projectId: string, start?: string, end?: string): number {
   return entries.filter(e => e.type === 'expense' && e.projectId === projectId && (!start || e.date >= start) && (!end || e.date <= end))
     .reduce((s, e) => s + num(e.amount), 0);
+}
+
+// 프로젝트에 필요한 시간(분) — 그 프로젝트(데드라인.projectId) 아래 미완료 task들의 예상 소요시간 합 (§19)
+export function projectRequiredMin(programs: Program[], projectId: string): number {
+  let m = 0;
+  for (const p of programs) for (const dl of p.deadlines ?? []) {
+    if (dl.projectId !== projectId) continue;
+    for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) if (!s.done) m += num(s.durationMin);
+  }
+  return m;
 }
 
 export interface FinancialSummary {

@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
-import { computeFinancialSummary, planOperating, revenueTargetOf, periodActuals, projectActualCost } from '../lib/finance';
+import { computeFinancialSummary, planOperating, revenueTargetOf, periodActuals, projectActualCost, projectRequiredMin } from '../lib/finance';
+import { computeDayCapacity } from '../lib/capacity';
 import type { FinancialPlan, FinRevenueSource, OperatingBudgetItem, BudgetAllocation } from '../lib/types';
 import { useChatContext } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
@@ -10,6 +11,7 @@ import { useUI } from '../lib/UIContext';
 const won = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const addMonthsStr = (ds: string, m: number) => { const d = new Date(ds + 'T00:00:00'); d.setMonth(d.getMonth() + m); d.setDate(0); return d.toISOString().slice(0, 10); };
+const addDaysStr = (ds: string, n: number) => { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 // P0-Stage1: 재무계획(기간·보유자금·수익·운영비·Reserve) + Investment Capacity
 export default function FinancialPlanPanel() {
@@ -70,6 +72,27 @@ export default function FinancialPlanPanel() {
   };
   const actual = periodActuals(entries, plan.startDate, plan.endDate); // 이 기간 실제 수입/지출
   const revProgress = s.target > 0 ? Math.round((actual.income / s.target) * 100) : 0;
+
+  // ── 실행 가능성 (Time + Money, §19) ──
+  const programs = store.data.programs ?? [];
+  const today = todayStr();
+  const availMin = (() => {
+    let sum = 0; let d = today > plan.startDate ? today : plan.startDate;
+    for (let i = 0; i < 200 && d <= plan.endDate; i++) { sum += computeDayCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, d).availableProjectMin; d = addDaysStr(d, 1); }
+    return sum;
+  })();
+  const allocProjects = allocs.filter(a => a.projectId).map(a => {
+    const p = projects.find(x => x.id === a.projectId!);
+    const reqMin = projectRequiredMin(programs, a.projectId!);
+    const spent = projectActualCost(entries, a.projectId!, plan.startDate, plan.endDate);
+    const reqBudget = Math.max(0, a.plannedAmount - spent); // 남은 필요 예산
+    return { id: a.projectId!, name: p?.name ?? '프로젝트', reqMin, reqBudget, planned: a.plannedAmount };
+  });
+  const totalReqMin = allocProjects.reduce((s2, p) => s2 + p.reqMin, 0);
+  const totalReqBudget = allocProjects.reduce((s2, p) => s2 + p.reqBudget, 0);
+  const timeOk = availMin >= totalReqMin;
+  const moneyOk = s.safeToAllocate >= totalReqBudget;
+  const fmtH = (min: number) => `${Math.round(min / 60)}h`;
 
   // AI 재무 재조정 상담 — 현재 재무상태 + 프로젝트 우선순위/상태를 컨텍스트로 전달(§25 원칙 적용, 자동 변경 없음)
   const askAI = () => {
@@ -286,6 +309,40 @@ export default function FinancialPlanPanel() {
           </p>
         )}
       </div>
+
+      {/* 실행 가능성 (Time + Money, §19/§20) */}
+      {allocProjects.length > 0 && (
+        <div className="rounded-[20px] border p-4 space-y-3" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+          <span className="text-[13px] font-black" style={{ color: '#16211E' }}>실행 가능성 <span className="text-[11px] font-medium" style={{ color: '#9AA39D' }}>· 시간 + 자금</span></span>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl p-3" style={{ backgroundColor: timeOk ? '#F1F8EE' : '#FFF1F1' }}>
+              <p className="text-[11px] font-bold mb-0.5" style={{ color: '#5B6560' }}>시간 (Time)</p>
+              <p className="text-[13px] tabular-nums" style={{ color: '#16211E' }}>필요 {fmtH(totalReqMin)} / 가용 {fmtH(availMin)}</p>
+              <p className="text-[12px] font-bold mt-0.5" style={{ color: timeOk ? '#3E7A2E' : '#C0392B' }}>{timeOk ? '충분' : `${fmtH(totalReqMin - availMin)} 부족`}</p>
+            </div>
+            <div className="rounded-xl p-3" style={{ backgroundColor: moneyOk ? '#F1F8EE' : '#FFF1F1' }}>
+              <p className="text-[11px] font-bold mb-0.5" style={{ color: '#5B6560' }}>자금 (Money)</p>
+              <p className="text-[13px] tabular-nums" style={{ color: '#16211E' }}>필요 {won(totalReqBudget)} / Safe {won(s.safeToAllocate)}</p>
+              <p className="text-[12px] font-bold mt-0.5" style={{ color: moneyOk ? '#3E7A2E' : '#C0392B' }}>{moneyOk ? '충분' : `${won(totalReqBudget - s.safeToAllocate)} 부족`}</p>
+            </div>
+          </div>
+          {(!timeOk || !moneyOk) && (
+            <p className="text-[12px] rounded-lg px-3 py-2" style={{ backgroundColor: '#FCF6EC', color: '#96631A' }}>
+              {timeOk && !moneyOk && `현재 일정으로는 수행 가능하지만, Reserve를 지키면 약 ${won(totalReqBudget - s.safeToAllocate)}의 추가 자금이 필요합니다.`}
+              {!timeOk && moneyOk && `자금은 충분하지만, 배정한 프로젝트를 모두 하려면 시간이 약 ${fmtH(totalReqMin - availMin)} 부족합니다.`}
+              {!timeOk && !moneyOk && `시간·자금 모두 부족합니다. 프로젝트 범위·시점·예산 조정이 필요해요.`}
+            </p>
+          )}
+          <div className="space-y-1">
+            {allocProjects.map(p => (
+              <div key={p.id} className="flex items-center justify-between text-[12px]">
+                <span className="truncate min-w-0 flex-1" style={{ color: '#5B6560' }}>{p.name}</span>
+                <span className="tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtH(p.reqMin)} · {won(p.reqBudget)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
