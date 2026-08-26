@@ -45,6 +45,8 @@ export default function Home() {
   const [urgentOpen, setUrgentOpen] = useState(false); // 긴급 업무 입력
   const [urgentName, setUrgentName] = useState('');
   const [urgentDur, setUrgentDur] = useState('');
+  const [editDurKey, setEditDurKey] = useState<string | null>(null); // 소요시간 편집 중인 task
+  const [editDurVal, setEditDurVal] = useState('');
   const [actualTarget, setActualTarget] = useState<SubtaskTask | null>(null); // 완료 시 실제시간 입력 대상
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
@@ -520,6 +522,13 @@ export default function Home() {
     );
   };
 
+  // 소요시간 인라인 편집 (오늘의 업무 태그 클릭)
+  const saveDur = (t: SubtaskTask) => {
+    const n = Math.round(Number(editDurVal));
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { durationMin: n > 0 ? n : undefined });
+    setEditDurKey(null);
+  };
+
   // 캘린더 task(세부 산출물 하위 task) 한 줄 렌더
   const renderSubtaskTask = (t: SubtaskTask) => {
     const dday = t.deadline && !t.done ? calcDday(t.deadline) : null;
@@ -551,9 +560,18 @@ export default function Home() {
         </span>
         <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deliverableName}</span>
         <span className="flex-1" />
-        {t.durationMin ? (
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>{fmtDur(t.durationMin)}</span>
-        ) : null}
+        {editDurKey === t.key ? (
+          <span className="flex items-center gap-1 flex-shrink-0" style={{ color: '#7C3AED' }} onClick={e => e.stopPropagation()}>
+            <input autoFocus type="number" min={0} step={5} value={editDurVal} onChange={e => setEditDurVal(e.target.value)}
+              onBlur={() => saveDur(t)} onKeyDown={e => { if (e.key === 'Enter') saveDur(t); else if (e.key === 'Escape') setEditDurKey(null); }}
+              className="w-14 text-[11px] tabular-nums text-right px-2 py-0.5 rounded-full outline-none" style={{ backgroundColor: '#F3F0FF', border: '1px solid #C9BCF0', color: '#7C3AED' }} placeholder="분" />
+            <span className="text-[10px]">분</span>
+          </span>
+        ) : t.durationMin ? (
+          <span onClick={e => { e.stopPropagation(); setEditDurKey(t.key); setEditDurVal(String(t.durationMin)); }} title="소요시간 수정" className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 cursor-pointer hover:brightness-95" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>{fmtDur(t.durationMin)}</span>
+        ) : (
+          <button onClick={e => { e.stopPropagation(); setEditDurKey(t.key); setEditDurVal(''); }} title="소요시간 입력" className="text-[11px] px-2 py-0.5 rounded-full flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#9AA39D', backgroundColor: '#F0F0EA' }}>+시간</button>
+        )}
         {dday && (
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>
             {dday.label}
