@@ -14,6 +14,9 @@ type Store = ReturnType<typeof useStore>;
 type Res = ResourceEntry & { wsId: string };
 type Proj = Project & { wsId: string };
 const dateFor = (month: string) => (month === currentYM() ? new Date().toISOString().slice(0, 10) : `${month}-01`);
+const prevYM = (ym: string) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const subActive = (s: Subscription, month: string) => (!s.startMonth || s.startMonth <= month) && (!s.endMonth || month <= s.endMonth);
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
 // 전 비즈니스(워크스페이스) 합산 — 기존 Resources와 동일하게 모든 사업의 거래를 함께 본다
 const allRes = (store: Store): Res[] => store.allWorkspacesEntries.flatMap(e => (e.resources ?? []).map(r => ({ ...r, wsId: e.workspace.id })));
@@ -29,7 +32,7 @@ export default function FinancialHub({ month }: { month: string }) {
   const entries = allRes(store).filter(e => e.date.startsWith(month));
   const incomeEntries = entries.filter(e => e.type === 'income');
   const expenseEntries = entries.filter(e => e.type === 'expense');
-  const subs = allSubs(store).filter(s => !s.startMonth || s.startMonth <= month);
+  const subs = allSubs(store).filter(s => subActive(s, month));
 
   const income = incomeEntries.reduce((s, e) => s + e.amount, 0);
   const subTotal = subs.reduce((s, x) => s + x.amount, 0);
@@ -107,9 +110,15 @@ function IncomeSection({ month }: { month: string }) {
 function FixedSection({ month }: { month: string }) {
   const store = useStore();
   const [name, setName] = useState(''); const [amt, setAmt] = useState(''); const [cat, setCat] = useState('');
+  const [subMenu, setSubMenu] = useState<string | null>(null);
+  // 구독 취소: 이번 달부터(이번 달도 미반영) → endMonth=지난달 / 다음 달부터(이번 달까지 반영) → endMonth=이번 달
+  const cancelSub = (s: Subscription & { wsId: string }, when: 'now' | 'next') => {
+    const cm = currentYM();
+    store.updateSubscriptionInWs(s.wsId, { id: s.id, name: s.name, amount: s.amount, startMonth: s.startMonth, endMonth: when === 'now' ? prevYM(cm) : cm });
+  };
   const cats = Array.from(new Set(store.allWorkspacesEntries.flatMap(e => e.expenseCategories ?? []))).filter(c => c !== RECURRING_CAT);
   const list = allRes(store).filter(e => e.type === 'expense' && !e.projectId && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
-  const subs = allSubs(store).filter(s => !s.startMonth || s.startMonth <= month);
+  const subs = allSubs(store).filter(s => subActive(s, month));
   const add = () => {
     const n = Number(amt.replace(/,/g, '')); if (!n || !name.trim()) return;
     if (cat.trim() === RECURRING_CAT) store.addSubscription({ name: name.trim(), amount: n, startMonth: month });
@@ -126,12 +135,21 @@ function FixedSection({ month }: { month: string }) {
       </div>
       <p className="text-[11px] mt-2" style={{ color: '#9AA39D' }}>카테고리를 <b style={{ color: '#5B6560' }}>{RECURRING_CAT}</b>로 고르면 매월 반복 고정비(구독)로 등록돼요.</p>
       {subs.length > 0 && <div className="mt-2 space-y-1">{subs.map(s => (
-        <div key={s.id} className="group flex items-center justify-between text-[13px] rounded-lg px-3 py-2" style={{ backgroundColor: '#FAFAF7' }}>
-          <span style={{ color: '#5B6560' }}>{s.name} <span className="text-[10px]" style={{ color: '#C4A24A' }}>매월</span></span>
-          <span className="flex items-center gap-2 flex-shrink-0">
-            <span className="tabular-nums font-semibold" style={{ color: '#16211E' }}>−{won(s.amount)}</span>
-            <button onClick={() => { if (window.confirm(`'${s.name}' 구독을 삭제할까요?`)) store.deleteSubscriptionInWs(s.wsId, s.id); }} title="구독 삭제 (구독 취소 시)" className="text-neutral-300 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100">×</button>
-          </span>
+        <div key={s.id} className="group flex items-center justify-between gap-2 text-[13px] rounded-lg px-3 py-2" style={{ backgroundColor: '#FAFAF7' }}>
+          <span className="truncate min-w-0" style={{ color: '#5B6560' }}>{s.name} <span className="text-[10px]" style={{ color: '#C4A24A' }}>매월</span></span>
+          {subMenu === s.id ? (
+            <span className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-[10px]" style={{ color: '#9AA39D' }}>취소:</span>
+              <button onClick={() => { cancelSub(s, 'now'); setSubMenu(null); }} title="이번 달부터 미반영" className="text-[11px] font-bold rounded-full px-2 py-0.5" style={{ backgroundColor: '#FFF1F1', color: '#C0392B' }}>이번 달부터</button>
+              <button onClick={() => { cancelSub(s, 'next'); setSubMenu(null); }} title="이번 달까지 반영, 다음 달부터 미반영" className="text-[11px] font-bold rounded-full px-2 py-0.5" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>다음 달부터</button>
+              <button onClick={() => setSubMenu(null)} className="text-neutral-400 text-[11px]">닫기</button>
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 flex-shrink-0">
+              <span className="tabular-nums font-semibold" style={{ color: '#16211E' }}>−{won(s.amount)}</span>
+              <button onClick={() => setSubMenu(s.id)} title="구독 취소" className="text-neutral-300 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100">×</button>
+            </span>
+          )}
         </div>
       ))}</div>}
       <EntryList list={list} onDel={r => store.deleteResourceInWs(r.wsId, r.id)} sign="−" />
@@ -142,7 +160,19 @@ function FixedSection({ month }: { month: string }) {
 // ── 프로젝트 투자비 입력 (전 비즈니스 프로젝트) ──
 function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: string) => number }) {
   const store = useStore();
-  const projects = allProjects(store).filter(p => p.status === 'active'); // 진행중 프로젝트만
+  // 카테고리보드와 동일한 '진행중' 판정: 상태 active이거나, (완료·보류 아님 + 프로젝트/로드맵 데드라인 시작일이 지남)
+  const projStart = (p: Proj) => {
+    let earliest = p.startDate;
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === p.wsId);
+    for (const prog of ws?.programs ?? []) for (const dl of prog.deadlines ?? []) {
+      if (dl.projectId !== p.id) continue;
+      const st = dl.startDate || dl.date;
+      if (st && (!earliest || st < earliest)) earliest = st;
+    }
+    return earliest;
+  };
+  const isRunning = (p: Proj) => p.status === 'active' || (p.status !== 'done' && p.status !== 'onhold' && !!projStart(p) && projStart(p)! <= todayStr());
+  const projects = allProjects(store).filter(isRunning); // 진행중(파생 포함) 프로젝트만
   const investPlan = mergedInvest(store);
   const [spendFor, setSpendFor] = useState<string | null>(null);
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');

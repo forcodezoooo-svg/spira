@@ -366,13 +366,7 @@ export interface Subscription {
   name: string;
   amount: number; // monthly amount
   startMonth?: string; // 구독 시작 월 "YYYY-MM" — 이 달부터 매월 비용에 반영(이전 달엔 미반영)
-}
-
-export interface Subscription {
-  id: string;
-  name: string;
-  amount: number; // monthly amount
-  startMonth?: string; // 구독 시작 월 "YYYY-MM" — 이 달부터 매월 비용에 반영(이전 달엔 미반영)
+  endMonth?: string;   // 구독 종료 월 "YYYY-MM" — 이 달까지만 반영(구독 취소 시). 없으면 계속 반영
 }
 
 export interface QuickTask {
