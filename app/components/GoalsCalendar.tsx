@@ -40,9 +40,6 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   const [previewTask, setPreviewTask] = useState<{ start?: string; end?: string; name: string } | null>(null);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [notPlaced, setNotPlaced] = useState<string | null>(null);
-  const [offOpen, setOffOpen] = useState(false);
-  const [offStart, setOffStart] = useState('');
-  const [offEnd, setOffEnd] = useState('');
 
   type CalDragTarget = { key: string; level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; start: string; end: string };
   const [calDrag, setCalDrag] = useState<
@@ -193,15 +190,6 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
       return { ...dl, date: newDlDate, startDate: newStartDate, todos: dl.todos.map(t => (t.id === payload.todoId ? { ...t, date, deadline: date } : t)) };
     });
     store.updateProgramInWs(payload.wsId, { ...prog, deadlines });
-  };
-
-  const applyOffPeriod = () => {
-    if (!offStart || !offEnd || offEnd < offStart) return;
-    const days = Math.round((new Date(offEnd).getTime() - new Date(offStart).getTime()) / 86400000) + 1;
-    if (!window.confirm(`${offStart} ~ ${offEnd} (${days}일)을 오프 기간으로 설정할까요?\n\n이 기간 시작일 이후의 모든 프로젝트 일정(디데이·시작일)이 ${days}일씩 뒤로 밀리고,\n캘린더·로드맵에 오프(휴무)로 표시됩니다.`)) return;
-    store.shiftAllSchedulesAfter(offStart, days);
-    store.setOffPeriod(offStart, offEnd, true); // 오프 날짜를 휴무(가용 0)로 기록 → 캘린더·로드맵 표시 + 스케줄 회피
-    setOffOpen(false); setOffStart(''); setOffEnd('');
   };
 
   // 리스트 드래그 시작(부모 리스트가 imperative로 호출)
@@ -381,23 +369,6 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
           <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </div>
-
-      {/* 분기 · off 설정 뱃지 */}
-      <div className="flex items-center justify-center gap-2 mb-5">
-        <span className="text-[12px] font-bold rounded-full px-2.5 py-1" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>{Math.floor(calMo / 3) + 1}분기</span>
-        <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정 — 이후 모든 일정이 그만큼 밀립니다">off 설정</button>
-      </div>
-      {offOpen && (
-        <div className="rounded-2xl p-3 mb-4" style={{ backgroundColor: '#FCF6EC', border: '1px solid #F2E2C4' }}>
-          <p className="text-[11px] mb-2 leading-relaxed" style={{ color: '#96631A' }}>전면 스탑(휴가 등) 기간을 정하면, 그 시작일 이후 모든 프로젝트 일정이 기간 일수만큼 뒤로 밀려요.</p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <input type="date" value={offStart} onChange={e => setOffStart(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
-            <span className="text-xs" style={{ color: '#C9A662' }}>~</span>
-            <input type="date" value={offEnd} min={offStart || undefined} onChange={e => setOffEnd(e.target.value)} className="bg-white border rounded-lg px-2 py-1 text-xs outline-none" style={{ borderColor: '#F2E2C4' }} />
-            <button onClick={applyOffPeriod} disabled={!offStart || !offEnd || offEnd < offStart} className="px-2.5 py-1 disabled:opacity-30 text-white text-xs rounded-lg transition-colors" style={{ backgroundColor: '#E0A73C' }}>적용</button>
-          </div>
-        </div>
-      )}
 
       {notPlaced && (
         <div className="mb-3 rounded-xl px-3 py-2 text-[12px] text-center leading-relaxed" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>
