@@ -23,19 +23,27 @@ const allSubs = (store: Store): (Subscription & { wsId: string })[] => store.all
 const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap(e => (e.plan?.projects ?? []).map(p => ({ ...p, wsId: e.workspace.id })));
 const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
 
-// 카테고리 보드에 뜨는 항목들 = 표시되는 데드라인(진행) 아래 완료 안 된 산출물(업무영역별 산출물)
-type Category = { wsId: string; todoId: string; name: string; dlName: string; projectId?: string };
+// 카테고리 보드에서 '진행중'인 데드라인(프로젝트) 아래 완료 안 된 산출물만
+type Category = { wsId: string; wsName: string; todoId: string; name: string; projectName: string; projectId?: string };
 const allCategories = (store: Store): Category[] => {
   const out: Category[] = [];
+  const today = new Date().toISOString().slice(0, 10);
   for (const e of store.allWorkspacesEntries) {
     const projs = e.plan?.projects ?? [];
     for (const prog of e.programs ?? []) {
       for (const dl of prog.deadlines ?? []) {
         if (dl.enabled === false || dl.done) continue;
-        if (dl.projectId && projs.find(p => p.id === dl.projectId)?.status === 'done') continue;
+        const proj = dl.projectId ? projs.find(p => p.id === dl.projectId) : undefined;
+        if (proj?.status === 'done') continue;
+        // 진행중 판정: 프로젝트 status active 이거나, (완료·보류 아님 + 시작일이 지남)
+        const started = dl.startDate || dl.date || (dl.todos ?? []).map(t => t.date).filter((x): x is string => !!x).sort()[0];
+        const running = proj
+          ? (proj.status === 'active' || (proj.status !== 'onhold' && !!started && started <= today))
+          : (!!started && started <= today);
+        if (!running) continue;
         for (const t of dl.todos ?? []) {
           if (t.done) continue;
-          out.push({ wsId: e.workspace.id, todoId: t.id, name: t.name, dlName: dl.name, projectId: dl.projectId });
+          out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, name: t.name, projectName: proj?.name || dl.name, projectId: dl.projectId });
         }
       }
     }
@@ -185,39 +193,53 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
   const [spendFor, setSpendFor] = useState<string | null>(null);
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');
   const addSpend = (c: Category) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResourceInWs(c.wsId, { type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), todoId: c.todoId, ...(c.projectId ? { projectId: c.projectId } : {}) }); setSpName(''); setSpAmt(''); setSpendFor(null); };
+  // 비즈니스 · 프로젝트 단위로 묶어서 표시
+  const groups: { key: string; wsName: string; projectName: string; items: Category[] }[] = [];
+  for (const c of cats) {
+    const key = `${c.wsId}::${c.projectName}`;
+    let g = groups.find(x => x.key === key);
+    if (!g) { g = { key, wsName: c.wsName, projectName: c.projectName, items: [] }; groups.push(g); }
+    g.items.push(c);
+  }
+  const catRow = (c: Category) => {
+    const spent = catSpent(c.todoId);
+    const planned = investPlan[c.todoId] ?? 0;
+    return (
+      <div key={c.todoId} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{c.name}</span>
+          <button onClick={() => { setSpendFor(spendFor === c.todoId ? null : c.todoId); setSpName(''); setSpAmt(''); }} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>지출 추가</button>
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px]" style={{ color: '#9AA39D' }}>투자 예정</span>
+            <input type="number" value={planned || ''} onChange={e => store.setProjectInvestInWs(c.wsId, c.todoId, Number(e.target.value) || 0)} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
+          </div>
+          <span className="text-[11px] ml-auto" style={{ color: spent > planned && planned > 0 ? '#C0392B' : '#9AA39D' }}>사용 <b className="tabular-nums">{won(spent)}</b></span>
+        </div>
+        {spendFor === c.todoId && (
+          <div className="flex items-center gap-1.5 mt-2">
+            <input value={spName} onChange={e => setSpName(e.target.value)} placeholder="지출 내용" className="flex-1 min-w-0 text-[12px] bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
+            <input type="number" value={spAmt} onChange={e => setSpAmt(e.target.value)} placeholder="금액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
+            <button onClick={() => addSpend(c)} className="text-[12px] font-bold rounded-lg px-3 py-1.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>추가</button>
+          </div>
+        )}
+      </div>
+    );
+  };
   return (
     <Card title="프로젝트 투자비">
-      {cats.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>카테고리 보드에 표시되는 산출물이 없어요. Goals에서 프로젝트·산출물을 만들어보세요.</p> : (
-        <div className="space-y-2">
-          {cats.map(c => {
-            const spent = catSpent(c.todoId);
-            const planned = investPlan[c.todoId] ?? 0;
-            return (
-              <div key={c.todoId} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0">
-                    <span className="text-[13px] font-bold block truncate" style={{ color: '#16211E' }}>{c.name}</span>
-                    <span className="text-[10px] block truncate" style={{ color: '#9AA39D' }}>{c.dlName}</span>
-                  </span>
-                  <button onClick={() => { setSpendFor(spendFor === c.todoId ? null : c.todoId); setSpName(''); setSpAmt(''); }} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>지출 추가</button>
-                </div>
-                <div className="flex items-center gap-3 mt-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px]" style={{ color: '#9AA39D' }}>투자 예정</span>
-                    <input type="number" value={planned || ''} onChange={e => store.setProjectInvestInWs(c.wsId, c.todoId, Number(e.target.value) || 0)} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-                  </div>
-                  <span className="text-[11px] ml-auto" style={{ color: spent > planned && planned > 0 ? '#C0392B' : '#9AA39D' }}>사용 <b className="tabular-nums">{won(spent)}</b></span>
-                </div>
-                {spendFor === c.todoId && (
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <input value={spName} onChange={e => setSpName(e.target.value)} placeholder="지출 내용" className="flex-1 min-w-0 text-[12px] bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-                    <input type="number" value={spAmt} onChange={e => setSpAmt(e.target.value)} placeholder="금액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-                    <button onClick={() => addSpend(c)} className="text-[12px] font-bold rounded-lg px-3 py-1.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>추가</button>
-                  </div>
-                )}
+      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 카테고리가 없어요. Goals 카테고리 보드에서 진행 중인 프로젝트·산출물을 만들어보세요.</p> : (
+        <div className="space-y-4">
+          {groups.map(g => (
+            <div key={g.key}>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>{g.wsName}</span>
+                <span className="text-[13px] font-black truncate" style={{ color: '#16211E' }}>{g.projectName}</span>
               </div>
-            );
-          })}
+              <div className="space-y-2">{g.items.map(catRow)}</div>
+            </div>
+          ))}
         </div>
       )}
     </Card>
