@@ -458,20 +458,22 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                     const isOver = !!ds && ds === dragOverDate;
                     const allowedOn = showAllowed && !!ds && inAllowed(ds);
                     const isSelected = !!ds && ds === selectedDate;
+                    const isOff = !!ds && store.capacity.dateOverrides?.[ds] === 0; // 오프(휴무)일
                     return (
                       <div
                         key={di}
                         data-cal-date={ds ?? undefined}
                         onClick={ds && onSelectDate ? () => onSelectDate(ds) : undefined}
                         onDragOver={ds ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverDateRef.current = ds; if (dragOverDate !== ds) setDragOverDate(ds); }) : undefined}
-                        className={`flex flex-col items-center rounded-lg transition-colors ${ds && onSelectDate ? 'cursor-pointer' : ''} ${isOver ? 'bg-violet-100 ring-2 ring-violet-400' : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300' : isSelected ? 'bg-[#F3F0FF] ring-1 ring-violet-300' : ''}`}
+                        className={`flex flex-col items-center rounded-lg transition-colors ${ds && onSelectDate ? 'cursor-pointer' : ''} ${isOver ? 'bg-violet-100 ring-2 ring-violet-400' : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300' : isSelected ? 'bg-[#F3F0FF] ring-1 ring-violet-300' : isOff ? 'bg-[#FCF3E4]' : ''}`}
                         style={{ minHeight: cellMinH }}
                       >
                         {ds && (
-                          <div className="w-8 h-8 flex items-center justify-center text-sm rounded-full font-semibold" style={isOver ? { backgroundColor: '#5FD93A', color: '#fff' } : ds === todayKey ? { backgroundColor: '#9DFE3B', color: '#16211E' } : isSelected ? { backgroundColor: '#7C3AED', color: '#fff' } : { color: '#5B6560' }}>
+                          <div className="w-8 h-8 flex items-center justify-center text-sm rounded-full font-semibold" style={isOver ? { backgroundColor: '#5FD93A', color: '#fff' } : ds === todayKey ? { backgroundColor: '#9DFE3B', color: '#16211E' } : isSelected ? { backgroundColor: '#7C3AED', color: '#fff' } : { color: isOff ? '#96631A' : '#5B6560' }}>
                             {Number(ds.slice(8))}
                           </div>
                         )}
+                        {isOff && <span className="text-[8px] font-bold leading-none px-1 rounded-full -mt-0.5" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>}
                       </div>
                     );
                   })}

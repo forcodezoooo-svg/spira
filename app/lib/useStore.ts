@@ -144,6 +144,18 @@ export function useStore() {
       if (hours === null) delete ov[date]; else ov[date] = Math.max(0, hours);
       return { ...d, capacity: { ...(d.capacity ?? {}), dateOverrides: ov } };
     });
+  // 오프 기간(휴가 등): 해당 범위의 각 날짜 가용시간을 0(휴무)으로 기록 → 스케줄 회피 + 캘린더·로드맵 표시
+  const setOffPeriod = (start: string, end: string, off: boolean) =>
+    update(d => {
+      const ov = { ...(d.capacity?.dateOverrides ?? {}) };
+      const cur = new Date(start + 'T00:00:00'); const last = new Date(end + 'T00:00:00');
+      while (cur.getTime() <= last.getTime()) {
+        const ds = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+        if (off) ov[ds] = 0; else if (ov[ds] === 0) delete ov[ds];
+        cur.setDate(cur.getDate() + 1);
+      }
+      return { ...d, capacity: { ...(d.capacity ?? {}), dateOverrides: ov } };
+    });
   // 주별 업무시간표 override — 그 주(월요일 키)에 한해 요일 근무시간을 조정 (기본 workSchedule은 유지)
   const setWeekWorkDay = (weekStart: string, day: number, patch: Partial<WorkDay>) =>
     update(d => {
@@ -738,7 +750,7 @@ export function useStore() {
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask,
     offDays, isOffDay, toggleOffDay,
     workSchedule, setWorkDay,
-    capacity, setBufferPercent, setDateCapacityOverride, setWeekWorkDay, resetWeekSchedule,
+    capacity, setBufferPercent, setDateCapacityOverride, setOffPeriod, setWeekWorkDay, resetWeekSchedule,
     boardTemplates, addBoardTemplate, deleteBoardTemplate,
     setOperatingMode, setWeeklyCapacityHours,
     areaOrder, moveArea, setAreaOrder,

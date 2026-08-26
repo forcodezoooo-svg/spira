@@ -266,8 +266,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const applyOffPeriod = () => {
     if (!offStart || !offEnd || offEnd < offStart) return;
     const days = Math.round((new Date(offEnd).getTime() - new Date(offStart).getTime()) / 86400000) + 1;
-    if (!window.confirm(`${offStart} ~ ${offEnd} (${days}일)을 오프 기간으로 설정할까요?\n\n이 기간 시작일 이후의 모든 프로젝트 일정이 ${days}일씩 뒤로 밀립니다.`)) return;
-    store.shiftAllSchedulesAfter(offStart, days); setOffOpen(false); setOffStart(''); setOffEnd('');
+    if (!window.confirm(`${offStart} ~ ${offEnd} (${days}일)을 오프 기간으로 설정할까요?\n\n이 기간 시작일 이후의 모든 프로젝트 일정이 ${days}일씩 뒤로 밀리고,\n캘린더·로드맵에 오프(휴무)로 표시됩니다.`)) return;
+    store.shiftAllSchedulesAfter(offStart, days);
+    store.setOffPeriod(offStart, offEnd, true); // 오프 날짜를 휴무(가용 0)로 기록 → 캘린더·로드맵 표시 + 스케줄 회피
+    setOffOpen(false); setOffStart(''); setOffEnd('');
   };
 
   const startListDrag = (payload: Payload, e: React.DragEvent) => { dragPayloadRef.current = payload; e.dataTransfer.setData('text/plain', JSON.stringify(payload)); e.dataTransfer.effectAllowed = 'move'; };
@@ -766,6 +768,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }
   const todayX = xOf(todayStr) + pxPerDay / 2;
   void schedule; void DOW;
+  // 오프(휴무) 날짜 = 가용시간 override가 0인 날 → 로드맵에 밴드로 표시 (연속일은 하나로 병합)
+  const offDates = Object.entries(store.capacity.dateOverrides ?? {}).filter(([, h]) => h === 0).map(([d]) => d).filter(d => d >= rangeStart && daysBetween(rangeStart, d) < span).sort();
+  const offBands: { start: string; end: string }[] = [];
+  for (const d of offDates) { const last = offBands[offBands.length - 1]; if (last && daysBetween(last.end, d) === 1) last.end = d; else offBands.push({ start: d, end: d }); }
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
@@ -995,6 +1001,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: LABEL_W, width: contentWidth }}>
               {dayLines.map((x, i) => <div key={`d${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#EEEEE8' }} />)}
               {strongLines.map((x, i) => <div key={`s${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#E2E2DA' }} />)}
+              {/* 오프(휴무) 밴드 */}
+              {offBands.map(b => (
+                <div key={`off${b.start}`} className="absolute top-0 bottom-0 flex items-start justify-center overflow-hidden" style={{ left: xOf(b.start), width: wOf(b.start, b.end), background: 'repeating-linear-gradient(45deg, rgba(150,99,26,0.12), rgba(150,99,26,0.12) 5px, rgba(150,99,26,0.04) 5px, rgba(150,99,26,0.04) 10px)' }}>
+                  <span className="text-[9px] font-bold mt-0.5 px-1 rounded-full whitespace-nowrap" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>
+                </div>
+              ))}
               {todayStr >= rangeStart && daysBetween(rangeStart, todayStr) < span && <div className="absolute top-0 bottom-0 w-px" style={{ left: todayX, backgroundColor: '#9DFE3B' }} />}
             </div>
             {rowsDraw.length === 0 ? (
