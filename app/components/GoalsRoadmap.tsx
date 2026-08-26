@@ -932,7 +932,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
-  const barH = (lvl: number) => lvl === 1 ? 26 : lvl === 2 ? 17 : 13; // 프로젝트=큰 막대, 산출물=작은 막대
+  const barH = (lvl: number) => lvl === 1 ? 26 : lvl === 2 ? 20 : 16; // 프로젝트=큰 막대, 하위(산출물) 막대 20% 확대
   const pgOrder = new Map<string, number>(); roadmapPrograms.forEach((p, i) => pgOrder.set(`p-${p.id}`, i));
   // 선택 아이템 빌더 + 체크 표시
   const rowSel = (r: Row): SelItem => ({ key: r.key, kind: r.kind, name: r.name, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, deadline: r.end });
