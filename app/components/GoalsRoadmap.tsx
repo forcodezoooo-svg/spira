@@ -772,6 +772,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const offDates = Object.entries(store.capacity.dateOverrides ?? {}).filter(([, h]) => h === 0).map(([d]) => d).filter(d => d >= rangeStart && daysBetween(rangeStart, d) < span).sort();
   const offBands: { start: string; end: string }[] = [];
   for (const d of offDates) { const last = offBands[offBands.length - 1]; if (last && daysBetween(last.end, d) === 1) last.end = d; else offBands.push({ start: d, end: d }); }
+  if (typeof window !== 'undefined') console.log('[spira-off] overrides:', store.capacity.dateOverrides, '→ offDates in range:', offDates, 'range:', rangeStart, '~', addDaysStr(rangeStart, span - 1));
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
