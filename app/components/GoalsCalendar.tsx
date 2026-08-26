@@ -198,8 +198,9 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   const applyOffPeriod = () => {
     if (!offStart || !offEnd || offEnd < offStart) return;
     const days = Math.round((new Date(offEnd).getTime() - new Date(offStart).getTime()) / 86400000) + 1;
-    if (!window.confirm(`${offStart} ~ ${offEnd} (${days}일)을 오프 기간으로 설정할까요?\n\n이 기간 시작일 이후의 모든 프로젝트 일정(디데이·시작일)이 ${days}일씩 뒤로 밀립니다.`)) return;
+    if (!window.confirm(`${offStart} ~ ${offEnd} (${days}일)을 오프 기간으로 설정할까요?\n\n이 기간 시작일 이후의 모든 프로젝트 일정(디데이·시작일)이 ${days}일씩 뒤로 밀리고,\n캘린더·로드맵에 오프(휴무)로 표시됩니다.`)) return;
     store.shiftAllSchedulesAfter(offStart, days);
+    store.setOffPeriod(offStart, offEnd, true); // 오프 날짜를 휴무(가용 0)로 기록 → 캘린더·로드맵 표시 + 스케줄 회피
     setOffOpen(false); setOffStart(''); setOffEnd('');
   };
 
