@@ -2,8 +2,8 @@
 import { useState } from 'react';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
-import { computeFinancialSummary, planOperating, revenueTargetOf } from '../lib/finance';
-import type { FinancialPlan, FinRevenueSource, OperatingBudgetItem } from '../lib/types';
+import { computeFinancialSummary, planOperating, revenueTargetOf, periodActuals, projectActualCost } from '../lib/finance';
+import type { FinancialPlan, FinRevenueSource, OperatingBudgetItem, BudgetAllocation } from '../lib/types';
 
 const won = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -50,6 +50,22 @@ export default function FinancialPlanPanel() {
   const setItem = (id: string, p: Partial<OperatingBudgetItem>) => patch({ operatingItems: items.map(x => x.id === id ? { ...x, ...p } : x) });
   const addItem = (kind: 'fixed' | 'variable') => patch({ operatingItems: [...items, { id: uid(), name: '', amount: 0, kind }] });
   const delItem = (id: string) => patch({ operatingItems: items.filter(x => x.id !== id) });
+
+  // ── 배분 (Budget Allocation) + 실적 ──
+  const projects = store.data.plan.projects ?? [];
+  const entries = store.data.resources ?? [];
+  const allocs = plan.allocations ?? [];
+  const setAlloc = (id: string, p: Partial<BudgetAllocation>) => patch({ allocations: allocs.map(x => x.id === id ? { ...x, ...p } : x) });
+  const addAlloc = () => patch({ allocations: [...allocs, { id: uid(), plannedAmount: 0 }] });
+  const delAlloc = (id: string) => patch({ allocations: allocs.filter(x => x.id !== id) });
+  const allocTargetVal = (a: BudgetAllocation) => a.projectId ? `p:${a.projectId}` : a.goalId ? `g:${a.goalId}` : '';
+  const setAllocTarget = (id: string, v: string) => {
+    if (v.startsWith('p:')) setAlloc(id, { projectId: v.slice(2), goalId: undefined });
+    else if (v.startsWith('g:')) setAlloc(id, { goalId: v.slice(2), projectId: undefined });
+    else setAlloc(id, { projectId: undefined, goalId: undefined });
+  };
+  const actual = periodActuals(entries, plan.startDate, plan.endDate); // 이 기간 실제 수입/지출
+  const revProgress = s.target > 0 ? Math.round((actual.income / s.target) * 100) : 0;
 
   const numInput = "w-28 text-[13px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400";
   const label = "text-[11px] font-semibold";
@@ -175,6 +191,68 @@ export default function FinancialPlanPanel() {
         <div className="rounded-xl px-3 py-2 mt-1" style={{ backgroundColor: '#fff', border: '1px solid #E4EFD4' }}>
           <p className="text-[12px]" style={{ color: '#16211E' }}>현재 계획대로라면 <b>{plan.endDate.slice(0, 7)}</b> 예상 보유자금 <b className="tabular-nums">{won(s.forecastEndingCash)}</b></p>
         </div>
+      </div>
+
+      {/* 배분 (Budget Allocation) */}
+      <div className="rounded-[20px] border p-4 space-y-3" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[13px] font-black" style={{ color: '#16211E' }}>투자 배분 (Goal · Project)</span>
+          <span className="text-[12px] font-bold" style={{ color: s.unallocated < 0 ? '#C0392B' : '#5B6560' }}>
+            미배정 <span className="tabular-nums">{won(s.unallocated)}</span>{s.unallocated < 0 ? ' · 과배정' : ''}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {allocs.map(a => {
+            const spent = a.projectId ? projectActualCost(entries, a.projectId, plan.startDate, plan.endDate) : 0;
+            return (
+              <div key={a.id} className="flex items-center gap-2">
+                <select value={allocTargetVal(a)} onChange={e => setAllocTarget(a.id, e.target.value)} className="flex-1 min-w-0 text-[12px] rounded-lg border px-2 py-1.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>
+                  <option value="">기타(공통)</option>
+                  {projects.length > 0 && <optgroup label="프로젝트">{projects.map(p => <option key={p.id} value={`p:${p.id}`}>{p.name}</option>)}</optgroup>}
+                  {goals.length > 0 && <optgroup label="목표">{goals.map(g => <option key={g.id} value={`g:${g.id}`}>{g.name}</option>)}</optgroup>}
+                </select>
+                <input type="number" value={a.plannedAmount || ''} onChange={e => setAlloc(a.id, { plannedAmount: Number(e.target.value) || 0 })} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+                {a.projectId && <span className="text-[10px] tabular-nums w-24 text-right flex-shrink-0" style={{ color: spent > a.plannedAmount ? '#C0392B' : '#9AA39D' }} title="이 프로젝트에 연결된 실제 지출">쓴 {won(spent)}</span>}
+                <button onClick={() => delAlloc(a.id)} className="w-5 text-neutral-300 hover:text-red-500 text-sm">×</button>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={addAlloc} className="text-[11px] font-semibold" style={{ color: '#7C3AED' }}>+ 배분 추가</button>
+      </div>
+
+      {/* 계획 대비 실적 (Planned vs Actual) */}
+      <div className="rounded-[20px] border p-4 space-y-3" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+        <span className="text-[13px] font-black" style={{ color: '#16211E' }}>계획 대비 실적 <span className="text-[11px] font-medium" style={{ color: '#9AA39D' }}>· {plan.startDate.slice(0, 7)}~{plan.endDate.slice(0, 7)}</span></span>
+        {/* 수익 진행 */}
+        <div>
+          <div className="flex items-center justify-between text-[12px] mb-1">
+            <span style={{ color: '#5B6560' }}>수익 목표</span>
+            <span style={{ color: '#5B6560' }}>실제 <b className="tabular-nums" style={{ color: '#3E7A2E' }}>{won(actual.income)}</b> / {won(s.target)} <b>({revProgress}%)</b></span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: '#F0F0EA' }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, revProgress)}%`, backgroundColor: '#9DFE3B' }} />
+          </div>
+        </div>
+        {/* 지출: 계획(운영비+배분) vs 실제 */}
+        <div className="flex items-center justify-between text-[12px]">
+          <span style={{ color: '#5B6560' }}>지출 계획 <span style={{ color: '#9AA39D' }}>(운영비+배분)</span></span>
+          <span style={{ color: '#5B6560' }}>실제 <b className="tabular-nums" style={{ color: '#C0392B' }}>{won(actual.expense)}</b> / {won(s.operating + s.allocated)}</span>
+        </div>
+        {/* Variance 메시지 */}
+        {(() => {
+          const plannedOut = s.operating + s.allocated;
+          const diff = actual.expense - plannedOut;
+          if (Math.abs(diff) < 1) return null;
+          return <p className="text-[12px] rounded-lg px-3 py-2" style={{ backgroundColor: diff > 0 ? '#FFF1F1' : '#F1F8EE', color: diff > 0 ? '#C0392B' : '#3E7A2E' }}>
+            {diff > 0 ? `지출이 계획보다 ${won(diff)} 많습니다.` : `지출이 계획보다 ${won(-diff)} 적습니다.`}
+          </p>;
+        })()}
+        {revProgress > 0 && revProgress < 60 && (
+          <p className="text-[12px] rounded-lg px-3 py-2" style={{ backgroundColor: '#FCF6EC', color: '#96631A' }}>
+            수익 진행이 {revProgress}%로, 남은 기간에 예상 수익 실현이 필요합니다.
+          </p>
+        )}
       </div>
     </div>
   );

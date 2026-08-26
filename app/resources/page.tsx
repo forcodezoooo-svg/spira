@@ -65,6 +65,7 @@ export default function ResourcesPage() {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
+  const [linkProjectId, setLinkProjectId] = useState(''); // 지출을 프로젝트에 연결(실지출 집계용)
 
   // 구독료(비용 카테고리 '구독료'로 통합) — 목록 편집용 상태만 유지
   const [editingSubId, setEditingSubId] = useState<string | null>(null);
@@ -205,8 +206,9 @@ export default function ResourcesPage() {
       description: name.trim(),
       date: todayStr(),
       ...(category.trim() ? { source: category.trim() } : {}),
+      ...(tab === 'expense' && linkProjectId ? { projectId: linkProjectId } : {}),
     });
-    setName(''); setAmount(''); // 카테고리는 연속 입력 편의를 위해 유지
+    setName(''); setAmount(''); // 카테고리·프로젝트는 연속 입력 편의를 위해 유지
   };
   const handleSaveSub = (id: string) => {
     const n = Number(editSubAmount.replace(/,/g, ''));
@@ -378,6 +380,12 @@ export default function ResourcesPage() {
                 recurring={tab === 'expense' ? { value: RECURRING_CAT, label: `${RECURRING_CAT} (매월 반복)` } : null}
                 onAdd={name => (isIncome ? store.addRevenueSource(name) : store.addExpenseCategory(name))}
               />
+              {tab === 'expense' && (store.data.plan.projects?.length ?? 0) > 0 && (
+                <select value={linkProjectId} onChange={e => setLinkProjectId(e.target.value)} title="이 지출을 프로젝트에 연결(실지출 집계)" className="flex-shrink-0 text-[13px] rounded-full border px-2.5 py-1.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>
+                  <option value="">프로젝트 연결 안 함</option>
+                  {(store.data.plan.projects ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
               <button
                 onClick={handleAdd}
                 disabled={!amount || !name.trim()}

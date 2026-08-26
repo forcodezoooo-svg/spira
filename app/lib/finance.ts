@@ -56,6 +56,26 @@ export function planActuals(plan: FinancialPlan, entries: ResourceEntry[]): { in
   };
 }
 
+// 배분 합계 (§11)
+export function allocatedTotal(plan: FinancialPlan): number {
+  return (plan.allocations ?? []).reduce((s, a) => s + num(a.plannedAmount), 0);
+}
+
+// 기간 내 실제 실적 (해당 비즈니스 거래 중 계획 기간에 든 것) — 링크 없이 날짜로 집계
+export function periodActuals(entries: ResourceEntry[], start: string, end: string): { income: number; expense: number } {
+  const rows = entries.filter(e => e.date >= start && e.date <= end);
+  return {
+    income: rows.filter(e => e.type === 'income').reduce((s, e) => s + num(e.amount), 0),
+    expense: rows.filter(e => e.type === 'expense').reduce((s, e) => s + num(e.amount), 0),
+  };
+}
+
+// 특정 프로젝트에 연결된 실제 지출 (기간 제한 선택)
+export function projectActualCost(entries: ResourceEntry[], projectId: string, start?: string, end?: string): number {
+  return entries.filter(e => e.type === 'expense' && e.projectId === projectId && (!start || e.date >= start) && (!end || e.date <= end))
+    .reduce((s, e) => s + num(e.amount), 0);
+}
+
 export interface FinancialSummary {
   startingFunds: number;
   confirmed: number;
@@ -63,13 +83,16 @@ export interface FinancialSummary {
   target: number;
   operating: number;
   reserve: number;
+  allocated: number;      // Goal/Project에 배정한 투자 합계
   // 지금 안전하게 배정 가능한 금액 = 보유 + 확정 − 운영비 − Reserve
   safeToAllocate: number;
+  // 아직 배정하지 않은 여력 = Safe − 배정합계 (음수면 과배정)
+  unallocated: number;
   // 예상 수익이 실현되면 추가로 생기는 여력
   potentialAdditional: number;
   // 목표까지 남은 격차 (참고용, 확정 자금 아님)
   targetGap: number;
-  // 계획대로 갈 때 기간말 예상 보유자금 (Confirmed+Expected 반영, 투자배분은 P0-2에서 차감)
+  // 계획대로 갈 때 기간말 예상 보유자금 (Confirmed+Expected − 운영비 − 투자배분)
   forecastEndingCash: number;
 }
 
@@ -80,9 +103,11 @@ export function computeFinancialSummary(plan: FinancialPlan, subscriptions: Subs
   const operating = planOperating(plan, subscriptions).total;
   const reserve = num(plan.reserveTarget);
   const startingFunds = num(plan.startingFunds);
+  const allocated = allocatedTotal(plan);
   const safeToAllocate = Math.max(0, startingFunds + confirmed - operating - reserve);
+  const unallocated = safeToAllocate - allocated;
   const potentialAdditional = expected;
   const targetGap = Math.max(0, target - confirmed - expected);
-  const forecastEndingCash = startingFunds + confirmed + expected - operating;
-  return { startingFunds, confirmed, expected, target, operating, reserve, safeToAllocate, potentialAdditional, targetGap, forecastEndingCash };
+  const forecastEndingCash = startingFunds + confirmed + expected - operating - allocated;
+  return { startingFunds, confirmed, expected, target, operating, reserve, allocated, safeToAllocate, unallocated, potentialAdditional, targetGap, forecastEndingCash };
 }
