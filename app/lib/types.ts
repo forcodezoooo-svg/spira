@@ -239,6 +239,7 @@ export interface ProgramTodo {
   durationDays?: number; // 대략 소요 일수 — 프로젝트 '일정 이어붙이기'에서 날짜를 순차 배치할 때 사용
   deliverableId?: string; // 원본 Plan 영역별 산출물(Project.areaDeliverables[].id) — Plan 완료 상태 동기화용
   pinned?: boolean; // 카테고리 보드에서 '우선' 표시 — 강조 + 맨 앞 정렬
+  dependsOn?: string; // 로드맵 막대 연결(선행) — 이 산출물 앞에 와야 하는 산출물(todo) id. 선행이 밀리면 같이 밀림
 }
 
 // 프로그램 내 데드라인 항목 (depth 2)

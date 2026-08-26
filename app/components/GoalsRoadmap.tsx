@@ -63,6 +63,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [kanban, setKanban] = useState(false); // 칸반 탭 여부
   const [sortMode, setSortMode] = useState<'dday' | 'business'>('business'); // 로드맵 정렬: 디데이순 / 비즈니스별
   const [ctxMenu, setCtxMenu] = useState<{ r: Row; x: number; y: number; days: number } | null>(null); // 우클릭 소요일 입력
+  const [linkFrom, setLinkFrom] = useState<string | null>(null); // 막대 연결: 선행 산출물(todo) id 선택 중
   const [editingKey, setEditingKey] = useState<string | null>(null); // 리스트 이름 인라인 편집 중인 행
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
   const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
@@ -677,6 +678,75 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (store.autoDelay) applyDelays();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.autoDelay]);
+
+  // ── 막대 연결(의존성) ──
+  // toId 산출물이 fromId 산출물 뒤에 오도록 연결 (선행이 밀리면 같이 밀림). 자기 참조·순환은 무시.
+  const linkTodos = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    for (const e of store.allWorkspacesEntries) for (const p of e.programs) for (const dl of p.deadlines ?? []) {
+      if (!dl.todos.some(t => t.id === toId)) continue;
+      const prog = findProg(e.workspace.id, p.id); if (!prog) return;
+      store.updateProgramInWs(e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => t.id === toId ? { ...t, dependsOn: fromId } : t) })) });
+      return;
+    }
+  };
+  const unlinkTodo = (toId: string) => {
+    for (const e of store.allWorkspacesEntries) for (const p of e.programs) for (const dl of p.deadlines ?? []) {
+      if (!dl.todos.some(t => t.id === toId && t.dependsOn)) continue;
+      const prog = findProg(e.workspace.id, p.id); if (!prog) return;
+      store.updateProgramInWs(e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => t.id === toId ? { ...t, dependsOn: undefined } : t) })) });
+      return;
+    }
+  };
+  const onBarLinkClick = (todoId?: string) => {
+    if (!todoId) return;
+    if (linkFrom === null) setLinkFrom(todoId);
+    else if (linkFrom === todoId) setLinkFrom(null);
+    else { linkTodos(linkFrom, todoId); setLinkFrom(null); }
+  };
+  // 연결된 산출물 전파: 선행이 밀리면 후행 시작을 선행 마감 뒤로 밀고(기간 유지) 연쇄 반영
+  const propagateLinks = () => {
+    type M = { wsId: string; pid: string; date?: string; deadline?: string; dependsOn?: string };
+    const map = new Map<string, M>();
+    for (const e of store.allWorkspacesEntries) for (const p of e.programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) if (!t.done) map.set(t.id, { wsId: e.workspace.id, pid: p.id, date: t.date, deadline: t.deadline, dependsOn: t.dependsOn });
+    const updates = new Map<string, { wsId: string; pid: string; date: string; deadline?: string }>();
+    let changed = true, guard = 0;
+    while (changed && guard++ < 100) {
+      changed = false;
+      for (const [id, t] of map) {
+        if (!t.dependsOn) continue;
+        const pred = map.get(t.dependsOn); if (!pred) continue;
+        const predEnd = pred.deadline || pred.date; const start = t.date || t.deadline;
+        if (predEnd && start && start < predEnd) {
+          const delta = daysBetween(start, predEnd);
+          const nd = { date: predEnd, deadline: t.deadline ? addDaysStr(t.deadline, delta) : predEnd };
+          map.set(id, { ...t, ...nd }); updates.set(id, { wsId: t.wsId, pid: t.pid, ...nd }); changed = true;
+        }
+      }
+    }
+    if (!updates.size) return;
+    const byProg = new Map<string, { wsId: string; pid: string; ids: Map<string, { date: string; deadline?: string }> }>();
+    for (const [id, u] of updates) { const k = `${u.wsId}::${u.pid}`; if (!byProg.has(k)) byProg.set(k, { wsId: u.wsId, pid: u.pid, ids: new Map() }); byProg.get(k)!.ids.set(id, { date: u.date, deadline: u.deadline }); }
+    for (const { wsId, pid, ids } of byProg.values()) {
+      const prog = findProg(wsId, pid); if (!prog) continue;
+      const deadlines = (prog.deadlines ?? []).map(dl => {
+        let dch = false;
+        const todos = dl.todos.map(t => { const u = ids.get(t.id); if (!u) return t; dch = true; return { ...t, date: u.date, deadline: u.deadline }; });
+        if (!dch) return dl;
+        const maxT = todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x).reduce((a, b) => (a > b ? a : b), dl.date || '');
+        return { ...dl, todos, date: maxT && (!dl.date || maxT > dl.date) ? maxT : dl.date };
+      });
+      store.updateProgramInWs(wsId, { ...prog, deadlines });
+    }
+  };
+  // 산출물 날짜/연결이 바뀔 때마다 전파 (수렴 — 후행이 이미 뒤면 변화 없음)
+  const linkSig = programs.flatMap(p => (p.deadlines ?? []).flatMap(dl => (dl.todos ?? []).map(t => `${t.id}:${t.date ?? ''}:${t.deadline ?? ''}:${t.dependsOn ?? ''}`))).join('|');
+  const dependentIds = new Set<string>(); // 선행에 연결된(따라 밀리는) 산출물
+  for (const p of programs) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) if (t.dependsOn) dependentIds.add(t.id);
+  useEffect(() => {
+    propagateLinks();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkSig]);
   // D-day 계산 + 배지 스타일
   const ddayOf = (d?: string) => { if (!d) return null; const diff = daysBetween(todayStr, d); if (diff > 0) return { label: `D-${diff}`, s: diff <= 3 ? 'urgent' : 'future' }; if (diff === 0) return { label: 'D-Day', s: 'urgent' }; return { label: `D+${-diff}`, s: 'over' }; };
   const DdayBadge = ({ d }: { d?: string }) => { const dd = ddayOf(d); if (!dd) return null; const st = dd.s === 'urgent' ? { color: '#fff', backgroundColor: '#FF696C' } : dd.s === 'over' ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }; return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={st}>{dd.label}</span>; };
@@ -893,6 +963,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             </div>
           )}
           {notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
+          {linkFrom && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center flex items-center justify-center gap-2" style={{ backgroundColor: '#E7F0FF', color: '#2B62C4' }}>선행 막대를 골랐어요. <b>뒤에 올 막대의 🔗 를 클릭</b>해 연결하세요. <button onClick={() => setLinkFrom(null)} className="underline">취소</button></div>}
         </>
       ) : (
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
@@ -1117,7 +1188,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
                         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); if (r.level > 0 && r.start && r.end) setCtxMenu({ r, x: e.clientX, y: e.clientY, days: daysBetween(r.start, r.end) + 1 }); }}
-                        className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer overflow-hidden"
+                        className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
                         style={{
                           left, width: Math.max(width, bl === 1 ? 14 : 6), height: barH(bl),
                           // 위계: 프로젝트=진한 단색(흰 글씨), 산출물=연한 채움+테두리
@@ -1135,6 +1206,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                           <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                           <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                         </>}
+                        {/* 막대 연결(의존성) */}
+                        {r.kind === 'todo' && r.todoId && (
+                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onBarLinkClick(r.todoId); }}
+                            title={linkFrom ? (linkFrom === r.todoId ? '연결 취소' : '이 막대를 뒤에 연결') : (dependentIds.has(r.todoId) ? '연결됨 (클릭: 선행으로 지정) · 아래 × 로 해제' : '연결 시작(선행 막대로 지정)')}
+                            className={`absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center z-30 transition-opacity ${linkFrom || dependentIds.has(r.todoId) ? '' : 'opacity-0 group-hover/bar:opacity-100'}`}
+                            style={{ backgroundColor: linkFrom === r.todoId ? '#2B62C4' : dependentIds.has(r.todoId) ? '#E7F0FF' : '#fff', border: '1px solid #2B62C4' }}>
+                            <svg className="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none" stroke={linkFrom === r.todoId ? '#fff' : '#2B62C4'} strokeWidth="1.6"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-1 1M9.5 6.5a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l1-1" strokeLinecap="round" /></svg>
+                          </button>
+                        )}
+                        {r.kind === 'todo' && r.todoId && dependentIds.has(r.todoId) && !linkFrom && (
+                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); unlinkTodo(r.todoId!); }} title="연결 해제" className="absolute -bottom-1.5 -left-1 w-3.5 h-3.5 rounded-full flex items-center justify-center z-30 text-[9px]" style={{ backgroundColor: '#fff', border: '1px solid #C4CCC4', color: '#9AA39D' }}>×</button>
+                        )}
                       </div>
                     )}
                   </div>
