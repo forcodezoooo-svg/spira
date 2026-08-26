@@ -17,7 +17,7 @@ const dateFor = (month: string) => (month === currentYM() ? new Date().toISOStri
 
 // 전 비즈니스(워크스페이스) 합산 — 기존 Resources와 동일하게 모든 사업의 거래를 함께 본다
 const allRes = (store: Store): Res[] => store.allWorkspacesEntries.flatMap(e => (e.resources ?? []).map(r => ({ ...r, wsId: e.workspace.id })));
-const allSubs = (store: Store): Subscription[] => store.allWorkspacesEntries.flatMap(e => e.subscriptions ?? []);
+const allSubs = (store: Store): (Subscription & { wsId: string })[] => store.allWorkspacesEntries.flatMap(e => (e.subscriptions ?? []).map(s => ({ ...s, wsId: e.workspace.id })));
 const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap(e => (e.plan?.projects ?? []).map(p => ({ ...p, wsId: e.workspace.id })));
 const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
 
@@ -126,9 +126,12 @@ function FixedSection({ month }: { month: string }) {
       </div>
       <p className="text-[11px] mt-2" style={{ color: '#9AA39D' }}>카테고리를 <b style={{ color: '#5B6560' }}>{RECURRING_CAT}</b>로 고르면 매월 반복 고정비(구독)로 등록돼요.</p>
       {subs.length > 0 && <div className="mt-2 space-y-1">{subs.map(s => (
-        <div key={s.id} className="flex items-center justify-between text-[13px] rounded-lg px-3 py-2" style={{ backgroundColor: '#FAFAF7' }}>
+        <div key={s.id} className="group flex items-center justify-between text-[13px] rounded-lg px-3 py-2" style={{ backgroundColor: '#FAFAF7' }}>
           <span style={{ color: '#5B6560' }}>{s.name} <span className="text-[10px]" style={{ color: '#C4A24A' }}>매월</span></span>
-          <span className="tabular-nums font-semibold" style={{ color: '#16211E' }}>−{won(s.amount)}</span>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            <span className="tabular-nums font-semibold" style={{ color: '#16211E' }}>−{won(s.amount)}</span>
+            <button onClick={() => { if (window.confirm(`'${s.name}' 구독을 삭제할까요?`)) store.deleteSubscriptionInWs(s.wsId, s.id); }} title="구독 삭제 (구독 취소 시)" className="text-neutral-300 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100">×</button>
+          </span>
         </div>
       ))}</div>}
       <EntryList list={list} onDel={r => store.deleteResourceInWs(r.wsId, r.id)} sign="−" />
@@ -139,7 +142,7 @@ function FixedSection({ month }: { month: string }) {
 // ── 프로젝트 투자비 입력 (전 비즈니스 프로젝트) ──
 function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: string) => number }) {
   const store = useStore();
-  const projects = allProjects(store).filter(p => p.status !== 'done');
+  const projects = allProjects(store).filter(p => p.status === 'active'); // 진행중 프로젝트만
   const investPlan = mergedInvest(store);
   const [spendFor, setSpendFor] = useState<string | null>(null);
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');
