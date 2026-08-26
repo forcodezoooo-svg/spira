@@ -570,7 +570,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     let di = 0;
     const subtasks = tasks.map(t => {
       const units = (t.units ?? []).map(u => ({ id: uid(), name: u.name, done: false, durationMin: u.durationMin }));
-      if (t.days?.length) return { id: uid(), name: t.name, done: false, date: anchor, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, days: t.days, units };
+      // 반복 task는 '반복 시작일'이 미래면 오늘부터 시작(오늘 요일부터 바로 뜨도록)
+      if (t.days?.length) return { id: uid(), name: t.name, done: false, date: anchor <= todayStr ? anchor : todayStr, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, days: t.days, units };
       const d = dates[di++] ?? anchor;
       return { id: uid(), name: t.name, done: false, date: d, deadline: d, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, units };
     });
@@ -587,7 +588,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   };
   // 병행 배치: 여러 프로젝트의 미완료 task를 라운드로빈 교차 후 오늘부터 가용시간에 채움
   // → 시작일이 같은 프로젝트들이 같은 날의 용량을 나눠 써 동시에 진행됨
-  const parallelReschedule = () => {
+  // onlyIds가 주어지면 그 task들만 (기존 배치는 유지한 채) 빈 용량에 배치 → 수동으로 옮긴 날짜 보존
+  const parallelReschedule = (onlyIds?: Set<string>) => {
     // 카테고리(산출물=todo) 단위로 그룹 → 여러 카테고리를 라운드로빈 교차해 동시 진행
     const groups: ParallelGroup[] = [];
     for (const p of programs) {
@@ -602,6 +604,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           const tasks: ParallelTask[] = [];
           for (const s of (t.subtasks ?? [])) {
             if (s.done || s.schedulingType === 'fixed' || (s.days?.length)) continue; // 완료·고정·반복 제외
+            if (onlyIds && !onlyIds.has(s.id)) continue; // 신규 task만 배치(기존은 그대로 두어 다른 task의 용량으로 계산됨)
             tasks.push({ subtaskId: s.id, dur: s.durationMin ?? 60, deadline: cap, earliest });
           }
           if (tasks.length) groups.push({ tasks });
@@ -621,8 +624,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 프로젝트 시작일(캘린더 일정)을 읽어 같은 시기 프로젝트를 동시 진행되도록 다시 배치.
   // (subtask id 목록을 서명으로 사용 — 날짜만 바뀌는 재배치 자신은 서명이 그대로라 무한루프 없음)
   const allSubIdsSig = programs.flatMap(p => (p.deadlines ?? []).flatMap(dl => (dl.todos ?? []).flatMap(t => (t.subtasks ?? []).map(s => s.id)))).sort().join(',');
+  const prevSubIdsRef = useRef<Set<string> | null>(null);
   useEffect(() => {
-    parallelReschedule();
+    const curIds = new Set(allSubIdsSig ? allSubIdsSig.split(',') : []);
+    // 마운트(첫 실행) 때는 기존 배치를 건드리지 않음 — 수동으로 조정한 날짜 보존
+    if (prevSubIdsRef.current === null) { prevSubIdsRef.current = curIds; return; }
+    const newIds = new Set([...curIds].filter(id => !prevSubIdsRef.current!.has(id)));
+    prevSubIdsRef.current = curIds;
+    if (newIds.size) parallelReschedule(newIds); // 새로 추가된 task만 빈 용량에 병행 배치
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allSubIdsSig]);
   // D-day 계산 + 배지 스타일
@@ -683,7 +692,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       if (kbForm.editTaskId) {
         const cur = kbForm.col.subtasks.find(x => x.id === kbForm.editTaskId);
         const patch: Partial<Sub> = { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined, days };
-        if (days) { patch.deadline = undefined; if (!cur?.date) patch.date = todayStr; } // 반복: 기존 날짜 유지·기한 제거
+        if (days) { patch.deadline = undefined; patch.date = cur?.date && cur.date <= todayStr ? cur.date : todayStr; } // 반복: 시작일 미래면 오늘부터(오늘 요일 바로 뜨게)·기한 제거
         else { const dd = cur?.date || cur?.deadline || todayStr; patch.date = dd; patch.deadline = dd; } // 단발: 기존 날짜 유지
         updateSub(kbForm.col, kbForm.editTaskId, patch);
       }
