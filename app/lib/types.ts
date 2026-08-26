@@ -452,6 +452,10 @@ export interface WorkspaceEntry {
   expenseCategoryTargets?: Record<string, number>; // 비용 카테고리 목표 비중(%)
   revenueTarget?: RevenueTarget;
   financialPlans?: FinancialPlan[]; // Financial Resource Planning — 기간별 재무계획(비즈니스별)
+  // ── 재무 도식(통합 페이지): 순이익 − 고정비용 − 프로젝트투자비 − 비상금(%) = 개인순이익 ──
+  emergencyFundPct?: number;              // 비상금 비율(%) — 순이익 대비 남겨둘 비율
+  projectInvestPlan?: Record<string, number>; // projectId -> 이번 기간 투자 예정액
+  reserveEarmarks?: { id: string; projectId: string; amount: number }[]; // 비상금을 쓸 미래 프로젝트 + 필요액
   annualGoals?: Record<string, string>; // "2026" -> 연간 목표 텍스트
   growthStageIndex?: number; // 현재 진행 중인 사업 성장 단계(plan.growthStages) 인덱스. 달성 시 +1
   achievedAreaGoals?: string[]; // 달성 처리한 업무 영역(workArea) id 목록

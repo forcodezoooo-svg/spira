@@ -588,6 +588,17 @@ export function useStore() {
   const deleteFinancialPlan = (id: string) =>
     updateActive(e => ({ ...e, financialPlans: (e.financialPlans ?? []).filter(p => p.id !== id) }));
 
+  // ── 재무 도식(통합 페이지) ──
+  const emergencyFundPct = activeEntry?.emergencyFundPct ?? 0;
+  const projectInvestPlan = activeEntry?.projectInvestPlan ?? {};
+  const reserveEarmarks = activeEntry?.reserveEarmarks ?? [];
+  const setEmergencyFundPct = (pct: number) =>
+    updateActive(e => ({ ...e, emergencyFundPct: Math.min(100, Math.max(0, pct)) }));
+  const setProjectInvest = (projectId: string, amount: number | null) =>
+    updateActive(e => { const m = { ...(e.projectInvestPlan ?? {}) }; if (amount === null || !amount) delete m[projectId]; else m[projectId] = amount; return { ...e, projectInvestPlan: m }; });
+  const setReserveEarmarks = (list: { id: string; projectId: string; amount: number }[]) =>
+    updateActive(e => ({ ...e, reserveEarmarks: list }));
+
   // 수익원(수익 수단) 카테고리 — 금액 입력과 별개로 먼저 정의
   const addRevenueSource = (name: string) =>
     updateActive(e => {
@@ -788,6 +799,7 @@ export function useStore() {
     addSubscription, deleteSubscription, updateSubscription, deleteSubscriptionInWs, updateSubscriptionInWs,
     setRevenueTarget, addRevenueSource, deleteRevenueSource, setRevenueSourceBiz,
     financialPlans, addFinancialPlan, updateFinancialPlan, deleteFinancialPlan,
+    emergencyFundPct, projectInvestPlan, reserveEarmarks, setEmergencyFundPct, setProjectInvest, setReserveEarmarks,
     setRevenueSourceTarget, addExpenseCategory, deleteExpenseCategory, setExpenseCategoryTarget,
     addQuickTask, addUrgentTask, toggleQuickTask, toggleQuickTaskStar, toggleQuickTaskLight, setQuickTaskTime, deleteQuickTask, getQuickTasksForDate,
     addEvent, deleteEvent, getEventsForDate,
