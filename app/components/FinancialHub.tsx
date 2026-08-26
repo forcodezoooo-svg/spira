@@ -7,6 +7,7 @@ import type { ResourceEntry, Subscription, Project } from '../lib/types';
 const won = (n: number) => `${n < 0 ? '−' : ''}₩${Math.abs(Math.round(n)).toLocaleString('ko-KR')}`;
 const currentYM = () => new Date().toISOString().slice(0, 7);
 const RECURRING_CAT = '구독료';
+const todayStr = () => new Date().toISOString().slice(0, 10);
 const ACCENT = '#9DFE3B'; // 활성 버튼 강조색 (브랜드 라임)
 
 type Section = 'income' | 'fixed' | 'invest' | 'reserve';
@@ -33,8 +34,10 @@ const allCategories = (store: Store): Category[] => {
       for (const dl of prog.deadlines ?? []) {
         if (dl.enabled === false || dl.done) continue;
         const proj = dl.projectId ? projs.find(p => p.id === dl.projectId) : undefined;
-        // '진행중'으로 명시된 프로젝트만 (Plan/카테고리 보드 상태 선택기로 직접 지정)
-        if (proj?.status !== 'active') continue;
+        // '진행중' = 상태 active 이거나, (완료·보류 아님 + 시작일이 지남) — 카테고리 보드 진행중 pill과 동일
+        const started = dl.startDate || (dl.todos ?? []).map(t => t.date).filter((x): x is string => !!x).sort()[0] || dl.date;
+        const running = proj?.status === 'active' || ((!proj || !proj.status || proj.status === 'planned') && !!started && started <= todayStr());
+        if (!running) continue;
         for (const t of dl.todos ?? []) {
           if (t.done) continue;
           out.push({ wsId: e.workspace.id, wsName: e.workspace.name, todoId: t.id, name: t.name, projectName: proj?.name || dl.name, projectId: dl.projectId });
