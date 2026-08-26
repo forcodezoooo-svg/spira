@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useStore } from '../lib/useStore';
 import CategoryPicker from './CategoryPicker';
+import type { ResourceEntry, Subscription, Project } from '../lib/types';
 
 const won = (n: number) => `${n < 0 ? '−' : ''}₩${Math.abs(Math.round(n)).toLocaleString('ko-KR')}`;
 const currentYM = () => new Date().toISOString().slice(0, 7);
@@ -9,17 +10,26 @@ const RECURRING_CAT = '구독료';
 const ACCENT = '#9DFE3B'; // 활성 버튼 강조색 (브랜드 라임)
 
 type Section = 'income' | 'fixed' | 'invest' | 'reserve';
+type Store = ReturnType<typeof useStore>;
+type Res = ResourceEntry & { wsId: string };
+type Proj = Project & { wsId: string };
 const dateFor = (month: string) => (month === currentYM() ? new Date().toISOString().slice(0, 10) : `${month}-01`);
+
+// 전 비즈니스(워크스페이스) 합산 — 기존 Resources와 동일하게 모든 사업의 거래를 함께 본다
+const allRes = (store: Store): Res[] => store.allWorkspacesEntries.flatMap(e => (e.resources ?? []).map(r => ({ ...r, wsId: e.workspace.id })));
+const allSubs = (store: Store): Subscription[] => store.allWorkspacesEntries.flatMap(e => e.subscriptions ?? []);
+const allProjects = (store: Store): Proj[] => store.allWorkspacesEntries.flatMap(e => (e.plan?.projects ?? []).map(p => ({ ...p, wsId: e.workspace.id })));
+const mergedInvest = (store: Store): Record<string, number> => Object.assign({}, ...store.allWorkspacesEntries.map(e => e.projectInvestPlan ?? {}));
 
 // 통합 재무 페이지 — 도식(순이익 − 고정비용 − 프로젝트투자비 − 비상금% = 개인순이익) + 항목별 입력
 export default function FinancialHub({ month }: { month: string }) {
   const store = useStore();
   const [section, setSection] = useState<Section | null>('income');
 
-  const entries = (store.data.resources ?? []).filter(e => e.date.startsWith(month));
+  const entries = allRes(store).filter(e => e.date.startsWith(month));
   const incomeEntries = entries.filter(e => e.type === 'income');
   const expenseEntries = entries.filter(e => e.type === 'expense');
-  const subs = (store.data.subscriptions ?? []).filter(s => !s.startMonth || s.startMonth <= month);
+  const subs = allSubs(store).filter(s => !s.startMonth || s.startMonth <= month);
 
   const income = incomeEntries.reduce((s, e) => s + e.amount, 0);
   const subTotal = subs.reduce((s, x) => s + x.amount, 0);
@@ -77,8 +87,8 @@ export default function FinancialHub({ month }: { month: string }) {
 function IncomeSection({ month }: { month: string }) {
   const store = useStore();
   const [name, setName] = useState(''); const [amt, setAmt] = useState(''); const [cat, setCat] = useState('');
-  const cats = store.data.revenueSources ?? [];
-  const list = (store.data.resources ?? []).filter(e => e.type === 'income' && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
+  const cats = Array.from(new Set(store.allWorkspacesEntries.flatMap(e => e.revenueSources ?? [])));
+  const list = allRes(store).filter(e => e.type === 'income' && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
   const add = () => { const n = Number(amt.replace(/,/g, '')); if (!n || !name.trim()) return; store.addResource({ type: 'income', amount: n, description: name.trim(), date: dateFor(month), ...(cat.trim() ? { source: cat.trim() } : {}) }); setName(''); setAmt(''); };
   return (
     <Card title="수익 입력">
@@ -88,7 +98,7 @@ function IncomeSection({ month }: { month: string }) {
         <CategoryPicker value={cat} onChange={setCat} categories={cats} onAdd={n => store.addRevenueSource(n)} />
         <button onClick={add} disabled={!amt || !name.trim()} className="px-4 py-2 rounded-xl text-[14px] font-bold disabled:opacity-30 flex-shrink-0" style={{ backgroundColor: ACCENT, color: '#16211E' }}>수익 추가</button>
       </div>
-      <EntryList list={list} onDel={id => store.deleteResource(id)} sign="+" />
+      <EntryList list={list} onDel={r => store.deleteResourceInWs(r.wsId, r.id)} sign="+" />
     </Card>
   );
 }
@@ -97,9 +107,9 @@ function IncomeSection({ month }: { month: string }) {
 function FixedSection({ month }: { month: string }) {
   const store = useStore();
   const [name, setName] = useState(''); const [amt, setAmt] = useState(''); const [cat, setCat] = useState('');
-  const cats = (store.data.expenseCategories ?? []).filter(c => c !== RECURRING_CAT);
-  const list = (store.data.resources ?? []).filter(e => e.type === 'expense' && !e.projectId && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
-  const subs = (store.data.subscriptions ?? []).filter(s => !s.startMonth || s.startMonth <= month);
+  const cats = Array.from(new Set(store.allWorkspacesEntries.flatMap(e => e.expenseCategories ?? []))).filter(c => c !== RECURRING_CAT);
+  const list = allRes(store).filter(e => e.type === 'expense' && !e.projectId && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
+  const subs = allSubs(store).filter(s => !s.startMonth || s.startMonth <= month);
   const add = () => {
     const n = Number(amt.replace(/,/g, '')); if (!n || !name.trim()) return;
     if (cat.trim() === RECURRING_CAT) store.addSubscription({ name: name.trim(), amount: n, startMonth: month });
@@ -121,26 +131,26 @@ function FixedSection({ month }: { month: string }) {
           <span className="tabular-nums font-semibold" style={{ color: '#16211E' }}>−{won(s.amount)}</span>
         </div>
       ))}</div>}
-      <EntryList list={list} onDel={id => store.deleteResource(id)} sign="−" />
+      <EntryList list={list} onDel={r => store.deleteResourceInWs(r.wsId, r.id)} sign="−" />
     </Card>
   );
 }
 
-// ── 프로젝트 투자비 입력 ──
+// ── 프로젝트 투자비 입력 (전 비즈니스 프로젝트) ──
 function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: string) => number }) {
   const store = useStore();
-  const projects = (store.data.plan.projects ?? []).filter(p => p.status !== 'done');
+  const projects = allProjects(store).filter(p => p.status !== 'done');
+  const investPlan = mergedInvest(store);
   const [spendFor, setSpendFor] = useState<string | null>(null);
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');
-  const plan = store.projectInvestPlan;
-  const addSpend = (pid: string) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResource({ type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), projectId: pid }); setSpName(''); setSpAmt(''); setSpendFor(null); };
+  const addSpend = (p: Proj) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResourceInWs(p.wsId, { type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), projectId: p.id }); setSpName(''); setSpAmt(''); setSpendFor(null); };
   return (
     <Card title="프로젝트 투자비">
       {projects.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 프로젝트가 없어요. Plan/Goals에서 프로젝트를 만들어보세요.</p> : (
         <div className="space-y-2">
           {projects.map(p => {
             const spent = projSpent(p.id);
-            const planned = plan[p.id] ?? 0;
+            const planned = investPlan[p.id] ?? 0;
             return (
               <div key={p.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--spira-border-subtle)' }}>
                 <div className="flex items-center justify-between gap-2">
@@ -150,7 +160,7 @@ function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: s
                 <div className="flex items-center gap-3 mt-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px]" style={{ color: '#9AA39D' }}>투자 예정</span>
-                    <input type="number" value={planned || ''} onChange={e => store.setProjectInvest(p.id, Number(e.target.value) || 0)} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
+                    <input type="number" value={planned || ''} onChange={e => store.setProjectInvestInWs(p.wsId, p.id, Number(e.target.value) || 0)} placeholder="0" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
                   </div>
                   <span className="text-[11px] ml-auto" style={{ color: spent > planned && planned > 0 ? '#C0392B' : '#9AA39D' }}>사용 <b className="tabular-nums">{won(spent)}</b></span>
                 </div>
@@ -158,7 +168,7 @@ function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: s
                   <div className="flex items-center gap-1.5 mt-2">
                     <input value={spName} onChange={e => setSpName(e.target.value)} placeholder="지출 내용" className="flex-1 min-w-0 text-[12px] bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
                     <input type="number" value={spAmt} onChange={e => setSpAmt(e.target.value)} placeholder="금액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-                    <button onClick={() => addSpend(p.id)} className="text-[12px] font-bold rounded-lg px-3 py-1.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>추가</button>
+                    <button onClick={() => addSpend(p)} className="text-[12px] font-bold rounded-lg px-3 py-1.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>추가</button>
                   </div>
                 )}
               </div>
@@ -173,7 +183,7 @@ function InvestSection({ month, projSpent }: { month: string; projSpent: (pid: s
 // ── 비상금(%) + 미래 프로젝트 배정 ──
 function ReserveSection() {
   const store = useStore();
-  const projects = store.data.plan.projects ?? [];
+  const projects = allProjects(store);
   const marks = store.reserveEarmarks;
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
   const setMark = (id: string, p: Partial<{ projectId: string; amount: number }>) => store.setReserveEarmarks(marks.map(m => m.id === id ? { ...m, ...p } : m));
@@ -211,7 +221,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
     </div>
   );
 }
-function EntryList({ list, onDel, sign }: { list: { id: string; description: string; amount: number; date: string; source?: string }[]; onDel: (id: string) => void; sign: string }) {
+function EntryList({ list, onDel, sign }: { list: Res[]; onDel: (r: Res) => void; sign: string }) {
   if (list.length === 0) return null;
   return (
     <div className="mt-3 space-y-1">
@@ -220,7 +230,7 @@ function EntryList({ list, onDel, sign }: { list: { id: string; description: str
           <span className="truncate min-w-0" style={{ color: '#5B6560' }}>{e.description}{e.source ? <span className="text-[10px] ml-1.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#F0F0EA', color: '#8D9A8D' }}>{e.source}</span> : null} <span className="text-[10px]" style={{ color: '#C4CCC4' }}>{e.date.slice(5)}</span></span>
           <span className="flex items-center gap-2 flex-shrink-0">
             <span className="tabular-nums font-semibold" style={{ color: '#16211E' }}>{sign}{won(e.amount)}</span>
-            <button onClick={() => onDel(e.id)} className="text-neutral-300 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100">×</button>
+            <button onClick={() => onDel(e)} className="text-neutral-300 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100">×</button>
           </span>
         </div>
       ))}

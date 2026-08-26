@@ -572,6 +572,10 @@ export function useStore() {
   // 특정 비즈니스(워크스페이스)의 거래/구독 수정 — Resources 통합 뷰에서 소유 워크스페이스로 라우팅
   const deleteResourceInWs = (wsId: string, id: string) =>
     updateWorkspace(wsId, e => ({ ...e, resources: e.resources.filter(x => x.id !== id) }));
+  const addResourceInWs = (wsId: string, r: Omit<ResourceEntry, 'id'>) =>
+    updateWorkspace(wsId, e => ({ ...e, resources: [...e.resources, { ...r, id: uid() }] }));
+  const setProjectInvestInWs = (wsId: string, projectId: string, amount: number | null) =>
+    updateWorkspace(wsId, e => { const m = { ...(e.projectInvestPlan ?? {}) }; if (amount === null || !amount) delete m[projectId]; else m[projectId] = amount; return { ...e, projectInvestPlan: m }; });
 
   const setRevenueTarget = (target: RevenueTarget | undefined) =>
     updateActive(e => ({ ...e, revenueTarget: target }));
@@ -795,7 +799,7 @@ export function useStore() {
     updatePlanInWs,
     addProject, updateProject, removeProject, setDeadlineProject,
     todayRoutines, toggleTask, isCompleted,
-    addResource, deleteResource, deleteResourceInWs,
+    addResource, deleteResource, deleteResourceInWs, addResourceInWs, setProjectInvestInWs,
     addSubscription, deleteSubscription, updateSubscription, deleteSubscriptionInWs, updateSubscriptionInWs,
     setRevenueTarget, addRevenueSource, deleteRevenueSource, setRevenueSourceBiz,
     financialPlans, addFinancialPlan, updateFinancialPlan, deleteFinancialPlan,
