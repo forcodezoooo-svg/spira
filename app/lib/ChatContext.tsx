@@ -6,7 +6,7 @@ import { useToast } from './ToastContext';
 import { useUpgrade } from './UpgradeContext';
 import { isOnboardingActive } from './onboarding';
 import { createClient } from './supabase/client';
-import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, ITEM_REVISE_MARKER } from './ai/markers';
+import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, ITEM_REVISE_MARKER, FIN_REPLAN_MARKER } from './ai/markers';
 import { FEEDBACK, AI_COPY } from './ai/messages';
 
 // 대화 내용에서 인식된 '앱에 자동 반영' 액션. 버튼으로 노출되며, 클릭 시 실제 반영(Pro/온보딩 게이트).
@@ -107,6 +107,9 @@ export type AreaAssignment = { programId: string; wsId: string; workAreaId: stri
 // AI가 기존 데드라인을 프로젝트로 정리 (사업별 assign 목록)
 export type ProjectAssignPlan = { wsId?: string; assign: Array<{ deadlineId: string; projectName: string; projectType?: 'routine' | 'build' }> };
 
+// AI 재무 재조정안 — 배분(프로젝트/목표별 금액)과 Reserve 조정 (사용자 승인 후 반영)
+export type FinReplanProposal = { reserveTarget?: number; allocations?: Array<{ projectId?: string; goalId?: string; amount: number }>; summary?: string };
+
 const SESSIONS_KEY = 'spira_chat_sessions';
 const CURRENT_KEY = 'spira_chat_current';
 
@@ -138,6 +141,8 @@ interface ChatContextType {
   unregisterAreaAssignHandler: () => void;
   registerProjectAssignHandler: (handler: (plans: ProjectAssignPlan[]) => void) => void;
   unregisterProjectAssignHandler: () => void;
+  registerFinanceHandler: (handler: (proposal: FinReplanProposal) => void) => void;
+  unregisterFinanceHandler: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -154,6 +159,11 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   if (full.includes(ITEM_REVISE_MARKER)) {
     const payload = tryParse(sliceObj(after(ITEM_REVISE_MARKER)));
     if (payload && typeof (payload as { text?: unknown }).text === 'string') return { kind: 'plan', marker: ITEM_REVISE_MARKER, payload, route: '', label: '이 내용으로 반영', feedback: '선택한 항목에 반영했어요. 🌿', display: before(ITEM_REVISE_MARKER) };
+  }
+  if (full.includes(FIN_REPLAN_MARKER)) {
+    const payload = tryParse(sliceObj(after(FIN_REPLAN_MARKER)));
+    if (payload && (Array.isArray((payload as FinReplanProposal).allocations) || typeof (payload as FinReplanProposal).reserveTarget === 'number'))
+      return { kind: 'plan', marker: FIN_REPLAN_MARKER, payload, route: '/resources', label: '재무 조정안 적용', feedback: '재무계획에 반영했어요. 🌿', display: before(FIN_REPLAN_MARKER) };
   }
   if (full.includes(PLAN_MARKER)) {
     const payload = tryParse(sliceObj(after(PLAN_MARKER)));
@@ -252,6 +262,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const quarterPlanHandlerRef = useRef<((plans: QuarterPlan[]) => void) | null>(null);
   const areaAssignHandlerRef = useRef<((assigns: AreaAssignment[]) => void) | null>(null);
   const projectAssignHandlerRef = useRef<((plans: ProjectAssignPlan[]) => void) | null>(null);
+  const financeHandlerRef = useRef<((proposal: FinReplanProposal) => void) | null>(null);
   // 페이지 핸들러가 등록될 때 대기 중인 액션을 반영(아래에서 실제 함수 주입)
   const flushPendingRef = useRef<((marker: string) => void) | null>(null);
   // autoApply용: 액션을 즉시 반영하는 함수(아래에서 주입)
@@ -291,6 +302,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const unregisterAreaAssignHandler = useCallback(() => {
     areaAssignHandlerRef.current = null;
+  }, []);
+
+  const registerFinanceHandler = useCallback((handler: (proposal: FinReplanProposal) => void) => {
+    financeHandlerRef.current = handler;
+    flushPendingRef.current?.(FIN_REPLAN_MARKER);
+  }, []);
+  const unregisterFinanceHandler = useCallback(() => {
+    financeHandlerRef.current = null;
   }, []);
 
   // 마운트 시: 이전 세션을 보관함에 저장하고, 전체 세션 목록 로드
@@ -427,6 +446,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         const display = full.includes(ITEM_REVISE_MARKER)
           ? full.split(ITEM_REVISE_MARKER)[0].trimEnd()
+          : full.includes(FIN_REPLAN_MARKER)
+          ? full.split(FIN_REPLAN_MARKER)[0].trimEnd()
           : full.includes(PLAN_MARKER)
           ? full.split(PLAN_MARKER)[0].trimEnd()
           : full.includes(ROUTINE_MARKER)
@@ -489,6 +510,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (marker === AREA_ASSIGN_MARKER && areaAssignHandlerRef.current) { areaAssignHandlerRef.current(payload as AreaAssignment[]); return true; }
     if (marker === PROJECT_ASSIGN_MARKER && projectAssignHandlerRef.current) { projectAssignHandlerRef.current(payload as ProjectAssignPlan[]); return true; }
     if (marker === ITEM_REVISE_MARKER && reviseHandlerRef.current) { reviseHandlerRef.current((payload as { text: string }).text); return true; }
+    if (marker === FIN_REPLAN_MARKER && financeHandlerRef.current) { financeHandlerRef.current(payload as FinReplanProposal); return true; }
     return false;
   }, []);
 
@@ -592,6 +614,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       registerQuarterPlanHandler, unregisterQuarterPlanHandler,
       registerAreaAssignHandler, unregisterAreaAssignHandler,
       registerProjectAssignHandler, unregisterProjectAssignHandler,
+      registerFinanceHandler, unregisterFinanceHandler,
     }}>
       {children}
     </ChatContext.Provider>

@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { BASE_SYSTEM, BUSINESS_PLANNING_SYSTEM, ROUTINE_SYSTEM, FINANCIAL_PLANNING_SYSTEM } from '../../lib/ai/prompts';
-import { ITEM_REVISE_MARKER } from '../../lib/ai/markers';
+import { ITEM_REVISE_MARKER, FIN_REPLAN_MARKER } from '../../lib/ai/markers';
 import { checkAiAccess } from '../../lib/aiUsage';
 
 // 지연 초기화: 빌드(page data 수집) 중 키 없이 모듈만 로드돼도 터지지 않도록,
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const { messages, planMode, routineMode, financeMode, appContext, reviseTarget } = await request.json();
 
   const baseSystem = planMode ? BUSINESS_PLANNING_SYSTEM : routineMode ? ROUTINE_SYSTEM : BASE_SYSTEM;
-  const financeNote = financeMode ? `\n\n---\n${FINANCIAL_PLANNING_SYSTEM}` : '';
+  const financeNote = financeMode ? `\n\n---\n${FINANCIAL_PLANNING_SYSTEM}\n\n조정안이 구체적으로 정해지면(사용자가 동의했거나 명확한 제안일 때), 답변 맨 끝에 아래 형식을 그대로 붙이세요. 그래야 '재무 조정안 적용' 버튼이 생겨 재무계획에 반영됩니다. 배분은 프로젝트/목표별 '최종 금액'입니다. 컨텍스트에 주어진 id(프로젝트 id 등)를 그대로 쓰세요.\n${FIN_REPLAN_MARKER}\n{"reserveTarget": 1800000, "allocations": [{"projectId": "id", "amount": 1500000}, {"goalId": "id", "amount": 2000000}], "summary": "한 줄 요약"}\n아직 논의 중이거나 여러 안을 비교하는 단계면 마커를 넣지 마세요. 운영비·Reserve를 보호하고, 사용자 승인 없이 임의로 확정하지 마세요(마커는 '제안'이며 실제 반영은 사용자가 버튼으로 승인).` : '';
   // 오늘 날짜(KST)를 항상 알려줘 과거 연도(예: 2023)로 일정 잡는 실수를 막는다.
   const todayKST = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
   const dateNote = `오늘 날짜는 ${todayKST}(KST)입니다. 모든 데드라인·할일 날짜는 반드시 오늘 이후(현재~미래)로만 잡으세요. 과거 날짜(지난 연도 등) 절대 금지.`;

@@ -1,11 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import { computeFinancialSummary, planOperating, revenueTargetOf, periodActuals, projectActualCost, projectRequiredMin } from '../lib/finance';
 import { computeDayCapacity } from '../lib/capacity';
 import type { FinancialPlan, FinRevenueSource, OperatingBudgetItem, BudgetAllocation } from '../lib/types';
-import { useChatContext } from '../lib/ChatContext';
+import { useChatContext, FinReplanProposal } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
 
 const won = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
@@ -31,6 +31,13 @@ export default function FinancialPlanPanel() {
     setSelId(id);
   };
   const patch = (p: Partial<FinancialPlan>) => plan && store.updateFinancialPlan(plan.id, p);
+
+  // AI 재무 조정안([적용] 버튼) 적용 핸들러 — 현재 렌더의 applyProposal을 ref로 참조해 항상 선택된 계획에 반영
+  const applyRef = useRef<((pr: FinReplanProposal) => void) | null>(null);
+  useEffect(() => {
+    chat?.registerFinanceHandler(pr => applyRef.current?.(pr));
+    return () => chat?.unregisterFinanceHandler();
+  }, [chat]);
 
   if (!plan) {
     return (
@@ -107,16 +114,31 @@ export default function FinancialPlanPanel() {
       for (const a of allocs) {
         const proj = a.projectId ? projects.find(p => p.id === a.projectId) : null;
         const goal = a.goalId ? goals.find(g => g.id === a.goalId) : null;
-        const tgt = proj ? `프로젝트 "${proj.name}"(상태 ${proj.status ?? 'planned'}${proj.importance ? `, 중요도 ${proj.importance}` : ''})` : goal ? `목표 "${goal.name}"` : '기타(공통)';
+        const idTag = proj ? `[projectId:${proj.id}]` : goal ? `[goalId:${goal.id}]` : '';
+        const tgt = proj ? `프로젝트 "${proj.name}"(상태 ${proj.status ?? 'planned'}${proj.importance ? `, 중요도 ${proj.importance}` : ''}) ${idTag}` : goal ? `목표 "${goal.name}" ${idTag}` : '기타(공통)';
         const spent = a.projectId ? projectActualCost(entries, a.projectId, plan.startDate, plan.endDate) : 0;
         lines.push(`- ${tgt}: 배정 ${won(a.plannedAmount)}${a.projectId ? ` · 실지출 ${won(spent)}` : ''}`);
       }
     }
     lines.push('');
-    lines.push('운영비와 Reserve를 보호하면서 현재 투자계획을 유지할 수 있는지 판단하고, 부족하거나 조정이 필요하면 프로젝트 우선순위·상태를 고려한 재조정안(유지/예산조정/시점이동 등)을 제시해줘. 임의로 확정하지 말고 제안 형태로.');
+    lines.push('운영비와 Reserve를 보호하면서 현재 투자계획을 유지할 수 있는지 판단하고, 부족하거나 조정이 필요하면 프로젝트 우선순위·상태를 고려한 재조정안(유지/예산조정/시점이동 등)을 제시해줘. 조정안이 정해지면 각 배분의 projectId/goalId와 최종 금액으로 %%%FIN_REPLAN%%% 마커를 붙여줘(적용 버튼용). 임의로 확정하지 말고 제안 형태로.');
     openChat();
     chat.sendMessage(lines.join('\n'), 'AI에게 현재 재무 상황 기준 재조정 상담 받기', { financeMode: true });
   };
+  // AI 조정안 적용 — 배분 금액/Reserve를 현재 선택된 계획에 반영
+  const applyProposal = (pr: FinReplanProposal) => {
+    const next = [...allocs];
+    for (const ch of pr.allocations ?? []) {
+      if (typeof ch.amount !== 'number') continue;
+      const idx = next.findIndex(a => (ch.projectId && a.projectId === ch.projectId) || (ch.goalId && a.goalId === ch.goalId));
+      if (idx >= 0) next[idx] = { ...next[idx], plannedAmount: ch.amount };
+      else next.push({ id: uid(), projectId: ch.projectId, goalId: ch.goalId, plannedAmount: ch.amount });
+    }
+    const p: Partial<FinancialPlan> = { allocations: next };
+    if (typeof pr.reserveTarget === 'number') p.reserveTarget = pr.reserveTarget;
+    patch(p);
+  };
+  applyRef.current = applyProposal;
 
   const numInput = "w-28 text-[13px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400";
   const label = "text-[11px] font-semibold";
