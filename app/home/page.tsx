@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { DashboardSkeleton } from '../components/Skeleton';
@@ -361,7 +361,19 @@ export default function Home() {
     if (g) g.items.push(u);
     else journeyGroups.push({ date: u.date, items: [u] });
   }
-  const journey = journeyGroups.slice(0, 5); // 다가오는 목표 5개 고정
+  // 다가오는 목표: 컨테이너 폭에 맞춰 '잘리지 않을 개수'만 표시 (최대 5개)
+  const journeyWrapRef = useRef<HTMLDivElement>(null);
+  const [journeyCols, setJourneyCols] = useState(5);
+  useEffect(() => {
+    const el = journeyWrapRef.current; if (!el) return;
+    const MIN = 176, GAP = 16; // 한 항목 최소 폭 + 간격
+    const compute = () => setJourneyCols(Math.max(1, Math.floor((el.clientWidth + GAP) / (MIN + GAP))));
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [journeyGroups.length]);
+  const journey = journeyGroups.slice(0, Math.min(5, journeyCols));
 
 
   // ── Goals 캘린더용 데이터 — Plan에서 가져온 항목만 (기존 데이터는 가림, Goals와 동일) ──
@@ -584,7 +596,7 @@ export default function Home() {
             <div className="relative">
               {/* 다이아몬드 중앙(마커 행 높이 24px의 절반)을 지나는 연결선 */}
               <div className="absolute left-0 right-0 top-3 h-px -translate-y-1/2" style={{ backgroundColor: 'var(--spira-border)' }} />
-              <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${journey.length}, minmax(0, 1fr))` }}>
+              <div ref={journeyWrapRef} className="grid gap-4" style={{ gridTemplateColumns: `repeat(${journey.length}, minmax(0, 1fr))` }}>
                 {journey.map(group => {
                   const dday = calcDday(group.date);
                   const first = group.items[0];
@@ -595,7 +607,7 @@ export default function Home() {
                         <svg viewBox="0 0 15 15" className="w-3.5 h-3.5 flex-shrink-0"><path d="M7.3 14.61C5.33 11.75 2.85 9.27 0 7.31C2.86 5.34 5.34 2.86 7.3 0C9.27 2.86 11.75 5.34 14.6 7.3C11.74 9.27 9.26 11.75 7.3 14.6V14.61Z" fill={diamondColor} /></svg>
                         <span className="text-[12px] font-semibold rounded-full px-2.5 py-0.5 truncate" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{dday.label}</span>
                       </div>
-                      <div className="text-[14px] font-semibold truncate mt-2.5" style={{ color: '#16211E' }}>{first.name}</div>
+                      <div className="text-[14px] font-semibold line-clamp-2 break-words mt-2.5" style={{ color: '#16211E' }}>{first.name}</div>
                       <div className="text-[12px] mt-1 truncate" style={{ color: '#9AA39D' }}>
                         {first.wsName}{group.items.length > 1 ? ` 외 ${group.items.length - 1}개` : ''}
                       </div>
