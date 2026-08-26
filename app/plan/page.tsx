@@ -1842,6 +1842,7 @@ function GoalsSection({
 }) {
   const chat = useChatContext();
   const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
+  const [aiMenuGoal, setAiMenuGoal] = useState<string | null>(null); // AI 버튼 드롭다운 열린 목표
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
@@ -1955,15 +1956,41 @@ function GoalsSection({
                         title="상태" className="text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 border-0 outline-none cursor-pointer appearance-none" style={{ backgroundColor: st.bg, color: st.color }}>
                         <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
                       </select>
-                      {aiEnabled && <AiBtn id={g.id} icon="split" label="프로젝트 생성" onClick={() => { onBreakdownGoal(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
-                      {aiEnabled && onReviseProjects && projects.length > 0 && <AiBtn id={g.id} icon="revise" label="프로젝트 수정" onClick={() => { onReviseProjects(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} />}
-                      {onResequenceProjects && projects.length > 0 && (
-                        <button onClick={() => { onResequenceProjects(g.id); setOpenGoals(prev => new Set(prev).add(g.id)); }} title="프로젝트들을 오늘부터 순서대로(기간 유지) 겹치지 않게 날짜 재조정"
-                          className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0" style={{ backgroundColor: '#EAF3FF', color: '#2B62C4' }}>
-                          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M13 3.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M13 1.5V4h-2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          날짜 재조정
-                        </button>
-                      )}
+                      {(aiEnabled || (onResequenceProjects && projects.length > 0)) && (() => {
+                        const open = aiMenuGoal === g.id;
+                        const openG = () => { setOpenGoals(prev => new Set(prev).add(g.id)); setAiMenuGoal(null); };
+                        return (
+                          <span className="relative flex-shrink-0">
+                            <button onClick={() => setAiMenuGoal(open ? null : g.id)} title="AI 도우미" className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-transform hover:-translate-y-0.5" style={open ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                              AI
+                              <svg className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                            {open && (
+                              <>
+                                <div className="fixed inset-0 z-[59]" onClick={() => setAiMenuGoal(null)} />
+                                <div className="absolute left-0 top-full mt-1 z-[60] rounded-xl bg-white shadow-xl p-1.5 flex flex-col gap-0.5 whitespace-nowrap" style={{ border: '1px solid #E7E7E1', minWidth: 132 }}>
+                                  {aiEnabled && (
+                                    <button onClick={() => { onBreakdownGoal(g.id); openG(); }} className="flex items-center gap-2 text-[12px] font-semibold px-2.5 py-1.5 rounded-lg hover:bg-neutral-100 transition-colors" style={{ color: '#16211E' }}>
+                                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" style={{ color: '#7C3AED' }}><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>프로젝트 생성
+                                    </button>
+                                  )}
+                                  {aiEnabled && onReviseProjects && projects.length > 0 && (
+                                    <button onClick={() => { onReviseProjects(g.id); openG(); }} className="flex items-center gap-2 text-[12px] font-semibold px-2.5 py-1.5 rounded-lg hover:bg-neutral-100 transition-colors" style={{ color: '#16211E' }}>
+                                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" style={{ color: '#7C3AED' }}><path d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>프로젝트 수정
+                                    </button>
+                                  )}
+                                  {onResequenceProjects && projects.length > 0 && (
+                                    <button onClick={() => { onResequenceProjects(g.id); openG(); }} title="프로젝트들을 오늘부터 순서대로(기간 유지) 겹치지 않게 날짜 재조정" className="flex items-center gap-2 text-[12px] font-semibold px-2.5 py-1.5 rounded-lg hover:bg-neutral-100 transition-colors" style={{ color: '#16211E' }}>
+                                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" style={{ color: '#2B62C4' }}><path d="M13 3.5A6 6 0 1 0 14 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><path d="M13 1.5V4h-2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>날짜 재조정
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </span>
+                        );
+                      })()}
                       {onImportGoal && projects.length > 0 && (
                         <button onClick={() => onImportGoal(g.id)} title="이 목표·프로젝트·산출물을 Goals 로드맵으로 가져가 날짜대로 배치"
                           className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full transition-colors flex-shrink-0" style={{ backgroundColor: '#DFF9C4', color: '#3E6B1F' }}>
