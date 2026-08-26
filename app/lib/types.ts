@@ -190,6 +190,7 @@ export interface ProgramUnit {      // 세부 작업 — 카테고리 보드 tas
   durationMin?: number; // 예상 소요 시간(분)
   date?: string;
   deadline?: string;
+  doneDates?: string[]; // 반복(매주) task의 세부작업 — 날짜별 완료 기록. 영구 done 대신 이걸로 관리
 }
 // Task 일정 유연성 (Time Management): fixed=고정 시간, due=기한 내 자유, flexible=이동 자유
 export type TaskSchedulingType = 'fixed' | 'due' | 'flexible';

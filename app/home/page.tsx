@@ -149,7 +149,16 @@ export default function Home() {
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: tomorrowStr, deadline: tomorrowStr });
   // task의 세부작업(unit) 완료 토글
   const toggleSubtaskUnit = (t: SubtaskTask, unitId: string) =>
-    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: (t.units ?? []).map(u => u.id === unitId ? { ...u, done: !u.done } : u) });
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: (t.units ?? []).map(u => {
+      if (u.id !== unitId) return u;
+      if (t.days?.length) { // 반복 task의 세부작업 — 오늘 날짜만 토글(doneDates), 영구 done은 건드리지 않음
+        const has = (u.doneDates ?? []).includes(dateStr);
+        return { ...u, doneDates: has ? (u.doneDates ?? []).filter(d => d !== dateStr) : [...(u.doneDates ?? []), dateStr] };
+      }
+      return { ...u, done: !u.done };
+    }) });
+  // 세부작업 오늘 완료 여부 (반복이면 날짜별, 아니면 영구 done)
+  const unitDoneToday = (t: SubtaskTask, u: { done: boolean; doneDates?: string[] }) => (t.days?.length ? (u.doneDates ?? []).includes(dateStr) : u.done);
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
   // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
@@ -589,15 +598,15 @@ export default function Home() {
         )}
         {(t.units?.length ?? 0) > 0 && (
           <ul className="w-full mt-1 ml-7 space-y-1">
-            {t.units!.map(u => (
+            {t.units!.map(u => { const ud = unitDoneToday(t, u); return (
               <li key={u.id} className="flex items-center gap-2">
-                <button onClick={() => toggleSubtaskUnit(t, u.id)} className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>
-                  {u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                <button onClick={() => toggleSubtaskUnit(t, u.id)} className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: ud ? '#5EA63A' : '#C7CEC7', backgroundColor: ud ? '#5EA63A' : 'transparent' }}>
+                  {ud && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </button>
-                <span className="text-[12px] flex-1 min-w-0 truncate" style={{ color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</span>
+                <span className="text-[12px] flex-1 min-w-0 truncate" style={{ color: ud ? '#9AA39D' : '#5B6560', textDecoration: ud ? 'line-through' : 'none' }}>{u.name}</span>
                 {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
               </li>
-            ))}
+            ); })}
           </ul>
         )}
       </li>

@@ -164,7 +164,7 @@ export interface SubtaskTask {
   projectDeadline?: string;   // 소속 프로젝트(ProgramDeadline) 마감일
   projectName?: string;       // 소속 프로젝트 이름
   actualMin?: number;         // 실제 소요 시간(분)
-  units?: { id: string; name: string; done: boolean; durationMin?: number }[]; // 세부 작업(체크리스트)
+  units?: { id: string; name: string; done: boolean; durationMin?: number; doneDates?: string[] }[]; // 세부 작업(체크리스트)
   days?: number[];            // 매주 반복 요일 (있으면 반복 task)
   doneDates?: string[];       // 반복 task의 날짜별 완료 기록
 }
