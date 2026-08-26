@@ -641,6 +641,42 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (newIds.size) parallelReschedule(newIds); // 새로 추가된 task만 빈 용량에 병행 배치
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allSubIdsSig]);
+  // 딜레이 자동 반영: 시작 안 했는데 시작일 지나면 오늘로 밀고(기간 유지), 안 끝났는데 마감 지나면 마감을 오늘로 연장
+  const applyDelays = () => {
+    for (const p of programs) {
+      const prog = findProg(p.wsId, p.id); if (!prog) continue;
+      let changed = false;
+      const deadlines = (prog.deadlines ?? []).map(dl => {
+        if (dl.done) return dl;
+        let dchanged = false;
+        const todos = dl.todos.map(t => {
+          if (t.done) return t;
+          let nt = t;
+          const subs = t.subtasks ?? [];
+          const started = subs.some(s => s.done || s.status === 'doing' || s.status === 'done' || (s.actualMin ?? 0) > 0 || (s.doneDates?.length ?? 0) > 0);
+          // 시작 지연: 하위 task가 있고 아직 시작 안 했는데 시작일이 지남 → 오늘로 밀고 마감도 같은 기간만큼 이동
+          if (subs.length > 0 && !started && nt.date && nt.date < todayStr) {
+            const delta = daysBetween(nt.date, todayStr);
+            nt = { ...nt, date: todayStr, deadline: nt.deadline ? addDaysStr(nt.deadline, delta) : nt.deadline };
+          }
+          // 종료 지연: 아직 안 끝났는데 마감일이 지남 → 마감을 오늘로 연장
+          if (nt.deadline && nt.deadline < todayStr) nt = { ...nt, deadline: todayStr };
+          if (nt !== t) dchanged = true;
+          return nt;
+        });
+        if (!dchanged) return dl;
+        // 데드라인(프로젝트) 막대가 산출물을 덮도록 마감 확장
+        const maxT = todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x).reduce((a, b) => (a > b ? a : b), dl.date || '');
+        changed = true;
+        return { ...dl, todos, date: maxT && (!dl.date || maxT > dl.date) ? maxT : dl.date };
+      });
+      if (changed) store.updateProgramInWs(p.wsId, { ...prog, deadlines });
+    }
+  };
+  useEffect(() => {
+    if (store.autoDelay) applyDelays();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.autoDelay]);
   // D-day 계산 + 배지 스타일
   const ddayOf = (d?: string) => { if (!d) return null; const diff = daysBetween(todayStr, d); if (diff > 0) return { label: `D-${diff}`, s: diff <= 3 ? 'urgent' : 'future' }; if (diff === 0) return { label: 'D-Day', s: 'urgent' }; return { label: `D+${-diff}`, s: 'over' }; };
   const DdayBadge = ({ d }: { d?: string }) => { const dd = ddayOf(d); if (!dd) return null; const st = dd.s === 'urgent' ? { color: '#fff', backgroundColor: '#FF696C' } : dd.s === 'over' ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }; return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={st}>{dd.label}</span>; };
@@ -842,6 +878,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <button key={m} onClick={() => setSortMode(m)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={sortMode === m ? { backgroundColor: '#fff', color: '#16211E', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } : { color: '#8D9A8D' }}>{label}</button>
               ))}
             </div>
+            <button onClick={() => store.setAutoDelay(!store.autoDelay)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={store.autoDelay ? { backgroundColor: '#E7F0FF', color: '#2B62C4' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="딜레이 자동 반영 — 시작 안 하면 막대를 오늘로 밀고, 마감 지나면 마감을 오늘로 연장">딜레이</button>
             <button onClick={() => setOffOpen(o => !o)} className="text-[12px] font-semibold rounded-full px-2.5 py-1.5 transition-colors flex-shrink-0" style={offOpen ? { backgroundColor: '#FBE7C6', color: '#96631A' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title="오프 기간(휴가 등) 설정">off</button>
           </div>
           {offOpen && (
