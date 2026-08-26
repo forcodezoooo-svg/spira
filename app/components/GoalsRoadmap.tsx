@@ -504,8 +504,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
         if (kbScope.todoId && kbScope.todoId !== t.id) continue;
         const { area, goalSub } = parseArea(t.name);
-        // task는 디데이(기한) 순서대로 배치 (완료는 뒤로, 기한 없는 건 맨 뒤)
-        const subs = [...(t.subtasks ?? [])].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+        // 완료는 뒤로 → 매주 반복 task 최상단 → 그 다음 디데이(기한) 순 (기한 없는 건 맨 뒤)
+        const subs = [...(t.subtasks ?? [])].sort((a, b) =>
+          (a.done ? 1 : 0) - (b.done ? 1 : 0)
+          || (((b.days?.length ?? 0) > 0 ? 1 : 0) - ((a.days?.length ?? 0) > 0 ? 1 : 0))
+          || (a.deadline || '9999').localeCompare(b.deadline || '9999'));
         kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: t.date || dl.startDate || '', due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs });
       }
     }
