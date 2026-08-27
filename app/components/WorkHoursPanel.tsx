@@ -78,7 +78,7 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
   return (
     <>
       {tile ? (
-        <button onClick={openModal} className="w-full h-full flex flex-col justify-between bg-white border rounded-2xl p-3.5 text-left transition-colors hover:brightness-[0.99]" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
+        <button onClick={openModal} data-teach="hp-workhours" className="w-full h-full flex flex-col justify-between bg-white border rounded-2xl p-3.5 text-left transition-colors hover:brightness-[0.99]" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
           <div className="flex items-center gap-1.5">
             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" fill="none" style={{ color: '#5EA63A' }}><circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4.6V8l2.4 1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
             <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>이번 주 업무시간</span>

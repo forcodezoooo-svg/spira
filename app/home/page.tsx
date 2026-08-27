@@ -703,7 +703,7 @@ export default function Home() {
                         <span className="text-[11px] font-bold rounded-full px-2 py-0.5 tabular-nums" style={{ backgroundColor: '#E4F5E0', color: '#3E6B1F' }} title="출근 시각 (눌러서 취소)"
                           onClick={() => window.confirm('출근 기록을 취소할까요?') && store.setClock(dateStr, 'in', null)} role="button">출근 {hhmm(att.in)}</span>
                       ) : (
-                        <button onClick={() => store.setClock(dateStr, 'in', Date.now())} className="text-[11px] font-bold rounded-full px-2.5 py-0.5 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>출근</button>
+                        <button onClick={() => store.setClock(dateStr, 'in', Date.now())} data-teach="hp-clockin" className="text-[11px] font-bold rounded-full px-2.5 py-0.5 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>출근</button>
                       )}
                       {att.out ? (
                         <span className="text-[11px] font-bold rounded-full px-2 py-0.5 tabular-nums" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }} title="퇴근 시각 (눌러서 취소)"

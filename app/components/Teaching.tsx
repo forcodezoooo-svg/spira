@@ -58,6 +58,11 @@ const GOALS_START = 8;
 
 // 온보딩 투어가 다루지 않는 페이지의 첫 진입 안내. Home·Goals는 위 투어가 다룸.
 const PAGE_TIPS: Record<string, Step[]> = {
+  '/home': [
+    { target: '[data-teach="hp-workhours"]', text: '이번 주에 일할 날짜와 시간을 이곳에서 설정할 수 있어요. 설정된 시간에 맞춰서 매일 소화할 수 있는 만큼의 업무가 계획돼요.', scrollCenter: true },
+    { target: '[data-teach="hp-timer"]', text: '오늘의 업무를 진행하며 플레이버튼을 누르면 소요 시간을 기록하고, 다음에 비슷한 일을 할 때 평균 소요 시간을 반영해 계획할 수 있어요.', scrollCenter: true },
+    { target: '[data-teach="hp-clockin"]', text: '출근, 퇴근 버튼을 통해 총 업무시간을 기록하고 업무와 일상을 분리할 수 있게 도와줘요.', scrollCenter: true, last: true },
+  ],
   '/task': [
     { text: 'Task에서는 날짜별 업무를 관리하고, 타이머로 집중한 작업 시간을 기록할 수 있어요.', last: true },
   ],

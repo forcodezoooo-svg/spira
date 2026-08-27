@@ -255,7 +255,7 @@ export default function MusicTimer({ compact = false, tile = false, floating = f
   // ── 컴팩트 pill (홈 우측 대시보드용) ─────────────────────────────────────────
   if (tile || floating) {
     return (
-      <div className={floating ? 'fixed z-40 w-60 bottom-4 right-[68px] lg:bottom-6 lg:right-[92px]' : 'relative h-full'}>
+      <div data-teach={tile && !floating ? 'hp-timer' : undefined} className={floating ? 'fixed z-40 w-60 bottom-4 right-[68px] lg:bottom-6 lg:right-[92px]' : 'relative h-full'}>
         <div className={`flex flex-col ${floating ? 'shadow-xl' : 'justify-between h-full'} bg-white border border-neutral-200 rounded-2xl p-3.5`} style={{ boxShadow: floating ? undefined : 'var(--spira-shadow)' }}>
           <div className="flex items-center gap-2">
             <button
