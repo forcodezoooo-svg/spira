@@ -901,7 +901,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbAddUnit = (col: KbCol, s: Sub) => { setKbForm({ mode: 'subtask', col, s }); setFormName(''); setFormDur(''); };
   const kbEditUnit = (col: KbCol, s: Sub, u: NonNullable<Sub['units']>[number]) => { setKbForm({ mode: 'subtask', col, s, editUnitId: u.id }); setFormName(u.name); setFormDur(u.durationMin ? String(u.durationMin) : ''); };
   const kbUpdateUnit = (col: KbCol, s: Sub, uId: string, name: string, durMin?: number) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, name, durationMin: durMin } : u) });
-  const kbToggleUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) });
+  const kbToggleUnit = (col: KbCol, s: Sub, uId: string) => { if ((s.days?.length ?? 0) > 0) return; updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) }); }; // 반복업무 세부작업은 카테고리보드에서 완료 체크하지 않음(요일별 Home 관리)
   // 다른 산출물 칸으로 task 이동 (드래그)
   const kbMoveTask = (sId: string, from: KbCol, to: KbCol) => {
     if (from.todoId === to.todoId) return;
@@ -1069,7 +1069,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                             <div className="flex items-start gap-1.5">
                               {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
                               <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: showDone ? '#5EA63A' : '#C7CEC7', backgroundColor: showDone ? '#5EA63A' : 'transparent' }}>{showDone && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
-                              <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="font-semibold flex-1 min-w-0 break-words text-left" style={{ fontSize: 15.6, color: showDone ? '#9AA39D' : '#16211E', textDecoration: showDone ? 'line-through' : 'none' }}>{s.name}</button>
+                              <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="font-semibold flex-1 min-w-0 break-words text-left" style={{ fontSize: 13, color: showDone ? '#9AA39D' : '#16211E', textDecoration: showDone ? 'line-through' : 'none' }}>{s.name}</button>
                               {(s.days?.length ?? 0) > 0 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="매주 반복 업무">매주</span>}
                               {isBlocked(s) && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FBF3E0', color: '#96631A' }} title="선행 작업이 아직 안 끝났어요">선행 대기</span>}
                               {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
@@ -1086,8 +1086,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                                 {units.map(u => (
                                   <div key={u.id} className="group/u flex items-center gap-1.5">
                                     {selMode && <button onClick={() => toggleSel(unitSel(col, s, u))} className="flex-shrink-0"><SelCheck on={sel.has(`u-${u.id}`)} /></button>}
-                                    <button onClick={() => kbToggleUnit(col, s, u.id)} className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: u.done ? '#5EA63A' : '#C7CEC7', backgroundColor: u.done ? '#5EA63A' : 'transparent' }}>{u.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
-                                    <button onClick={() => kbEditUnit(col, s, u)} title="수정" className="truncate flex-1 min-w-0 text-left" style={{ fontSize: 13.2, color: u.done ? '#9AA39D' : '#5B6560', textDecoration: u.done ? 'line-through' : 'none' }}>{u.name}</button>
+                                    {(() => { const uDone = u.done && !recurring; return (<>
+                                    <button onClick={() => kbToggleUnit(col, s, u.id)} className="w-3 h-3 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: uDone ? '#5EA63A' : '#C7CEC7', backgroundColor: uDone ? '#5EA63A' : 'transparent' }}>{uDone && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
+                                    <button onClick={() => kbEditUnit(col, s, u)} title="수정" className="truncate flex-1 min-w-0 text-left" style={{ fontSize: 13.2, color: uDone ? '#9AA39D' : '#5B6560', textDecoration: uDone ? 'line-through' : 'none' }}>{u.name}</button>
+                                    </>); })()}
                                     {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
                                     <button onClick={() => kbDelUnit(col, s, u.id)} className="text-neutral-300 hover:text-red-500 text-[11px] flex-shrink-0 opacity-0 group-hover/u:opacity-100 transition-opacity" title="삭제">×</button>
                                   </div>
