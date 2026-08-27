@@ -397,7 +397,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
       >
         {calDrag && (<div className="absolute bottom-full left-0 right-0 mb-1 h-6 z-20 flex items-center justify-center text-[11px] font-semibold text-violet-700 bg-violet-100/95 rounded-lg border border-violet-200 pointer-events-none">▲ 위로 끌면 이전 달 ({calMo === 0 ? 12 : calMo}월)</div>)}
         {calDrag && (<div className="absolute top-full left-0 right-0 mt-1 h-6 z-20 flex items-center justify-center text-[11px] font-semibold text-violet-700 bg-violet-100/95 rounded-lg border border-violet-200 pointer-events-none">▼ 아래로 끌면 다음 달 ({(calMo + 2) > 12 ? (calMo + 2 - 12) : calMo + 2}월)</div>)}
-        <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pr-1" ref={weeksRef}>
+        <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1" ref={weeksRef}>
           {calWeeks.map((week, wi) => {
             const days = week.filter((d): d is string => !!d);
             if (!days.length) return <div key={wi} />;
