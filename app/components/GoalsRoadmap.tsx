@@ -893,6 +893,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) }) }) });
   };
   const kbToggleDone = (col: KbCol, s: Sub) => {
+    if ((s.days?.length ?? 0) > 0) return; // 반복 업무는 카테고리보드에서 완료 체크하지 않음(요일별로 Home에서 관리)
     const nowDone = !s.done;
     updateSub(col, s.id, { done: nowDone, status: nowDone ? 'done' : 'todo' });
     if (nowDone && s.actualMin === undefined && !(s.days?.length)) setActualTarget({ col, s }); // 실제 소요시간 물어보기 (§14, 반복 제외)
@@ -1059,14 +1060,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     <div className="space-y-2">
                       {col.subtasks.map(s => {
                         const units = s.units ?? [];
+                        const recurring = (s.days?.length ?? 0) > 0;   // 반복 업무는 카테고리보드에서 완료 체크를 표시하지 않음(요일별 관리)
+                        const showDone = s.done && !recurring;
                         return (
                           <div key={s.id} draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
                             data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}task · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'} / 카테고리: ${col.area}] task: ${s.name}`}
                             className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.5 : 1 }}>
                             <div className="flex items-start gap-1.5">
                               {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
-                              <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: s.done ? '#5EA63A' : '#C7CEC7', backgroundColor: s.done ? '#5EA63A' : 'transparent' }}>{s.done && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
-                              <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="text-[13px] font-semibold flex-1 min-w-0 break-words text-left" style={{ color: s.done ? '#9AA39D' : '#16211E', textDecoration: s.done ? 'line-through' : 'none' }}>{s.name}</button>
+                              <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: showDone ? '#5EA63A' : '#C7CEC7', backgroundColor: showDone ? '#5EA63A' : 'transparent' }}>{showDone && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
+                              <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="text-[14.3px] font-semibold flex-1 min-w-0 break-words text-left" style={{ color: showDone ? '#9AA39D' : '#16211E', textDecoration: showDone ? 'line-through' : 'none' }}>{s.name}</button>
                               {(s.days?.length ?? 0) > 0 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="매주 반복 업무">매주</span>}
                               {isBlocked(s) && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FBF3E0', color: '#96631A' }} title="선행 작업이 아직 안 끝났어요">선행 대기</span>}
                               {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
@@ -1249,7 +1252,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         }}
                         title={`${r.name} — 클릭: 하위 단계로 · 드래그: 이동 · 양끝: 기간 조절 · 우클릭: 소요일 입력`}>
                         {bl >= 2 && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: r.color }} />}
-                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: bl === 1 ? 12 : 10, fontWeight: bl === 1 ? 800 : 600, color: bl === 1 ? '#fff' : '#16211E', textShadow: bl === 1 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
+                        <span className="truncate px-2 pointer-events-none" style={{ fontSize: bl === 1 ? 12 : 11, fontWeight: bl === 1 ? 800 : 600, color: bl === 1 ? '#fff' : '#16211E', textShadow: bl === 1 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
                         {r.level > 0 && <>
                           <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                           <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>

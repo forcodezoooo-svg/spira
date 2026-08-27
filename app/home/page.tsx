@@ -446,7 +446,7 @@ export default function Home() {
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>오늘</span>
         )}
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-        <span className="text-[15px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
+        <span className="text-[16.5px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
         </span>
         <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deadlineName}</span>
@@ -564,7 +564,7 @@ export default function Home() {
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>매주</span>
         )}
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-        <span className="text-[15px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
+        <span className="text-[16.5px] font-bold flex-shrink-0 transition-colors" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
         </span>
         <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deliverableName}</span>
