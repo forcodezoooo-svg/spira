@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../lib/useStore';
 import CategoryPicker from './CategoryPicker';
 import { workspaceColor } from '../lib/goalTasks';
@@ -62,6 +62,12 @@ const allCategories = (store: Store): Category[] => {
 export default function FinancialHub({ month }: { month: string }) {
   const store = useStore();
   const [section, setSection] = useState<Section | null>('income');
+  // Financial 안내 투어: 도식 섹션 활성화 요청
+  useEffect(() => {
+    const onSec = (e: Event) => { const v = (e as CustomEvent<string>).detail; setSection(v === 'none' ? null : (v as Section)); };
+    window.addEventListener('spira-teach:fin-section', onSec);
+    return () => window.removeEventListener('spira-teach:fin-section', onSec);
+  }, []);
 
   const entries = allRes(store).filter(e => e.date.startsWith(month));
   const incomeEntries = entries.filter(e => e.type === 'income');
@@ -82,7 +88,7 @@ export default function FinancialHub({ month }: { month: string }) {
   const Box = ({ id, label, value }: { id: Section; label: string; value: number }) => {
     const on = section === id;
     return (
-      <button onClick={() => setSection(s => s === id ? null : id)}
+      <button onClick={() => setSection(s => s === id ? null : id)} data-teach={`fin-${id}`}
         className="flex flex-col items-center rounded-2xl px-3 py-2.5 transition-all flex-1 min-w-[92px]"
         style={{ backgroundColor: on ? ACCENT : '#fff', border: `1.5px solid ${on ? ACCENT : '#E7E7E1'}`, boxShadow: on ? '0 3px 10px rgba(157,254,59,0.35)' : 'none' }}>
         <span className="text-[11px] font-bold" style={{ color: on ? '#16211E' : '#9AA39D' }}>{label}</span>
@@ -105,7 +111,7 @@ export default function FinancialHub({ month }: { month: string }) {
           <div className="flex items-center"><Op ch="−" /></div>
           <Box id="reserve" label={`비상금 ${pct}%`} value={reserve} />
           <div className="flex items-center"><Op ch="=" /></div>
-          <div className="flex flex-col items-center rounded-2xl px-3 py-2.5 flex-1 min-w-[92px]" style={{ backgroundColor: '#16211E' }}>
+          <div data-teach="fin-net" className="flex flex-col items-center rounded-2xl px-3 py-2.5 flex-1 min-w-[92px]" style={{ backgroundColor: '#16211E' }}>
             <span className="text-[11px] font-bold" style={{ color: '#B9C4B4' }}>개인순이익</span>
             <span className="text-[15px] font-black tabular-nums mt-0.5" style={{ color: personal < 0 ? '#FF8B8E' : ACCENT }}>{won(personal)}</span>
           </div>

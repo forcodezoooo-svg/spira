@@ -85,6 +85,12 @@ export default function ResourcesPage() {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [editCat]);
+  // Financial 안내 투어: 탭 전환 요청
+  useEffect(() => {
+    const onTab = (e: Event) => setTab((e as CustomEvent<Tab>).detail);
+    window.addEventListener('spira-teach:fin-tab', onTab);
+    return () => window.removeEventListener('spira-teach:fin-tab', onTab);
+  }, []);
 
   // 다음달 자산 목표 (칩 선택 후 % 입력)
   const [selGoalCat, setSelGoalCat] = useState<{ type: 'income' | 'expense'; name: string } | null>(null);
@@ -338,6 +344,7 @@ export default function ResourcesPage() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
+              data-teach={t.key === 'manage' ? 'fin-report' : undefined}
               className="py-3.5 rounded-2xl border text-[15px] font-bold transition-colors"
               style={tab === t.key
                 ? { backgroundColor: '#9DFE3B', borderColor: '#9DFE3B', color: '#16211E' }
@@ -643,7 +650,7 @@ export default function ResourcesPage() {
             </section>
 
             {/* 4. 다음달 자산 목표 */}
-            <section className="bg-white border border-neutral-200 rounded-2xl p-5">
+            <section data-teach="fin-assetgoal" className="bg-white border border-neutral-200 rounded-2xl p-5">
               <div className="flex items-start justify-between mb-1">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">다음달 자산 목표</p>
                 <button onClick={handleAiSuggest} title="AI에게 조정 방법 물어보기" className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105" style={{ backgroundColor: '#5FD93A', boxShadow: 'var(--spira-glow-fab)' }}>

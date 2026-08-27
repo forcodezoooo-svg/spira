@@ -25,6 +25,9 @@ type Step = {
   awaitTasks?: boolean;       // 할일(subtask)이 생성될 때까지 대기 후 진행
   forceTemplate?: boolean;    // '템플릿 저장' 버튼을 강제로 노출(hover 없이도 보이게)
   forceUnitAdd?: boolean;     // '+ 세부 작업' 추가 버튼을 강제로 노출(hover 없이도 보이게)
+  // Financial 안내 전용
+  finSection?: string;        // 재무 도식 섹션 활성화(income/fixed/invest/reserve/none)
+  finTab?: string;            // Financial 탭 전환(hub/manage)
   // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
   tipAbove?: boolean;
   // 툴팁을 대상 '왼쪽'에 강제 배치(오른쪽 끝 버튼이라 오른쪽엔 잘릴 때)
@@ -67,7 +70,14 @@ const PAGE_TIPS: Record<string, Step[]> = {
     { text: 'Task에서는 날짜별 업무를 관리하고, 타이머로 집중한 작업 시간을 기록할 수 있어요.', last: true },
   ],
   '/resources': [
-    { text: 'Resources에는 사업에 필요한 자료·링크·메모를 한곳에 모아둘 수 있어요.', last: true },
+    { text: 'Financial에서는 비즈니스 자금을 운영 계획에 맞춰 관리할 수 있어요.' },
+    { target: '[data-teach="fin-income"]', text: '이번 달 수익을 카테고리로 나눠서 기록할 수 있어요.', finSection: 'income', scrollCenter: true },
+    { target: '[data-teach="fin-fixed"]', text: '구독료, 관리비, 인건비 등 고정적인 지출을 입력해요.', finSection: 'fixed', scrollCenter: true },
+    { target: '[data-teach="fin-invest"]', text: '비즈니스를 발전시키기 위한 새로운 프로젝트에 투자하는 비용을 관리해요.', finSection: 'invest', scrollCenter: true },
+    { target: '[data-teach="fin-reserve"]', text: '미래에 진행할 프로젝트나 갑작스러운 상황에 대비해 남겨둘 비상금을 입력해요.', finSection: 'reserve', scrollCenter: true },
+    { target: '[data-teach="fin-net"]', text: '남은 비용은 그대로 개인 순이익이 되어요.', finSection: 'none', scrollCenter: true },
+    { target: '[data-teach="fin-report"]', text: '금전 변동 상황은 리포트 페이지에서 확인할 수 있어요.', scrollCenter: true },
+    { target: '[data-teach="fin-assetgoal"]', text: '수익이나 비용에서 늘리거나 줄이고 싶은 목표를 입력한 후 Sparky 아이콘을 누르면 AI가 지금 상황에 맞춰 자산 관리 계획을 제안해줄거예요.', finTab: 'manage', scrollCenter: true, last: true },
   ],
 };
 
@@ -285,6 +295,14 @@ export default function Teaching() {
     document.body.classList.toggle('spira-teach-unitadd', !!(tourActive && step?.forceUnitAdd));
     return () => document.body.classList.remove('spira-teach-unitadd');
   }, [tourActive, step]);
+
+  // Financial 안내: 도식 섹션 활성화 / 탭 전환 (page tip이므로 tourActive 무관, step 기준)
+  useEffect(() => {
+    if (step?.finSection) window.dispatchEvent(new CustomEvent('spira-teach:fin-section', { detail: step.finSection }));
+  }, [step]);
+  useEffect(() => {
+    if (step?.finTab) window.dispatchEvent(new CustomEvent('spira-teach:fin-tab', { detail: step.finTab }));
+  }, [step]);
 
   // await 감지 (할일 생성) — subtask 수 증가 폴링
   useEffect(() => {
