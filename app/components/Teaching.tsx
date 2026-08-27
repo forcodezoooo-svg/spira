@@ -16,6 +16,10 @@ type Step = {
   awaitChatOpen?: boolean; awaitTodos?: boolean; awaitPlaced?: boolean; awaitTimer?: boolean;
   // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
   tipAbove?: boolean;
+  // 툴팁을 대상 '왼쪽'에 강제 배치(오른쪽 끝 버튼이라 오른쪽엔 잘릴 때)
+  tipLeft?: boolean;
+  // 단계 시작 시 대상을 화면 중앙으로 자동 스크롤
+  scrollCenter?: boolean;
   // 온보딩 자동 생성: 사용자가 입력하지 않아도 '버튼 있는 답변'이 자동으로 나오게 함
   autoSend?: string;    // 조용히 전송할 요청(사용자 말풍선 없음)
   autoIntro?: string;   // 답변에 고정으로 표시할 문구
@@ -25,7 +29,7 @@ const TOUR: Step[] = [
   { page: '/plan', text: '입력하신 내용으로 사업개요를 작성했어요. 이미 작성해둔 사업계획서가 있다면, 업로드 해서 사업 계획에 참고할 수 있어요.' },
   { page: '/plan', target: '[data-teach="plan-help"]', text: '각 항목 옆에 있는 물음표를 클릭하면, 어떤 내용을 기입해야 하는지 간단한 설명을 볼 수 있어요.' },
   { page: '/plan', target: '[data-teach="plan-fill"]', text: '타이틀 옆의 다이아몬드 아이콘을 클릭하면, Sparky가 해당 칸의 내용을 채워줘요.' },
-  { page: '/plan', target: '[data-teach="goal-suggest"]', text: '‘AI로 목표추천’ 버튼을 눌러보세요. 사업개요의 내용에 맞춰 사업 성장 목표가 자동으로 생성되어요.' },
+  { page: '/plan', target: '[data-teach="goal-suggest"]', text: '‘AI로 목표추천’ 버튼을 눌러보세요. 사업개요의 내용에 맞춰 사업 성장 목표가 자동으로 생성되어요.', scrollCenter: true, tipLeft: true },
   { page: '/plan', target: '[data-teach="nav-goals"]', text: '위의 깃발 모양 아이콘을 눌러 Goals 페이지로 이동해보세요!', go: '/programs' },
   { page: '/programs', target: '[data-teach="sparky"]', text: '아래 Sparky 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
   { page: '/programs', target: '[data-teach="sparky-panel"]', text: '기획안을 기반으로 업무 일정을 계획해뒀어요. 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', autoSend: '기획안을 기반으로 이번 분기 업무 일정을 계획해줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 만들어줘.', autoIntro: '기획안을 기반으로 업무 일정을 계획해봤어요! 아래 버튼을 누르면 Goals에 자동으로 반영돼요. 🌿', awaitTodos: true, closeChat: true },
@@ -197,6 +201,20 @@ export default function Teaching() {
   }, [step, locate]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // 단계 시작 시 대상을 화면 중앙으로 스크롤(scrollCenter 지정 단계). 대상이 렌더될 때까지 재시도 후 1회 실행.
+  useEffect(() => {
+    if (!step?.scrollCenter) return;
+    const sel = step.target ?? step.targets?.[0];
+    if (!sel) return;
+    let tries = 0;
+    const iv = setInterval(() => {
+      const el = document.querySelector(sel);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); clearInterval(iv); }
+      else if (++tries > 40) clearInterval(iv);
+    }, 120);
+    return () => clearInterval(iv);
+  }, [step]);
+
   if (!step) return null;
 
   // 툴팁 위치 기준. 기본은 마지막 하이라이트, tipAbove면 '첫 번째' 하이라이트(드래그할 업무) 기준.
@@ -283,14 +301,19 @@ export default function Teaching() {
 
   // 툴팁 위치: 대상 주변 4방향 중 공간이 있는 쪽으로 배치(패널과 겹치지 않게).
   const PAD = 8, GAP = 12, TW = 420, TH = 180, EDGE = 30; // EDGE: 하이라이트/화면 가장자리와의 여백
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  // rects는 zoom 보정(÷zoom)된 좌표계이므로 뷰포트도 같은 좌표계로 맞춘다.
+  const zc0 = typeof window !== 'undefined' ? parseFloat(getComputedStyle(document.documentElement).zoom || '1') : 1;
+  const zf = zc0 && !isNaN(zc0) && zc0 > 0.5 && zc0 < 3 ? zc0 : 1;
+  const vw = (typeof window !== 'undefined' ? window.innerWidth : 1200) / zf;
+  const vh = (typeof window !== 'undefined' ? window.innerHeight : 800) / zf;
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
   const g = EDGE; // 모든 단계: 하이라이트 영역에서 50px 띄움
   let tipStyle: React.CSSProperties;
   if (rect) {
     let left: number, top: number | undefined, bottom: number | undefined;
-    if (step.tipAbove) {                            // 강제 '위' — 드래그할 업무 하이라이트 바로 위에 배치
+    if (step.tipLeft) {                             // 강제 '왼쪽' — 오른쪽 끝 버튼이라 오른쪽엔 잘릴 때
+      left = rect.left - g - TW; top = rect.top + rect.height / 2 - TH / 2;
+    } else if (step.tipAbove) {                     // 강제 '위' — 드래그할 업무 하이라이트 바로 위에 배치
       bottom = vh - rect.top + g; left = rect.left + rect.width / 2 - TW / 2;
     } else if (vh - rect.bottom >= TH + g) {        // 아래
       top = rect.bottom + g; left = rect.left + rect.width / 2 - TW / 2;
