@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../lib/useStore';
 import { DEFAULT_BUFFER_PERCENT, weekStartMonday, redistributeWeekTasks } from '../lib/capacity';
 
@@ -101,9 +102,10 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
         </button>
       )}
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setOpen(false)}>
-          <div className="bg-white rounded-[24px] w-full max-w-[560px] max-h-[90vh] overflow-y-auto p-6" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+      {open && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setOpen(false)}>
+          <div className="bg-white rounded-[24px] w-full max-w-[560px] overflow-hidden" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+           <div className="max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[18px] font-black" style={{ color: '#16211E' }}>주간 업무시간</h2>
               <button onClick={() => setOpen(false)} className="text-neutral-300 hover:text-neutral-700 text-lg transition-colors">×</button>
@@ -188,9 +190,10 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
             </div>
 
             <button onClick={() => setOpen(false)} className="mt-5 w-full py-2.5 rounded-xl text-[14px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>완료</button>
+           </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </>
   );
 }
