@@ -109,7 +109,15 @@ export default function FinancialHub({ month }: { month: string }) {
           <div className="flex items-center"><Op ch="−" /></div>
           <Box id="invest" label="프로젝트 투자비" value={projInvest} />
           <div className="flex items-center"><Op ch="−" /></div>
-          <Box id="reserve" label={`비상금 ${pct}%`} value={reserve} />
+          <div data-teach="fin-reserve" className="flex flex-col items-center rounded-2xl px-3 py-2.5 flex-1 min-w-[92px]" style={{ backgroundColor: '#fff', border: '1.5px solid #E7E7E1' }}>
+            <div className="flex items-center gap-0.5">
+              <span className="text-[11px] font-bold" style={{ color: '#9AA39D' }}>비상금</span>
+              <input type="number" min={0} max={100} value={store.emergencyFundPct || ''} onChange={e => store.setEmergencyFundPct(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} placeholder="0"
+                className="w-7 text-[11px] font-bold tabular-nums text-center bg-transparent outline-none border-b" style={{ color: '#16211E', borderColor: '#C9D6C2' }} />
+              <span className="text-[11px] font-bold" style={{ color: '#9AA39D' }}>%</span>
+            </div>
+            <span className="text-[15px] font-black tabular-nums mt-0.5" style={{ color: '#16211E' }}>{won(reserve)}</span>
+          </div>
           <div className="flex items-center"><Op ch="=" /></div>
           <div data-teach="fin-net" className="flex flex-col items-center rounded-2xl px-3 py-2.5 flex-1 min-w-[92px]" style={{ backgroundColor: '#16211E' }}>
             <span className="text-[11px] font-bold" style={{ color: '#B9C4B4' }}>개인순이익</span>
@@ -122,7 +130,6 @@ export default function FinancialHub({ month }: { month: string }) {
       {section === 'income' && <IncomeSection month={month} />}
       {section === 'fixed' && <FixedSection month={month} />}
       {section === 'invest' && <InvestSection month={month} catSpent={catSpent} />}
-      {section === 'reserve' && <ReserveSection />}
     </div>
   );
 }
@@ -263,67 +270,6 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
               </div>
             );
           })}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ── 비상금(%) + 미래 프로젝트 배정 ──
-function ReserveSection() {
-  const store = useStore();
-  const marks = store.reserveEarmarks;
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
-  const wsColor = (wsId: string) => workspaceColor(store.allWorkspacesEntries, wsId);
-  // 모든 비즈니스의 Plan 목표·프로젝트를 자동으로 목록화 (Goals 로드맵 배치 여부 무관)
-  const amountFor = (kind: 'goal' | 'project', id: string) => marks.find(m => kind === 'goal' ? m.goalId === id : m.projectId === id)?.amount ?? 0;
-  const setAmount = (kind: 'goal' | 'project', wsId: string, id: string, amount: number) => {
-    const exist = marks.find(m => kind === 'goal' ? m.goalId === id : m.projectId === id);
-    let next = marks;
-    if (exist) next = amount > 0 ? marks.map(m => m === exist ? { ...m, amount } : m) : marks.filter(m => m !== exist);
-    else if (amount > 0) next = [...marks, { id: uid(), wsId, ...(kind === 'goal' ? { goalId: id } : { projectId: id }), amount }];
-    store.setReserveEarmarks(next);
-  };
-  const groups = store.allWorkspacesEntries
-    .map(e => {
-      const goalName = new Map((e.plan?.goals ?? []).map(g => [g.id, g.name] as const));
-      // 현재 목표에 소속된 프로젝트만 (옛/끊긴 데이터 제외 — 지금 Plan 구조의 프로젝트만)
-      const projects = (e.plan?.projects ?? [])
-        .filter(p => p.goalId && goalName.has(p.goalId))
-        .map(p => ({ id: p.id, name: p.name, goalName: goalName.get(p.goalId!) }));
-      return { wsId: e.workspace.id, wsName: e.workspace.name, projects };
-    })
-    .filter(g => g.projects.length > 0);
-  const row = (wsId: string, p: { id: string; name: string; goalName?: string }) => (
-    <div key={p.id} className="flex items-center gap-2">
-      <span className="min-w-0 flex-1">
-        <span className="text-[12px] truncate block" style={{ color: '#16211E' }}>{p.name}</span>
-        {p.goalName && <span className="text-[10px] truncate block" style={{ color: '#9AA39D' }}>목표 · {p.goalName}</span>}
-      </span>
-      <input type="number" value={amountFor('project', p.id) || ''} onChange={e => setAmount('project', wsId, p.id, Number(e.target.value) || 0)} placeholder="필요액" className="w-24 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400 flex-shrink-0" style={{ borderColor: 'var(--spira-border)' }} />
-    </div>
-  );
-  return (
-    <Card title="비상금 설정">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px]" style={{ color: '#5B6560' }}>수익의</span>
-        <input type="number" min={0} max={100} value={store.emergencyFundPct || ''} onChange={e => store.setEmergencyFundPct(Number(e.target.value) || 0)} placeholder="0" className="w-16 text-[14px] tabular-nums text-center bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
-        <span className="text-[13px]" style={{ color: '#5B6560' }}>%를 비상금으로 남겨둡니다.</span>
-      </div>
-      <p className="text-[12px] font-semibold mb-2" style={{ color: '#5B6560' }}>이 비상금을 쓸 미래 프로젝트에 필요액을 적어두세요 <span className="font-normal" style={{ color: '#9AA39D' }}>· 모든 비즈니스</span></p>
-      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>Plan/Goals에서 만든 프로젝트가 여기에 떠요.</p> : (
-        <div className="space-y-4">
-          {groups.map(g => (
-            <div key={g.wsId}>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: wsColor(g.wsId) }} />
-                <span className="text-[12px] font-bold" style={{ color: wsColor(g.wsId) }}>{g.wsName}</span>
-              </div>
-              <div className="space-y-1.5">
-                {g.projects.map(x => row(g.wsId, x))}
-              </div>
-            </div>
-          ))}
         </div>
       )}
     </Card>
