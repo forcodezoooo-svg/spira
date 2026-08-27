@@ -119,7 +119,7 @@ const FEATURES = [
   {
     icon: '/goals_icon.svg',
     title: '각기 다른 성격의 일들도\n일정을 나눠서 차근차근',
-    desc: <>Goals에서 <Em>업무 영역별 목표와 데드라인</Em>을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 <Em>Sparky가 함께 도와줘요.</Em></>,
+    desc: <>Process에서 <Em>업무 영역별 목표와 데드라인</Em>을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 <Em>Sparky가 함께 도와줘요.</Em></>,
     mock: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/feature-goals.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300 }} />
@@ -129,7 +129,7 @@ const FEATURES = [
   {
     icon: '/resources_icon.svg',
     title: '비용과 수익을 관리하며\n비즈니스 성장을 직관적으로',
-    desc: <>Resources에서 <Em>수익과 비용을 기록</Em>하고 매달 달라지는 <Em>비즈니스의 성장</Em>을 확인하세요. 다음 목표를 설정하면 <Em>Sparky가 계획도 함께 세워줘요.</Em></>,
+    desc: <>Financial에서 <Em>수익과 비용을 기록</Em>하고 매달 달라지는 <Em>비즈니스의 성장</Em>을 확인하세요. 다음 목표를 설정하면 <Em>Sparky가 계획도 함께 세워줘요.</Em></>,
     mock: (
       <div className="w-full space-y-3" style={{ maxWidth: 300 }}>
         <ResourceCard income="+124,000" expense="-78,000" net="+46,000" />

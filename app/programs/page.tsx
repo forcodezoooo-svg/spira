@@ -485,7 +485,7 @@ export default function ProgramsPage() {
   if (!wsId) {
     return (
       <div className="max-w-2xl">
-        <h1 className="text-xl font-semibold mb-2">Goals</h1>
+        <h1 className="text-xl font-semibold mb-2">Process</h1>
         <p className="text-sm text-neutral-500">먼저 워크스페이스를 만들어주세요.</p>
       </div>
     );

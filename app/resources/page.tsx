@@ -296,7 +296,7 @@ export default function ResourcesPage() {
       {/* ── 왼쪽: 메인 ── */}
       <div className="min-w-0">
         {/* 헤더 */}
-        <h1 className="text-[28px] font-black tracking-[-0.02em] mb-3" style={{ color: '#16211E' }}>Resources</h1>
+        <h1 className="text-[28px] font-black tracking-[-0.02em] mb-3" style={{ color: '#16211E' }}>Financial</h1>
 
         {/* 월 선택 */}
         <div className="flex items-center gap-2 mb-5">

@@ -800,9 +800,9 @@ export default function Home() {
         {/* 태스크 목록 · 빈/완료 상태 */}
         {totalTasks === 0 ? (
           <EmptyState
-            title="오늘은 예정된 업무가 없어요"
-            description="Goals에서 목표·업무를 이 날짜에 배치하면 여기에 나타나요."
-            action={<button onClick={() => router.push('/programs')} className="px-4 py-2 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>Goals에서 배치하기</button>}
+            title="오늘 할 일을 생성하면 할 일이 나타나요"
+            description="Process에서 목표·업무를 이 날짜에 배치하면 여기에 나타나요."
+            action={<button onClick={() => router.push('/programs')} className="px-4 py-2 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>Process에서 생성하기</button>}
           />
         ) : (
           <>
