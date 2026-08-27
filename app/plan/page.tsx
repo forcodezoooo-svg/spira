@@ -1863,11 +1863,14 @@ function GoalsSection({
   useEffect(() => {
     const onExpand = () => { const g = goals[0]; if (g) setOpenGoals(prev => new Set(prev).add(g.id)); };
     const onBreakdown = () => { const g = goals[0]; if (g) { setOpenGoals(prev => new Set(prev).add(g.id)); onBreakdownGoal(g.id); } };
+    const onExpandProject = (e: Event) => { const id = (e as CustomEvent<string>).detail; if (id) setOpenProjects(prev => new Set(prev).add(id)); };
     window.addEventListener('spira-teach:expand-goals', onExpand);
     window.addEventListener('spira-teach:breakdown-goals', onBreakdown);
+    window.addEventListener('spira:expand-project', onExpandProject);
     return () => {
       window.removeEventListener('spira-teach:expand-goals', onExpand);
       window.removeEventListener('spira-teach:breakdown-goals', onBreakdown);
+      window.removeEventListener('spira:expand-project', onExpandProject);
     };
   }, [goals, onBreakdownGoal]);
   const toggle = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
@@ -3149,20 +3152,22 @@ export default function PlanPage() {
       if (!res.ok || data.error) { toast('AI 분해에 실패했어요.', 'error'); return; }
       const projs = (data.projects ?? []) as { name: string; finalDeliverable: string; startDate?: string; endDate?: string; areaDeliverables?: { area: string; content: string }[] }[];
       if (!projs.length) { toast('제안할 프로젝트를 찾지 못했어요.', 'info'); return; }
+      const baseCount = (plan.projects ?? []).filter(x => x.goalId === goalId).length;
+      const newProjects: Project[] = projs.map((p, i) => ({
+        id: uid(), name: p.name, goalId, order: baseCount + i, finalDeliverable: p.finalDeliverable,
+        startDate: p.startDate || undefined, endDate: p.endDate || undefined, status: 'planned',
+        areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
+      }));
       setPlan(prev => {
         if (!prev) return prev;
-        const baseCount = (prev.projects ?? []).filter(x => x.goalId === goalId).length;
-        const newProjects: Project[] = projs.map((p, i) => ({
-          id: uid(), name: p.name, goalId, order: baseCount + i, finalDeliverable: p.finalDeliverable,
-          startDate: p.startDate || undefined, endDate: p.endDate || undefined, status: 'planned',
-          areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
-        }));
         const next = { ...prev, projects: [...(prev.projects ?? []), ...newProjects] };
         const wsId = selectedWsIdRef.current;
         if (wsId) store.updatePlanInWs(wsId, next);
         return next;
       });
       toast(`프로젝트 ${projs.length}개를 추가했어요. 🌿`, 'success');
+      // 생성된 첫 프로젝트를 자동으로 펼쳐 보이게
+      if (newProjects[0]) window.dispatchEvent(new CustomEvent('spira:expand-project', { detail: newProjects[0].id }));
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };

@@ -100,6 +100,7 @@ export default function Teaching() {
   const [tourIdx, setTourIdx] = useState(-1);
   const [pageIdx, setPageIdx] = useState(-1);
   const [rects, setRects] = useState<DOMRect[]>([]); // 하이라이트 대상들(다중 지원)
+  const [busy, setBusy] = useState(false); // 목표/프로젝트 AI 생성 중 로딩 표시
 
   // 경로 변경 시: 투어 진행값 로드 + (네비게이션 대기 단계면) 목표 페이지 도달 시 자동 진행 + 페이지 첫 진입 안내
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -194,12 +195,26 @@ export default function Teaching() {
     if (tourActive && step?.expandGoals) window.dispatchEvent(new CustomEvent('spira-teach:expand-goals'));
   }, [tourActive, tourIdx, step]);
 
-  // 목표 추천 단계에서는 '목표 추천' 버튼이 모달 대신 직접 생성 경로를 타게 하는 플래그
+  // 목표 추천 단계: '목표 추천' 버튼이 모달 대신 직접 생성 경로를 타게 하는 플래그 + 클릭 시 로딩 표시
   useEffect(() => {
+    setBusy(false); // 단계 진입 시 로딩 초기화
     const w = window as Window & { __spiraTeachDirectGoals?: boolean };
-    w.__spiraTeachDirectGoals = !!(tourActive && step?.awaitGoals);
-    return () => { w.__spiraTeachDirectGoals = false; };
-  }, [tourActive, step]);
+    const on = !!(tourActive && step?.awaitGoals);
+    w.__spiraTeachDirectGoals = on;
+    if (!on) return () => { w.__spiraTeachDirectGoals = false; };
+    const onClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement)?.closest?.('[data-teach="goal-suggest"]')) setBusy(true);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => { w.__spiraTeachDirectGoals = false; document.removeEventListener('click', onClick, true); };
+  }, [tourActive, tourIdx, step]);
+
+  // 생성 실패 등으로 로딩이 멈추지 않도록 안전 타임아웃(목표 감지되면 단계 전환으로 먼저 초기화됨)
+  useEffect(() => {
+    if (!busy) return;
+    const t = setTimeout(() => setBusy(false), 45000);
+    return () => clearTimeout(t);
+  }, [busy]);
 
   const locate = useCallback(() => {
     const sels = step ? (step.targets ?? (step.target ? [step.target] : [])) : [];
@@ -299,6 +314,7 @@ export default function Teaching() {
       }
       if (step.awaitGoals) {
         // 'AI로 목표추천' 버튼을 대신 눌러 목표 생성 시작 (목표 생성 감지로 다음 단계 진행)
+        setBusy(true);
         const btn = document.querySelector<HTMLElement>('[data-teach="goal-suggest"]');
         if (btn) { btn.click(); return; }
       }
@@ -424,23 +440,30 @@ export default function Teaching() {
       <div className="fixed z-[80]" style={tipStyle}>
         <div className="bg-white rounded-2xl border p-4" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 16px 44px rgba(0,0,0,0.28)' }}>
           <p className="text-[14px] leading-relaxed" style={{ color: '#16211E' }}>{step.text}</p>
-          <div className="flex items-center justify-between mt-3.5">
-            <div className="flex items-center gap-1">
-              {Array.from({ length: dotCount }).map((_, i) => (
-                <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: i === dotIdx ? '#5EA63A' : '#E1E1DA' }} />
-              ))}
+          {busy ? (
+            <div className="flex items-center gap-2 mt-3.5" style={{ color: '#5B6560' }}>
+              <span className="w-4 h-4 rounded-full border-2 border-neutral-200 border-t-violet-400 animate-spin" />
+              <span className="text-[13px] font-semibold">사업 성장 목표를 만들고 있어요…</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              {!isLast && (
-                <button onClick={skip} className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }}>
-                  건너뛰기
+          ) : (
+            <div className="flex items-center justify-between mt-3.5">
+              <div className="flex items-center gap-1">
+                {Array.from({ length: dotCount }).map((_, i) => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: i === dotIdx ? '#5EA63A' : '#E1E1DA' }} />
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                {!isLast && (
+                  <button onClick={skip} className="px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }}>
+                    건너뛰기
+                  </button>
+                )}
+                <button onClick={next} className="px-4 py-1.5 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
+                  {nextLabel}
                 </button>
-              )}
-              <button onClick={next} className="px-4 py-1.5 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#16211E', color: '#EDFF9F' }}>
-                {nextLabel}
-              </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </>
