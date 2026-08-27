@@ -14,6 +14,9 @@ type Step = {
   page?: string; target?: string; targets?: string[]; text: string;
   closeChat?: boolean; go?: string; last?: boolean; prefill?: string; celebrate?: boolean;
   awaitChatOpen?: boolean; awaitTodos?: boolean; awaitPlaced?: boolean; awaitTimer?: boolean;
+  awaitGoals?: boolean;       // '다음'/버튼으로 사업 목표가 생성될 때까지 대기 후 진행
+  expandGoals?: boolean;      // 단계 시작 시 첫 사업 목표를 자동으로 펼침
+  breakdownOnNext?: boolean;  // '다음' 클릭 시 첫 목표에 AI로 프로젝트(초안) 자동 생성
   // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
   tipAbove?: boolean;
   // 툴팁을 대상 '왼쪽'에 강제 배치(오른쪽 끝 버튼이라 오른쪽엔 잘릴 때)
@@ -29,15 +32,11 @@ const TOUR: Step[] = [
   { page: '/plan', text: '입력하신 내용으로 사업개요를 작성했어요. 이미 작성해둔 사업계획서가 있다면, 업로드 해서 사업 계획에 참고할 수 있어요.' },
   { page: '/plan', target: '[data-teach="plan-help"]', text: '각 항목 옆에 있는 물음표를 클릭하면, 어떤 내용을 기입해야 하는지 간단한 설명을 볼 수 있어요.' },
   { page: '/plan', target: '[data-teach="plan-fill"]', text: '타이틀 옆의 다이아몬드 아이콘을 클릭하면, Sparky가 해당 칸의 내용을 채워줘요.' },
-  { page: '/plan', target: '[data-teach="goal-suggest"]', text: '‘AI로 목표추천’ 버튼을 눌러보세요. 사업개요의 내용에 맞춰 사업 성장 목표가 자동으로 생성되어요.', scrollCenter: true, tipLeft: true },
-  { page: '/plan', target: '[data-teach="nav-goals"]', text: '위의 깃발 모양 아이콘을 눌러 Goals 페이지로 이동해보세요!', go: '/programs' },
-  { page: '/programs', target: '[data-teach="sparky"]', text: '아래 Sparky 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
-  { page: '/programs', target: '[data-teach="sparky-panel"]', text: '기획안을 기반으로 업무 일정을 계획해뒀어요. 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', autoSend: '기획안을 기반으로 이번 분기 업무 일정을 계획해줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 만들어줘.', autoIntro: '기획안을 기반으로 업무 일정을 계획해봤어요! 아래 버튼을 누르면 Goals에 자동으로 반영돼요. 🌿', awaitTodos: true, closeChat: true },
-  { page: '/programs', target: '[data-teach="goal-card"]', text: '생성된 할 일을 자유롭게 수정하거나 추가할 수 있어요.' },
-  { page: '/programs', targets: ['[data-teach="todo-item"]', '[data-teach="calendar"]'], text: '이 업무를 클릭, 드래그 해서 캘린더의 오늘 날짜 위에 놓아보세요!', awaitPlaced: true, tipAbove: true },
-  { page: '/programs', target: '[data-teach="nav-home"]', text: '위의 집 모양 아이콘을 눌러 Home 페이지로 이동해보세요!', go: '/home' },
-  { page: '/home', target: '[data-teach="today-timer"]', text: '오늘의 업무 옆 플레이 버튼을 눌러보세요. 플레이 버튼은 업무 위에 마우스를 올리면 나타나요. 누르면 타이머가 시작되고 업무 시간이 기록돼요.', awaitTimer: true },
-  { page: '/home', text: '여정 지도에 첫 목표 깃발을 꽂았어요. 업무를 완수할 때마다 깃발이 하나씩 쌓여요.', last: true, celebrate: true },
+  { page: '/plan', target: '[data-teach="goal-suggest"]', text: '‘AI로 목표추천’ 버튼을 눌러보세요. 사업개요의 내용에 맞춰 사업 성장 목표가 자동으로 생성되어요.', scrollCenter: true, tipLeft: true, awaitGoals: true },
+  { page: '/plan', target: '[data-teach="goal-card"]', text: '사업목표를 이루기 위한 전략과 성과지표를 설정하고, 본격적인 업무 프로젝트를 설정할 수 있어요.', expandGoals: true, scrollCenter: true },
+  { page: '/plan', target: '[data-teach="goal-ai"]', text: '어떤 내용으로 채워야 할지 막막할 때는, AI가 사업개요에 맞춰 간단히 초안을 채워넣어줄 수 있어요.', scrollCenter: true, breakdownOnNext: true },
+  { page: '/plan', target: '[data-teach="goal-card"]', text: 'AI가 생성해준 내용들을 확인하고, 수정이나 보완해보세요!', scrollCenter: true },
+  { page: '/plan', text: '첫 사업 목표를 세웠어요. 이제 본격적으로 시작해볼까요?', last: true, celebrate: true },
 ];
 
 // 온보딩 투어가 다루지 않는 페이지의 첫 진입 안내. Home·Goals는 위 투어가 다룸.
@@ -78,6 +77,16 @@ function readCounts(): { total: number; placedToday: number } {
   } catch {
     return { total: 0, placedToday: 0 };
   }
+}
+
+// 전체 워크스페이스의 사업 목표(plan.goals) 수 — 온보딩 투어의 '목표 생성' 감지용
+function readGoalCount(): number {
+  try {
+    const d = JSON.parse(localStorage.getItem('spira') || '{}');
+    let n = 0;
+    for (const e of d.workspaces ?? []) n += (e.plan?.goals ?? []).length;
+    return n;
+  } catch { return 0; }
 }
 
 export default function Teaching() {
@@ -169,6 +178,28 @@ export default function Teaching() {
     }, 500);
     return () => clearInterval(iv);
   }, [tourActive, step, advanceTour, ui]);
+
+  // await 감지 (사업 목표 생성) — plan.goals 수 증가 폴링
+  useEffect(() => {
+    if (!tourActive || !step?.awaitGoals) return;
+    const base = readGoalCount();
+    const iv = setInterval(() => {
+      if (readGoalCount() > base) { clearInterval(iv); advanceTour(); }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [tourActive, step, advanceTour]);
+
+  // 단계 시작 시 첫 목표 자동 펼침
+  useEffect(() => {
+    if (tourActive && step?.expandGoals) window.dispatchEvent(new CustomEvent('spira-teach:expand-goals'));
+  }, [tourActive, tourIdx, step]);
+
+  // 목표 추천 단계에서는 '목표 추천' 버튼이 모달 대신 직접 생성 경로를 타게 하는 플래그
+  useEffect(() => {
+    const w = window as Window & { __spiraTeachDirectGoals?: boolean };
+    w.__spiraTeachDirectGoals = !!(tourActive && step?.awaitGoals);
+    return () => { w.__spiraTeachDirectGoals = false; };
+  }, [tourActive, step]);
 
   const locate = useCallback(() => {
     const sels = step ? (step.targets ?? (step.target ? [step.target] : [])) : [];
@@ -265,6 +296,15 @@ export default function Teaching() {
         // 하이라이트된 플레이 버튼을 대신 눌러 업무 타이머를 시작 (타이머 감지로 다음 단계 진행)
         const btn = document.querySelector<HTMLElement>('[data-teach="today-timer"]');
         if (btn) { btn.click(); return; }
+      }
+      if (step.awaitGoals) {
+        // 'AI로 목표추천' 버튼을 대신 눌러 목표 생성 시작 (목표 생성 감지로 다음 단계 진행)
+        const btn = document.querySelector<HTMLElement>('[data-teach="goal-suggest"]');
+        if (btn) { btn.click(); return; }
+      }
+      if (step.breakdownOnNext) {
+        // 첫 목표에 AI로 프로젝트(초안) 자동 생성 트리거 후 다음 안내로 진행
+        window.dispatchEvent(new CustomEvent('spira-teach:breakdown-goals'));
       }
     }
     if (step.closeChat) ui.closeChat();

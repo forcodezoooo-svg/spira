@@ -1859,6 +1859,17 @@ function GoalsSection({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusGoal, goals]);
+  // 티칭 투어 연동: 첫 목표 자동 펼침 / 첫 목표에 AI로 프로젝트(초안) 자동 생성
+  useEffect(() => {
+    const onExpand = () => { const g = goals[0]; if (g) setOpenGoals(prev => new Set(prev).add(g.id)); };
+    const onBreakdown = () => { const g = goals[0]; if (g) { setOpenGoals(prev => new Set(prev).add(g.id)); onBreakdownGoal(g.id); } };
+    window.addEventListener('spira-teach:expand-goals', onExpand);
+    window.addEventListener('spira-teach:breakdown-goals', onBreakdown);
+    return () => {
+      window.removeEventListener('spira-teach:expand-goals', onExpand);
+      window.removeEventListener('spira-teach:breakdown-goals', onBreakdown);
+    };
+  }, [goals, onBreakdownGoal]);
   const toggle = (setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
     setFn(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const startEdit = (id: string, cur: string) => { setEditId(id); setEditVal(cur); };
@@ -1937,7 +1948,7 @@ function GoalsSection({
           const prog = projects.length ? doneCount / projects.length : null; // 진행도 = 완료한 프로젝트 비율
           const st = GOAL_STATUS_META[g.status ?? 'active'];
           return (
-            <div key={g.id} id={`plan-goal-${g.id}`} className="border border-neutral-200 rounded-2xl bg-white scroll-mt-24">
+            <div key={g.id} id={`plan-goal-${g.id}`} data-teach="goal-card" className="border border-neutral-200 rounded-2xl bg-white scroll-mt-24">
               {/* Goal 헤더 (기본 노출) */}
               <div className="px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -1960,7 +1971,7 @@ function GoalsSection({
                         const openG = () => { setOpenGoals(prev => new Set(prev).add(g.id)); setAiMenuGoal(null); };
                         return (
                           <span className="relative flex-shrink-0">
-                            <button onClick={() => setAiMenuGoal(open ? null : g.id)} title="AI 도우미" className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-transform hover:-translate-y-0.5" style={open ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+                            <button onClick={() => setAiMenuGoal(open ? null : g.id)} data-teach="goal-ai" title="AI 도우미" className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-transform hover:-translate-y-0.5" style={open ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
                               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
                               AI
                               <svg className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -3062,7 +3073,14 @@ export default function PlanPage() {
   const removeProject = (id: string) => update({ projects: (plan.projects ?? []).filter(p => p.id !== id) });
 
   // ── AI: 목표 설계 팝업 열기 / 점검 / 쪼개기 ──
-  const suggestGoals = () => { if (aiGate()) setGoalPlanOpen(true); };
+  const suggestGoals = () => {
+    if (!aiGate()) return;
+    // 티칭 투어 중에는 모달(오버레이에 가려짐) 대신 직접 생성·적용 경로로
+    if (typeof window !== 'undefined' && (window as Window & { __spiraTeachDirectGoals?: boolean }).__spiraTeachDirectGoals) {
+      window.dispatchEvent(new CustomEvent('spira-teach:suggest-goals')); return;
+    }
+    setGoalPlanOpen(true);
+  };
   // 팝업에서 확정한 목표들을 실제 반영 (첫 목표만 진행중, 나머지 보류)
   const applyPlannedGoals = (planned: PlanGoal[]) => {
     setPlan(prev => {
@@ -3083,6 +3101,23 @@ export default function PlanPage() {
     setGoalPlanOpen(false);
     toast(`목표 ${planned.length}개를 추가했어요. 🌿`, 'success');
   };
+  // 티칭 투어: 모달 없이 사업 목표를 직접 생성·적용 (온보딩 매끄러운 흐름)
+  useEffect(() => {
+    const gen = async () => {
+      if (!aiGate()) return;
+      try {
+        const areas = (plan.workAreas ?? []).map(a => a.name);
+        const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+        const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context: buildContext(), areas, today, messages: [{ role: 'user', content: '이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.' }] }) });
+        const data = await res.json().catch(() => ({}));
+        const gs = Array.isArray(data.goals) ? data.goals : [];
+        if (gs.length) applyPlannedGoals(gs);
+      } catch { /* 무시 */ }
+    };
+    window.addEventListener('spira-teach:suggest-goals', gen);
+    return () => window.removeEventListener('spira-teach:suggest-goals', gen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan]);
   const reviewGoal = async (goalId: string) => {
     if (!aiGate()) return;
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
