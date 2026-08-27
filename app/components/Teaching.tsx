@@ -71,9 +71,9 @@ const PAGE_TIPS: Record<string, Step[]> = {
   ],
   '/resources': [
     { text: 'Financial에서는 비즈니스 자금을 운영 계획에 맞춰 관리할 수 있어요.' },
-    { target: '[data-teach="fin-income"]', text: '이번 달 수익을 카테고리로 나눠서 기록할 수 있어요.', finSection: 'income', scrollCenter: true },
-    { target: '[data-teach="fin-fixed"]', text: '구독료, 관리비, 인건비 등 고정적인 지출을 입력해요.', finSection: 'fixed', scrollCenter: true },
-    { target: '[data-teach="fin-invest"]', text: '비즈니스를 발전시키기 위한 새로운 프로젝트에 투자하는 비용을 관리해요.', finSection: 'invest', scrollCenter: true },
+    { targets: ['[data-teach="fin-income"]', '[data-teach="fin-income-sec"]'], text: '이번 달 수익을 카테고리로 나눠서 기록할 수 있어요.', finSection: 'income', scrollCenter: true },
+    { targets: ['[data-teach="fin-fixed"]', '[data-teach="fin-fixed-sec"]'], text: '구독료, 관리비, 인건비 등 고정적인 지출을 입력해요.', finSection: 'fixed', scrollCenter: true },
+    { targets: ['[data-teach="fin-invest"]', '[data-teach="fin-invest-sec"]'], text: '비즈니스를 발전시키기 위한 새로운 프로젝트에 투자하는 비용을 관리해요.', finSection: 'invest', scrollCenter: true },
     { target: '[data-teach="fin-reserve"]', text: '미래에 진행할 프로젝트나 갑작스러운 상황에 대비해 남겨둘 비상금을 입력해요.', finSection: 'none', scrollCenter: true },
     { target: '[data-teach="fin-net"]', text: '남은 비용은 그대로 개인 순이익이 되어요.', finSection: 'none', scrollCenter: true },
     { target: '[data-teach="fin-report"]', text: '금전 변동 상황은 리포트 페이지에서 확인할 수 있어요.', scrollCenter: true },
@@ -369,7 +369,7 @@ export default function Teaching() {
   // 단계 시작 시 대상을 화면 중앙으로 스크롤(scrollCenter 지정 단계). 대상이 렌더될 때까지 재시도 후 1회 실행.
   useEffect(() => {
     if (!step?.scrollCenter) return;
-    const sel = step.target ?? step.targets?.[0];
+    const sel = step.target ?? step.targets?.[step.targets.length - 1]; // 다중 타깃이면 마지막(아래 섹션)을 중앙에 — 박스+섹션이 함께 보이게
     if (!sel) return;
     let tries = 0;
     const iv = setInterval(() => {

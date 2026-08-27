@@ -142,7 +142,7 @@ function IncomeSection({ month }: { month: string }) {
   const list = allRes(store).filter(e => e.type === 'income' && e.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date));
   const add = () => { const n = Number(amt.replace(/,/g, '')); if (!n || !name.trim()) return; store.addResource({ type: 'income', amount: n, description: name.trim(), date: dateFor(month), ...(cat.trim() ? { source: cat.trim() } : {}) }); setName(''); setAmt(''); };
   return (
-    <Card title="수익 입력">
+    <Card title="수익 입력" teach="fin-income-sec">
       <div className="flex flex-wrap items-center gap-2">
         <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="+ 수익 이름" className="flex-1 min-w-0 text-[14px] bg-white border rounded-xl px-3 py-2 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
         <input value={amt} onChange={e => setAmt(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="금액" className="w-24 text-[14px] tabular-nums text-right bg-white border rounded-xl px-3 py-2 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
@@ -174,7 +174,7 @@ function FixedSection({ month }: { month: string }) {
     setName(''); setAmt('');
   };
   return (
-    <Card title="고정 비용 입력">
+    <Card title="고정 비용 입력" teach="fin-fixed-sec">
       <div className="flex flex-wrap items-center gap-2">
         <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="+ 비용 이름" className="flex-1 min-w-0 text-[14px] bg-white border rounded-xl px-3 py-2 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
         <input value={amt} onChange={e => setAmt(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="금액" className="w-24 text-[14px] tabular-nums text-right bg-white border rounded-xl px-3 py-2 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
@@ -254,7 +254,7 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
     );
   };
   return (
-    <Card title="프로젝트 투자비">
+    <Card title="프로젝트 투자비" teach="fin-invest-sec">
       {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 카테고리가 없어요. Goals 카테고리 보드에서 진행 중인 프로젝트·산출물을 만들어보세요.</p> : (
         <div className="space-y-4">
           {groups.map(g => {
@@ -277,9 +277,9 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
 }
 
 // ── 공용 소컴포넌트 (그레이 톤) ──
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, teach }: { title: string; children: React.ReactNode; teach?: string }) {
   return (
-    <div className="rounded-[20px] border p-4" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+    <div data-teach={teach} className="rounded-[20px] border p-4" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
       <p className="text-[14px] font-black mb-3" style={{ color: '#16211E' }}>{title}</p>
       {children}
     </div>
