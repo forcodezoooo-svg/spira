@@ -2677,6 +2677,14 @@ export default function PlanPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 티칭 투어: 모달 없이 사업 목표를 직접 생성·적용 (리스너는 early return 위에서 등록, 실제 로직은 아래 ref로 주입)
+  const teachSuggestRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const h = () => teachSuggestRef.current();
+    window.addEventListener('spira-teach:suggest-goals', h);
+    return () => window.removeEventListener('spira-teach:suggest-goals', h);
+  }, []);
+
   if (!store.ready || !plan || !selectedWsId) return <ListSkeleton />;
 
   const selectedWs = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId)?.workspace;
@@ -3101,23 +3109,18 @@ export default function PlanPage() {
     setGoalPlanOpen(false);
     toast(`목표 ${planned.length}개를 추가했어요. 🌿`, 'success');
   };
-  // 티칭 투어: 모달 없이 사업 목표를 직접 생성·적용 (온보딩 매끄러운 흐름)
-  useEffect(() => {
-    const gen = async () => {
-      if (!aiGate()) return;
-      try {
-        const areas = (plan.workAreas ?? []).map(a => a.name);
-        const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-        const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context: buildContext(), areas, today, messages: [{ role: 'user', content: '이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.' }] }) });
-        const data = await res.json().catch(() => ({}));
-        const gs = Array.isArray(data.goals) ? data.goals : [];
-        if (gs.length) applyPlannedGoals(gs);
-      } catch { /* 무시 */ }
-    };
-    window.addEventListener('spira-teach:suggest-goals', gen);
-    return () => window.removeEventListener('spira-teach:suggest-goals', gen);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan]);
+  // 티칭 투어 직접 생성 로직 주입(리스너는 위에서 등록)
+  teachSuggestRef.current = async () => {
+    if (!aiGate()) return;
+    try {
+      const areas = (plan.workAreas ?? []).map(a => a.name);
+      const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      const res = await fetch('/api/split', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'goal-suggest', context: buildContext(), areas, today, messages: [{ role: 'user', content: '이 사업의 성장 목표 5단계를 현실적이고 촘촘하게(달성 가능한 작은 수치부터) 제안해줘.' }] }) });
+      const data = await res.json().catch(() => ({}));
+      const gs = Array.isArray(data.goals) ? data.goals : [];
+      if (gs.length) applyPlannedGoals(gs);
+    } catch { /* 무시 */ }
+  };
   const reviewGoal = async (goalId: string) => {
     if (!aiGate()) return;
     const goal = (plan.goals ?? []).find(g => g.id === goalId);
