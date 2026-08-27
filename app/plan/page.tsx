@@ -1919,7 +1919,7 @@ function GoalsSection({
       <div className="flex items-start justify-between gap-2 mb-1">
         <h2 className="text-[17px] font-black text-neutral-900">사업 목표</h2>
         {aiEnabled && onSuggestGoals && (
-          <button onClick={onSuggestGoals} disabled={!!aiBusyId}
+          <button onClick={onSuggestGoals} disabled={!!aiBusyId} data-teach="goal-suggest"
             className="flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full transition-colors flex-shrink-0 disabled:opacity-50"
             style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
             {aiBusyId === '__goals__'

@@ -22,11 +22,10 @@ type Step = {
 };
 
 const TOUR: Step[] = [
-  { page: '/plan', text: '입력하신 내용으로 기획서 초안을 작성했어요. 기획서의 내용을 채우면서 프로젝트의 방향성을 구체화해 보아요. 잘 모르겠는 내용은 AI 어시스턴트 Sparky에게 물어보면 도와줄거예요.' },
+  { page: '/plan', text: '입력하신 내용으로 사업개요를 작성했어요. 이미 작성해둔 사업계획서가 있다면, 업로드 해서 사업 계획에 참고할 수 있어요.' },
   { page: '/plan', target: '[data-teach="plan-help"]', text: '각 항목 옆에 있는 물음표를 클릭하면, 어떤 내용을 기입해야 하는지 간단한 설명을 볼 수 있어요.' },
   { page: '/plan', target: '[data-teach="plan-fill"]', text: '타이틀 옆의 다이아몬드 아이콘을 클릭하면, Sparky가 해당 칸의 내용을 채워줘요.' },
-  { page: '/plan', target: '[data-teach="sparky"]', text: 'Sparky를 불러볼까요? 아래 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
-  { page: '/plan', target: '[data-teach="sparky-panel"]', text: '아직 아이디어가 정리되지 않아도 괜찮아요. 자유롭게 대화하듯 Sparky와 이야기한 뒤 ‘이 내용으로 기획서 작성해줘’라고 부탁하면, 답변 아래에 ‘Plan에 자동으로 채우기’ 버튼이 생겨요. 그 버튼을 누르면 기획서에 바로 반영돼요.', closeChat: true },
+  { page: '/plan', target: '[data-teach="goal-suggest"]', text: '‘AI로 목표추천’ 버튼을 눌러보세요. 사업개요의 내용에 맞춰 사업 성장 목표가 자동으로 생성되어요.' },
   { page: '/plan', target: '[data-teach="nav-goals"]', text: '위의 깃발 모양 아이콘을 눌러 Goals 페이지로 이동해보세요!', go: '/programs' },
   { page: '/programs', target: '[data-teach="sparky"]', text: '아래 Sparky 아이콘을 눌러 대화창을 직접 열어보세요.', awaitChatOpen: true },
   { page: '/programs', target: '[data-teach="sparky-panel"]', text: '기획안을 기반으로 업무 일정을 계획해뒀어요. 답변 아래 ‘Goals에 자동으로 채우기’ 버튼을 누르면 할 일이 만들어져요!', autoSend: '기획안을 기반으로 이번 분기 업무 일정을 계획해줘. 프로그램·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 만들어줘.', autoIntro: '기획안을 기반으로 업무 일정을 계획해봤어요! 아래 버튼을 누르면 Goals에 자동으로 반영돼요. 🌿', awaitTodos: true, closeChat: true },
@@ -170,7 +169,19 @@ export default function Teaching() {
   const locate = useCallback(() => {
     const sels = step ? (step.targets ?? (step.target ? [step.target] : [])) : [];
     const found: DOMRect[] = [];
-    for (const s of sels) { const el = document.querySelector(s); if (el) found.push(el.getBoundingClientRect()); }
+    // html { zoom } 보정: getBoundingClientRect은 zoom이 반영된 좌표를 주지만
+    // fixed 오버레이(SVG/툴팁)는 window.innerWidth/Height 기준 좌표계라 어긋난다.
+    // html 실측폭 ÷ innerWidth 로 실제 배율을 구해 rect을 오버레이 좌표계로 환산.
+    const iw = window.innerWidth;
+    const hw = document.documentElement.getBoundingClientRect().width;
+    const ratio = iw > 0 && hw > 0 ? hw / iw : 1;
+    const scl = ratio > 0.5 && ratio < 2 ? ratio : 1;
+    for (const sel of sels) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      const b = el.getBoundingClientRect();
+      found.push(scl === 1 ? b : new DOMRect(b.left / scl, b.top / scl, b.width / scl, b.height / scl));
+    }
     setRects(found);
   }, [step]);
 
