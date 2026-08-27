@@ -305,11 +305,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
   useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
 
-  // Goals 티칭 투어: 카테고리 보드 뷰로 전환 요청
+  // Goals 티칭 투어: 카테고리 보드 뷰 전환 / 우클릭 팝업 닫기 요청
   useEffect(() => {
     const onKbView = () => { setKanban(true); setCtxMenu(null); };
+    const onCloseCtx = () => setCtxMenu(null);
     window.addEventListener('spira-teach:kb-view', onKbView);
-    return () => window.removeEventListener('spira-teach:kb-view', onKbView);
+    window.addEventListener('spira-teach:close-ctx', onCloseCtx);
+    return () => { window.removeEventListener('spira-teach:kb-view', onKbView); window.removeEventListener('spira-teach:close-ctx', onCloseCtx); };
   }, []);
 
   // 선택 항목들에 일괄 패치 적용 (레벨별로 올바른 필드에)
@@ -956,7 +958,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       <div className="flex items-center gap-2 mb-3">
         <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#EDEDE7' }}>
           {([[false, '로드맵'], [true, '카테고리 보드']] as [boolean, string][]).map(([kb, label]) => (
-            <button key={label} onClick={() => setKanban(kb)} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
+            <button key={label} onClick={() => setKanban(kb)} data-teach={kb ? 'kb-toggle' : undefined} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
           ))}
         </div>
         {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
@@ -1103,7 +1105,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                                 ))}
                               </div>
                             )}
-                            <div className="mt-1 ml-5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div data-teach="kb-addunit" className="mt-1 ml-5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button onClick={() => kbAddUnit(col, s)} className="text-[10px] font-semibold" style={{ color: '#9AA39D' }}>+ 세부 작업</button>
                               <button onClick={() => kbAiUnits(col, s)} disabled={!!kbUnitAiBusy} title="AI로 세부 작업 생성" className="flex items-center gap-0.5 text-[10px] font-bold disabled:opacity-50" style={{ color: '#7C3AED' }}>
                                 {kbUnitAiBusy === s.id
@@ -1293,7 +1295,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       {ctxMenu && (
         <>
           <div className="fixed inset-0 z-[59]" onClick={() => setCtxMenu(null)} onContextMenu={e => { e.preventDefault(); setCtxMenu(null); }} />
-          <div className="fixed z-[80] rounded-xl bg-white shadow-xl p-3" style={{ left: Math.min(ctxMenu.x, (typeof window !== 'undefined' ? window.innerWidth / htmlZoom() : 9999) - 210), top: ctxMenu.y + 6, border: '1px solid #E7E7E1', width: 196 }} onClick={e => e.stopPropagation()}>
+          <div data-teach-ctx className="fixed z-[80] rounded-xl bg-white shadow-xl p-3" style={{ left: Math.min(ctxMenu.x, (typeof window !== 'undefined' ? window.innerWidth / htmlZoom() : 9999) - 210), top: ctxMenu.y + 6, border: '1px solid #E7E7E1', width: 196 }} onClick={e => e.stopPropagation()}>
             <div className="text-[11px] font-bold mb-1.5 truncate" style={{ color: '#16211E' }}>{ctxMenu.r.kind === 'deadline' ? '프로젝트' : '산출물'} 일정</div>
             <div className="text-[10px] mb-2 truncate" style={{ color: '#9AA39D' }}>{ctxMenu.r.name}</div>
             <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>시작 날짜</div>

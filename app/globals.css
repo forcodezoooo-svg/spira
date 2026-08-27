@@ -88,6 +88,7 @@ textarea {
 /* 티칭 타이머 단계: 호버 시에만 보이는 오늘의 업무 플레이 버튼을 강제 노출 */
 body.spira-teach-timer [data-teach="today-timer"] { opacity: 1 !important; }
 body.spira-teach-template [data-teach="kb-template"] { opacity: 1 !important; }
+body.spira-teach-unitadd [data-teach="kb-addunit"] { opacity: 1 !important; }
 
 /* ── 로딩: 스켈레톤 셔머 + 브랜드 로더 (STEP 3) ── */
 @keyframes spira-shimmer {

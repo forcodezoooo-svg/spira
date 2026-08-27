@@ -24,6 +24,7 @@ type Step = {
   genTasksOnNext?: boolean;   // '다음' 클릭 시 카테고리 보드 AI 버튼으로 할일 생성
   awaitTasks?: boolean;       // 할일(subtask)이 생성될 때까지 대기 후 진행
   forceTemplate?: boolean;    // '템플릿 저장' 버튼을 강제로 노출(hover 없이도 보이게)
+  forceUnitAdd?: boolean;     // '+ 세부 작업' 추가 버튼을 강제로 노출(hover 없이도 보이게)
   // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
   tipAbove?: boolean;
   // 툴팁을 대상 '왼쪽'에 강제 배치(오른쪽 끝 버튼이라 오른쪽엔 잘릴 때)
@@ -46,9 +47,10 @@ const TOUR: Step[] = [
   { page: '/plan', text: '첫 사업 목표를 세웠어요. 이제 본격적으로 시작해볼까요?', last: true, celebrate: true },
   // ── Goals 투어 (별도) — 로드맵이 비었을 때 '첫 목표 가져오기'로 시작 (GOALS_START부터) ──
   { page: '/programs', target: '[data-teach="roadmap-bar"]', text: '프로젝트 막대 위에 마우스를 올려놓고 우클릭하면 프로젝트 시작 날짜와 소요 기간을 설정할 수 있어요!', scrollCenter: true },
-  { page: '/programs', target: '[data-teach="roadmap-bar"]', text: '직접 날짜를 입력할 수도 있지만, 드래그를 통해서 기간을 조절하거나 옮기는 것도 가능해요.', openCtx: true },
+  { page: '/programs', target: '[data-teach-ctx]', text: '직접 날짜를 입력할 수도 있지만, 드래그를 통해서 기간을 조절하거나 옮기는 것도 가능해요.', openCtx: true },
+  { page: '/programs', target: '[data-teach="kb-toggle"]', text: '카테고리 보드로 이동해볼까요?' },
   { page: '/programs', target: '[data-teach="kb-ai"]', text: 'AI 버튼을 누르면 이 프로젝트를 위한 할일이 자동으로 생성돼요.', kbView: true, scrollCenter: true, genTasksOnNext: true, awaitTasks: true },
-  { page: '/programs', target: '[data-teach="kb-task"]', text: '이 task를 위한 세부 업무도 만들어서 할 일을 좀 더 촘촘히 계획할 수 있어요. 할일 수정이나 반복 설정은 텍스트를 클릭하면 가능해요.', scrollCenter: true },
+  { page: '/programs', target: '[data-teach="kb-task"]', text: '이 task를 위한 세부 업무도 만들어서 할 일을 좀 더 촘촘히 계획할 수 있어요. 할일 수정이나 반복 설정은 텍스트를 클릭하면 가능해요.', scrollCenter: true, forceUnitAdd: true },
   { page: '/programs', target: '[data-teach="kb-template"]', text: '이 프로세스를 다음에 또 하고 싶을 땐 템플릿 저장을 해보세요. 필요할 때 또 템플릿을 불러와서 사용할 수 있어요.', forceTemplate: true, scrollCenter: true, last: true },
 ];
 // Goals 투어 시작 인덱스(위 온보딩 8단계 다음). '첫 목표 가져오기' 시 이 인덱스로 점프.
@@ -252,7 +254,7 @@ export default function Teaching() {
     if (tourActive && step?.kbView) window.dispatchEvent(new CustomEvent('spira-teach:kb-view'));
   }, [tourActive, tourIdx, step]);
 
-  // Goals 투어: 로드맵 막대의 우클릭 팝업 자동 표시(막대에 합성 contextmenu 이벤트 디스패치)
+  // Goals 투어: 로드맵 막대의 우클릭 팝업 자동 표시(막대에 합성 contextmenu 이벤트 디스패치). 단계 벗어나면 팝업 닫기.
   useEffect(() => {
     if (!tourActive || !step?.openCtx) return;
     let tries = 0;
@@ -264,13 +266,19 @@ export default function Teaching() {
         clearInterval(iv);
       } else if (++tries > 40) clearInterval(iv);
     }, 120);
-    return () => clearInterval(iv);
+    return () => { clearInterval(iv); window.dispatchEvent(new CustomEvent('spira-teach:close-ctx')); };
   }, [tourActive, tourIdx, step]);
 
   // Goals 투어: '템플릿 저장' 버튼 강제 노출(hover 없이 보이게)
   useEffect(() => {
     document.body.classList.toggle('spira-teach-template', !!(tourActive && step?.forceTemplate));
     return () => document.body.classList.remove('spira-teach-template');
+  }, [tourActive, step]);
+
+  // Goals 투어: '+ 세부 작업' 버튼 강제 노출(hover 없이 보이게)
+  useEffect(() => {
+    document.body.classList.toggle('spira-teach-unitadd', !!(tourActive && step?.forceUnitAdd));
+    return () => document.body.classList.remove('spira-teach-unitadd');
   }, [tourActive, step]);
 
   // await 감지 (할일 생성) — subtask 수 증가 폴링
