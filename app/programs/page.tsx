@@ -1472,6 +1472,13 @@ export default function ProgramsPage() {
     const allDates = deadlines.flatMap(d => [d.startDate, d.date]).filter(Boolean) as string[];
     const anchorDate = allDates.length ? new Date(allDates.sort()[0]) : new Date();
     store.addProgramToWs(gWsId, { name: goal.name, goal: goal.statement || goal.name, color: businessColor(gWsId), fromPlan: true, planGoalId: goal.id, deadlines, year: anchorDate.getFullYear(), quarter: Math.floor(anchorDate.getMonth() / 3) + 1 });
+    // 로드맵이 비어 있던 '첫 목표 가져오기'라면 Goals 티칭 투어 시작(최초 1회)
+    try {
+      if (visiblePrograms.length === 0 && !localStorage.getItem('spira_seen:goals-teach')) {
+        localStorage.setItem('spira_seen:goals-teach', '1');
+        setTimeout(() => window.dispatchEvent(new CustomEvent('spira-teach:start-goals')), 400);
+      }
+    } catch { /* empty */ }
   };
   const shortDate = (d?: string) => (d ? d.slice(5).replace('-', '.') : '');
 

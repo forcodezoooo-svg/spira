@@ -305,6 +305,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
   useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
 
+  // Goals 티칭 투어: 카테고리 보드 뷰로 전환 요청
+  useEffect(() => {
+    const onKbView = () => { setKanban(true); setCtxMenu(null); };
+    window.addEventListener('spira-teach:kb-view', onKbView);
+    return () => window.removeEventListener('spira-teach:kb-view', onKbView);
+  }, []);
+
   // 선택 항목들에 일괄 패치 적용 (레벨별로 올바른 필드에)
   const applyBulkPatches = (upList: { key: string; patch: BulkPatch }[]) => {
     const groups = new Map<string, { wsId: string; programId: string; ups: Map<string, BulkPatch> }>();
@@ -1041,7 +1048,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     <svg className="w-4 h-4" viewBox="0 0 20 20" fill={col.pinned ? '#F0B429' : 'none'} stroke={col.pinned ? '#F0B429' : '#C7CEC7'} strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8L10 2z" strokeLinejoin="round" /></svg>
                   </button>
                   <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
-                  {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
+                  {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} data-teach="kb-template" title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
                 </div>
                 {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
@@ -1063,7 +1070,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         const recurring = (s.days?.length ?? 0) > 0;   // 반복 업무는 카테고리보드에서 완료 체크를 표시하지 않음(요일별 관리)
                         const showDone = s.done && !recurring;
                         return (
-                          <div key={s.id} draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
+                          <div key={s.id} data-teach="kb-task" draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
                             data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}task · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'} / 카테고리: ${col.area}] task: ${s.name}`}
                             className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.5 : 1 }}>
                             <div className="flex items-start gap-1.5">
@@ -1110,7 +1117,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       })}
                       <div className="flex gap-1.5">
                         <button onClick={() => kbAddTask(col)} className="flex-1 py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task</button>
-                        <button onClick={() => kbAiTasks(col)} disabled={!!kbAiBusy} title="AI로 이 산출물의 task 생성" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+                        <button onClick={() => kbAiTasks(col)} data-teach="kb-ai" disabled={!!kbAiBusy} title="AI로 이 산출물의 task 생성" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
                           {kbAiBusy === col.todoId
                             ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
                             : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
@@ -1239,7 +1246,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
-                      <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
+                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
                         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
                         style={{
@@ -1286,7 +1293,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       {ctxMenu && (
         <>
           <div className="fixed inset-0 z-[59]" onClick={() => setCtxMenu(null)} onContextMenu={e => { e.preventDefault(); setCtxMenu(null); }} />
-          <div className="fixed z-[60] rounded-xl bg-white shadow-xl p-3" style={{ left: Math.min(ctxMenu.x, (typeof window !== 'undefined' ? window.innerWidth / htmlZoom() : 9999) - 210), top: ctxMenu.y + 6, border: '1px solid #E7E7E1', width: 196 }} onClick={e => e.stopPropagation()}>
+          <div className="fixed z-[80] rounded-xl bg-white shadow-xl p-3" style={{ left: Math.min(ctxMenu.x, (typeof window !== 'undefined' ? window.innerWidth / htmlZoom() : 9999) - 210), top: ctxMenu.y + 6, border: '1px solid #E7E7E1', width: 196 }} onClick={e => e.stopPropagation()}>
             <div className="text-[11px] font-bold mb-1.5 truncate" style={{ color: '#16211E' }}>{ctxMenu.r.kind === 'deadline' ? '프로젝트' : '산출물'} 일정</div>
             <div className="text-[10px] mb-2 truncate" style={{ color: '#9AA39D' }}>{ctxMenu.r.name}</div>
             <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>시작 날짜</div>

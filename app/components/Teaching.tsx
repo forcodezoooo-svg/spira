@@ -18,6 +18,12 @@ type Step = {
   awaitProject?: boolean;     // '다음'으로 프로젝트가 생성될 때까지 대기 후 진행
   expandGoals?: boolean;      // 단계 시작 시 첫 사업 목표를 자동으로 펼침
   breakdownOnNext?: boolean;  // '다음' 클릭 시 첫 목표에 AI로 프로젝트(초안) 자동 생성
+  // Goals 투어 전용
+  openCtx?: boolean;          // 단계 시작 시 로드맵 막대의 우클릭 팝업을 자동으로 띄움
+  kbView?: boolean;           // 단계 시작 시 카테고리 보드 뷰로 전환
+  genTasksOnNext?: boolean;   // '다음' 클릭 시 카테고리 보드 AI 버튼으로 할일 생성
+  awaitTasks?: boolean;       // 할일(subtask)이 생성될 때까지 대기 후 진행
+  forceTemplate?: boolean;    // '템플릿 저장' 버튼을 강제로 노출(hover 없이도 보이게)
   // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
   tipAbove?: boolean;
   // 툴팁을 대상 '왼쪽'에 강제 배치(오른쪽 끝 버튼이라 오른쪽엔 잘릴 때)
@@ -38,7 +44,15 @@ const TOUR: Step[] = [
   { page: '/plan', target: '[data-teach="goal-ai"]', text: '어떤 내용으로 채워야 할지 막막할 때는, AI가 사업개요에 맞춰 간단히 초안을 채워넣어줄 수 있어요.', scrollCenter: true, breakdownOnNext: true, awaitProject: true },
   { page: '/plan', target: '[data-teach="project-card"]', text: 'AI가 생성해준 내용들을 확인하고, 수정이나 보완해보세요!', scrollCenter: true },
   { page: '/plan', text: '첫 사업 목표를 세웠어요. 이제 본격적으로 시작해볼까요?', last: true, celebrate: true },
+  // ── Goals 투어 (별도) — 로드맵이 비었을 때 '첫 목표 가져오기'로 시작 (GOALS_START부터) ──
+  { page: '/programs', target: '[data-teach="roadmap-bar"]', text: '프로젝트 막대 위에 마우스를 올려놓고 우클릭하면 프로젝트 시작 날짜와 소요 기간을 설정할 수 있어요!', scrollCenter: true },
+  { page: '/programs', target: '[data-teach="roadmap-bar"]', text: '직접 날짜를 입력할 수도 있지만, 드래그를 통해서 기간을 조절하거나 옮기는 것도 가능해요.', openCtx: true },
+  { page: '/programs', target: '[data-teach="kb-ai"]', text: 'AI 버튼을 누르면 이 프로젝트를 위한 할일이 자동으로 생성돼요.', kbView: true, scrollCenter: true, genTasksOnNext: true, awaitTasks: true },
+  { page: '/programs', target: '[data-teach="kb-task"]', text: '이 task를 위한 세부 업무도 만들어서 할 일을 좀 더 촘촘히 계획할 수 있어요. 할일 수정이나 반복 설정은 텍스트를 클릭하면 가능해요.', scrollCenter: true },
+  { page: '/programs', target: '[data-teach="kb-template"]', text: '이 프로세스를 다음에 또 하고 싶을 땐 템플릿 저장을 해보세요. 필요할 때 또 템플릿을 불러와서 사용할 수 있어요.', forceTemplate: true, scrollCenter: true, last: true },
 ];
+// Goals 투어 시작 인덱스(위 온보딩 8단계 다음). '첫 목표 가져오기' 시 이 인덱스로 점프.
+const GOALS_START = 8;
 
 // 온보딩 투어가 다루지 않는 페이지의 첫 진입 안내. Home·Goals는 위 투어가 다룸.
 const PAGE_TIPS: Record<string, Step[]> = {
@@ -96,6 +110,16 @@ function readProjectCount(): number {
     const d = JSON.parse(localStorage.getItem('spira') || '{}');
     let n = 0;
     for (const e of d.workspaces ?? []) n += (e.plan?.projects ?? []).length;
+    return n;
+  } catch { return 0; }
+}
+
+// 전체 워크스페이스의 할일(subtask) 수 — Goals 투어의 '할일 생성' 감지용
+function readSubtaskCount(): number {
+  try {
+    const d = JSON.parse(localStorage.getItem('spira') || '{}');
+    let n = 0;
+    for (const e of d.workspaces ?? []) for (const p of e.programs ?? []) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) n += (t.subtasks ?? []).length;
     return n;
   } catch { return 0; }
 }
@@ -216,6 +240,49 @@ export default function Teaching() {
     if (tourActive && step?.expandGoals) window.dispatchEvent(new CustomEvent('spira-teach:expand-goals'));
   }, [tourActive, tourIdx, step]);
 
+  // Goals 투어 시작: '첫 목표 가져오기'가 호출하는 이벤트로 GOALS_START 단계로 점프
+  useEffect(() => {
+    const onStart = () => { localStorage.setItem(TOUR_KEY, String(GOALS_START)); setTourIdx(GOALS_START); };
+    window.addEventListener('spira-teach:start-goals', onStart);
+    return () => window.removeEventListener('spira-teach:start-goals', onStart);
+  }, []);
+
+  // Goals 투어: 카테고리 보드 뷰로 전환
+  useEffect(() => {
+    if (tourActive && step?.kbView) window.dispatchEvent(new CustomEvent('spira-teach:kb-view'));
+  }, [tourActive, tourIdx, step]);
+
+  // Goals 투어: 로드맵 막대의 우클릭 팝업 자동 표시(막대에 합성 contextmenu 이벤트 디스패치)
+  useEffect(() => {
+    if (!tourActive || !step?.openCtx) return;
+    let tries = 0;
+    const iv = setInterval(() => {
+      const el = document.querySelector('[data-teach="roadmap-bar"]') as HTMLElement | null;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+        clearInterval(iv);
+      } else if (++tries > 40) clearInterval(iv);
+    }, 120);
+    return () => clearInterval(iv);
+  }, [tourActive, tourIdx, step]);
+
+  // Goals 투어: '템플릿 저장' 버튼 강제 노출(hover 없이 보이게)
+  useEffect(() => {
+    document.body.classList.toggle('spira-teach-template', !!(tourActive && step?.forceTemplate));
+    return () => document.body.classList.remove('spira-teach-template');
+  }, [tourActive, step]);
+
+  // await 감지 (할일 생성) — subtask 수 증가 폴링
+  useEffect(() => {
+    if (!tourActive || !step?.awaitTasks) return;
+    const base = readSubtaskCount();
+    const iv = setInterval(() => {
+      if (readSubtaskCount() > base) { clearInterval(iv); advanceTour(); }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [tourActive, step, advanceTour]);
+
   // 목표 추천 단계: '목표 추천' 버튼이 모달 대신 직접 생성 경로를 타게 하는 플래그 + 클릭 시 로딩 표시
   useEffect(() => {
     setBusy(false); // 단계 진입 시 로딩 초기화
@@ -287,8 +354,12 @@ export default function Teaching() {
   // 툴팁 위치 기준. 기본은 마지막 하이라이트, tipAbove면 '첫 번째' 하이라이트(드래그할 업무) 기준.
   const rect: DOMRect | null = rects.length ? (step.tipAbove ? rects[0] : rects[rects.length - 1]) : null;
 
-  const dotCount = tourActive ? TOUR.length : pageTips!.length;
-  const dotIdx = tourActive ? tourIdx : pageIdx;
+  // 온보딩 투어[0,GOALS_START)와 Goals 투어[GOALS_START,끝)를 분리해 점 개수/위치 표시
+  const inGoals = tourActive && tourIdx >= GOALS_START;
+  const segStart = inGoals ? GOALS_START : 0;
+  const segEnd = inGoals ? TOUR.length : GOALS_START;
+  const dotCount = tourActive ? (segEnd - segStart) : pageTips!.length;
+  const dotIdx = tourActive ? (tourIdx - segStart) : pageIdx;
 
   const setTour = (n: number) => {
     if (n < 0 || n >= TOUR.length) { localStorage.removeItem(TOUR_KEY); setTourIdx(-1); }
@@ -344,6 +415,12 @@ export default function Teaching() {
         if (step.awaitProject) setBusy(true);
         window.dispatchEvent(new CustomEvent('spira-teach:breakdown-goals'));
         if (step.awaitProject) return;
+      }
+      if (step.genTasksOnNext) {
+        // 카테고리 보드 AI 버튼을 대신 눌러 할일 생성 → 생성 감지(awaitTasks)로 다음 단계 진행
+        if (step.awaitTasks) setBusy(true);
+        const btn = document.querySelector<HTMLElement>('[data-teach="kb-ai"]');
+        if (btn) { btn.click(); if (step.awaitTasks) return; }
       }
     }
     if (step.closeChat) ui.closeChat();
@@ -466,7 +543,7 @@ export default function Teaching() {
           {busy ? (
             <div className="flex items-center gap-2 mt-3.5" style={{ color: '#5B6560' }}>
               <span className="w-4 h-4 rounded-full border-2 border-neutral-200 border-t-violet-400 animate-spin" />
-              <span className="text-[13px] font-semibold">{step.awaitProject ? '프로젝트를 만들고 있어요…' : '사업 성장 목표를 만들고 있어요…'}</span>
+              <span className="text-[13px] font-semibold">{step.awaitTasks ? '할일을 만들고 있어요…' : step.awaitProject ? '프로젝트를 만들고 있어요…' : '사업 성장 목표를 만들고 있어요…'}</span>
             </div>
           ) : (
             <div className="flex items-center justify-between mt-3.5">
