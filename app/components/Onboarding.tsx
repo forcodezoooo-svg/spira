@@ -130,6 +130,13 @@ export default function Onboarding() {
     if (goPlan) router.push('/plan');
   };
 
+  // 3단계(설명)까지만 받고 마무리: 사업명·업종·컨셉만으로 워크스페이스 생성 → /plan 티칭이 이후 목표·프로젝트를 만든다
+  const finishOnboarding = () => {
+    const wsId = store.addWorkspace(name.trim());
+    store.updatePlanInWs(wsId, { ...emptyPlan, concept: desc.trim(), overview: { category, concept: desc.trim(), tagline: '', problem: '', solution: '', mission: '', vision: '' } });
+    finish(true);
+  };
+
   const inputCls = 'w-full px-4 py-3 rounded-2xl border text-[15px] outline-none focus:border-neutral-400 transition-colors';
   const primary = 'py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-40';
 
@@ -140,7 +147,7 @@ export default function Onboarding() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="Spira" className="w-6 h-auto" />
           <div className="flex-1" />
-          {[0, 1, 2, 3, 4, 5].map(i => (
+          {[0, 1, 2].map(i => (
             <span key={i} className="w-1.5 h-1.5 rounded-full transition-colors" style={{ backgroundColor: i <= step ? '#9DFE3B' : '#E1E1DA' }} />
           ))}
         </div>
@@ -202,53 +209,10 @@ export default function Onboarding() {
                 className={`${inputCls} resize-none leading-relaxed`} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E', alignContent: 'start' }} />
               <div className="flex gap-2 mt-4">
                 <button onClick={() => setStep(1)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
-                <button onClick={() => setStep(3)} disabled={!desc.trim()} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
+                <button onClick={finishOnboarding} disabled={!desc.trim()} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>시작하기</button>
               </div>
             </>
-          ) : step === 3 ? (
-            <>
-              <h2 className="text-[20px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>이 프로젝트에서<br />이루고 싶은 첫 목표는?</h2>
-              <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>예: “앱 런칭 후 사용자 10만 달성”. 이 목표를 Sparky가 분기별로 나눠 제안할게요.</p>
-              <input autoFocus value={goal} onChange={e => setGoal(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && goal.trim() && analyze()}
-                placeholder="예: 앱 런칭 후 사용자 10만 달성" className={inputCls} style={{ borderColor: 'var(--spira-border-strong)', color: '#16211E' }} />
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(2)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
-                <button onClick={analyze} disabled={!goal.trim()} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>AI로 분석하기</button>
-              </div>
-            </>
-          ) : step === 4 ? (
-            <>
-              <h2 className="text-[19px] font-black leading-snug mb-1" style={{ color: '#16211E' }}>분기별 목표 제안</h2>
-              <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>첫 목표를 이루기 위한 단계예요. 수정·추가·삭제할 수 있고, 나중에 Goals에서도 바꿀 수 있어요.</p>
-              <EditList items={qGoals} setItems={setQGoals} placeholder="목표 이름" numbered />
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(3)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
-                <button onClick={() => setStep(5)} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>다음</button>
-              </div>
-            </>
-          ) : step === 5 ? (
-            <>
-              <h2 className="text-[19px] font-black leading-snug mb-1" style={{ color: '#16211E' }}>업무 영역 제안</h2>
-              <p className="text-[13px] leading-relaxed mb-3" style={{ color: '#5B6560' }}>목표 달성에 필요한 업무 영역이에요. 수정·추가·삭제할 수 있고, 나중에 Plan에서도 바꿀 수 있어요.</p>
-              <EditList items={wAreas} setItems={setWAreas} placeholder="업무 영역 이름" descPlaceholder="이 영역이 하는 일을 한 줄로" withDesc />
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => setStep(4)} className="px-4 py-3 rounded-2xl text-[14px] font-semibold" style={{ color: '#5B6560', backgroundColor: '#F1F1EB' }}>이전</button>
-                <button onClick={createAll} className={`flex-1 ${primary}`} style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>완료</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 spira-bob" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>
-                <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none"><path d="M6 12.5l3.6 3.6L18 7.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </div>
-              <h2 className="text-[20px] font-black leading-snug mb-2" style={{ color: '#16211E' }}>좋아요! 이제부터<br />업무를 위한 계획을 세워봐요</h2>
-              <p className="text-[14px] leading-relaxed mb-6" style={{ color: '#5B6560' }}>
-                ‘{name.trim()}’ 기획서 초안·분기별 목표·업무 영역을 만들었어요. Plan에서 기획서를 다듬고, Goals에서 목표를 데드라인·업무로 쪼개 캘린더에 배치해보세요.
-              </p>
-              <button onClick={() => finish(true)} className="w-full py-3 rounded-2xl text-[15px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>내 비즈니스 시작하기</button>
-            </>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
