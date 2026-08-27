@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, forwardRef, Fragment } from 'react';
+import { useState, useEffect, useRef, useMemo, forwardRef, Fragment } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { ListSkeleton } from '../components/Skeleton';
@@ -2688,39 +2688,64 @@ export default function PlanPage() {
     return () => window.removeEventListener('spira-teach:suggest-goals', h);
   }, []);
 
-  // 이미 로드맵으로 가져온 목표(fromPlan 프로그램)에, Plan에 있지만 로드맵엔 아직 없는 프로젝트를 자동으로 채워넣음(누락 보정).
-  // 생성 시점뿐 아니라 페이지 진입 시에도 동작하므로, 이전에 추가해둔 프로젝트도 반영된다.
+  // 로드맵으로 가져온 목표(fromPlan 프로그램) ↔ Plan 프로젝트 '양방향 동기화'(추가+삭제).
+  // 로드맵 프로그램 상태 시그니처 — 로드맵이 (뒤늦게) 로드/변경돼도 동기화가 다시 돌게 하는 의존값.
+  const roadmapSig = useMemo(() => {
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    return (ws?.programs ?? []).filter(pg => pg.fromPlan)
+      .map(pg => `${pg.id}|${pg.name}|${(pg.deadlines ?? []).map(d => d.projectId ?? '·').join(',')}`).join('§');
+  }, [store.allWorkspacesEntries, selectedWsId]);
   useEffect(() => {
     if (!selectedWsId || !plan) return;
     const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
     if (!ws) return;
-    const projById = new Map((plan.projects ?? []).map(p => [p.id, p]));
+    const goals = plan.goals ?? [];
+    const projects = plan.projects ?? [];
+    const buildDeadline = (goal: Goal, p: Project) => {
+      const start = p.startDate || '';
+      const end = p.endDate || p.deadline || goal.targetDate || start || '';
+      const todos = (p.areaDeliverables ?? []).map(a => ({
+        id: uid(), name: a.area ? `${a.area}: ${a.content}` : a.content, done: !!a.done, deliverableId: a.id,
+        ...(start ? { date: start } : end ? { date: end } : {}),
+        ...(end ? { deadline: end } : {}),
+      }));
+      return { id: uid(), name: p.name, date: end, startDate: start || undefined, todos, enabled: true, projectId: p.id };
+    };
     for (const pg of ws.programs ?? []) {
       if (!pg.fromPlan) continue;
-      const dlProjIds = (pg.deadlines ?? []).map(dl => dl.projectId).filter(Boolean) as string[];
-      if (!dlProjIds.length) continue;
-      // 이 프로그램이 담당하는 목표 추론(들어있는 프로젝트의 goalId)
-      let goalId: string | undefined;
-      for (const id of dlProjIds) { const gid = projById.get(id)?.goalId; if (gid) { goalId = gid; break; } }
-      if (!goalId) continue;
-      const have = new Set(dlProjIds);
-      const missing = (plan.projects ?? []).filter(p => p.goalId === goalId && !have.has(p.id));
-      if (!missing.length) continue;
-      const goal = (plan.goals ?? []).find(g => g.id === goalId);
-      const newDeadlines = missing.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(p => {
-        const start = p.startDate || '';
-        const end = p.endDate || p.deadline || goal?.targetDate || start || '';
-        const todos = (p.areaDeliverables ?? []).map(a => ({
-          id: uid(), name: a.area ? `${a.area}: ${a.content}` : a.content, done: !!a.done, deliverableId: a.id,
-          ...(start ? { date: start } : end ? { date: end } : {}),
-          ...(end ? { deadline: end } : {}),
-        }));
-        return { id: uid(), name: p.name, date: end, startDate: start || undefined, todos, enabled: true, projectId: p.id };
-      });
-      store.updateProgramInWs(selectedWsId, { ...pg, deadlines: [...(pg.deadlines ?? []), ...newDeadlines] });
+      // 프로그램 → 목표 매핑: 데드라인 projectId의 goalId, 안 되면 프로그램 이름 == 목표 이름
+      let goal: Goal | null = null;
+      for (const dl of pg.deadlines ?? []) {
+        if (!dl.projectId) continue;
+        const p = projects.find(x => x.id === dl.projectId);
+        const g = p && goals.find(gg => gg.id === p.goalId);
+        if (g) { goal = g; break; }
+      }
+      if (!goal) goal = goals.find(g => g.name === pg.name) ?? null;
+      if (!goal) continue;
+      const goalProjects = projects.filter(p => p.goalId === goal!.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const goalProjIds = new Set(goalProjects.map(p => p.id));
+      // 유지/백필/삭제 반영
+      let changed = false;
+      const kept: typeof pg.deadlines = [];
+      for (const dl of pg.deadlines ?? []) {
+        if (dl.projectId) {
+          if (goalProjIds.has(dl.projectId)) kept.push(dl);
+          else changed = true; // Plan에서 삭제된 프로젝트 → 로드맵에서도 제거
+        } else {
+          const p = goalProjects.find(gp => gp.name === dl.name); // 옛 데이터: 이름으로 매칭해 projectId 백필
+          if (p) { kept.push({ ...dl, projectId: p.id }); changed = true; }
+          else kept.push(dl); // 수동 추가 데드라인은 그대로 유지
+        }
+      }
+      const haveIds = new Set(kept.map(dl => dl.projectId).filter(Boolean) as string[]);
+      const toAdd = goalProjects.filter(p => !haveIds.has(p.id));
+      if (toAdd.length) changed = true;
+      if (!changed) continue;
+      store.updateProgramInWs(selectedWsId, { ...pg, deadlines: [...kept, ...toAdd.map(p => buildDeadline(goal!, p))] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan?.projects, selectedWsId]);
+  }, [plan?.projects, plan?.goals, selectedWsId, roadmapSig]);
 
   if (!store.ready || !plan || !selectedWsId) return <ListSkeleton />;
 
