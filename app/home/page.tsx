@@ -719,14 +719,12 @@ export default function Home() {
                   );
                 })()}
               </div>
-              {dayCap.baseMin > 0 ? (
+              {dayCap.baseMin > 0 && (
                 <div className="flex items-center gap-3 text-[12px]">
                   <span style={{ color: '#5B6560' }}>가용 <b className="tabular-nums" style={{ color: '#16211E' }}>{fmtMin(dayCap.availableProjectMin)}</b></span>
                   <span style={{ color: '#5B6560' }}>계획 <b className="tabular-nums" style={{ color: dayCap.overMin > 0 ? '#C0392B' : '#3E7A2E' }}>{fmtMin(dayCap.plannedProjectMin)}</b></span>
                   <span style={{ color: '#9AA39D' }}>Buffer <span className="tabular-nums">{fmtMin(dayCap.bufferMin)}</span></span>
                 </div>
-              ) : (
-                <button onClick={() => window.dispatchEvent(new CustomEvent('spira:open-workhours'))} className="text-[12px] font-semibold rounded-full px-3 py-1 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>이번 주 업무시간 설정하기 ›</button>
               )}
             </div>
             {/* 진행 막대 — 업무시간 설정됐을 때만 */}
