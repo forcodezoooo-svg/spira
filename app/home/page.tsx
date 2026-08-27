@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { DashboardSkeleton } from '../components/Skeleton';
@@ -63,6 +63,20 @@ export default function Home() {
   useEffect(() => {
     return () => { closeChat(); };
   }, [closeChat]);
+
+  // 다가오는 목표: 컨테이너 폭에 맞춰 열 개수 측정 (콜백 ref로 조기 return보다 앞에서 hook 선언 — 순서 고정)
+  const [journeyCols, setJourneyCols] = useState(5);
+  const journeyRoRef = useRef<ResizeObserver | null>(null);
+  const journeyWrapRef = useCallback((el: HTMLDivElement | null) => {
+    journeyRoRef.current?.disconnect();
+    if (!el) return;
+    const MIN = 176, GAP = 16; // 한 항목 최소 폭 + 간격
+    const compute = () => setJourneyCols(Math.max(1, Math.floor((el.clientWidth + GAP) / (MIN + GAP))));
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    journeyRoRef.current = ro;
+  }, []);
 
   if (!store.ready) return <DashboardSkeleton />;
 
@@ -372,18 +386,6 @@ export default function Home() {
     if (g) g.items.push(u);
     else journeyGroups.push({ date: u.date, items: [u] });
   }
-  // 다가오는 목표: 컨테이너 폭에 맞춰 '잘리지 않을 개수'만 표시 (최대 5개)
-  const journeyWrapRef = useRef<HTMLDivElement>(null);
-  const [journeyCols, setJourneyCols] = useState(5);
-  useEffect(() => {
-    const el = journeyWrapRef.current; if (!el) return;
-    const MIN = 176, GAP = 16; // 한 항목 최소 폭 + 간격
-    const compute = () => setJourneyCols(Math.max(1, Math.floor((el.clientWidth + GAP) / (MIN + GAP))));
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [journeyGroups.length]);
   const journey = journeyGroups.slice(0, Math.min(5, journeyCols));
 
 
