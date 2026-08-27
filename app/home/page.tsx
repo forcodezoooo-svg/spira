@@ -446,7 +446,7 @@ export default function Home() {
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>오늘</span>
         )}
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-        <span className="font-bold flex-shrink-0 transition-colors" style={{ fontSize: 16.5, color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
+        <span className="font-bold flex-shrink-0 transition-colors" style={{ fontSize: 18, color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
         </span>
         <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deadlineName}</span>
@@ -564,7 +564,7 @@ export default function Home() {
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>매주</span>
         )}
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-        <span className="font-bold flex-shrink-0 transition-colors" style={{ fontSize: 16.5, color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
+        <span className="font-bold flex-shrink-0 transition-colors" style={{ fontSize: 18, color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
         </span>
         <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deliverableName}</span>
@@ -603,7 +603,7 @@ export default function Home() {
                 <button onClick={() => toggleSubtaskUnit(t, u.id)} className="w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: ud ? '#5EA63A' : '#C7CEC7', backgroundColor: ud ? '#5EA63A' : 'transparent' }}>
                   {ud && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </button>
-                <span className="flex-1 min-w-0 truncate" style={{ fontSize: 13.2, color: ud ? '#9AA39D' : '#5B6560', textDecoration: ud ? 'line-through' : 'none' }}>{u.name}</span>
+                <span className="flex-1 min-w-0 truncate" style={{ fontSize: 14.4, color: ud ? '#9AA39D' : '#5B6560', textDecoration: ud ? 'line-through' : 'none' }}>{u.name}</span>
                 {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
               </li>
             ); })}
