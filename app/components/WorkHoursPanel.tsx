@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../lib/useStore';
 import { DEFAULT_BUFFER_PERCENT, weekStartMonday, redistributeWeekTasks } from '../lib/capacity';
@@ -74,6 +74,13 @@ export default function WorkHoursPanel({ tile = false }: { tile?: boolean }) {
   const redistribute = () => applyRedistribute(capacity, true);
 
   const openModal = () => { setWeekStart(thisWeekStart); setOpen(true); };
+  // 다른 곳(예: Home 가용시간 박스)에서 업무시간 설정 모달 열기 요청
+  useEffect(() => {
+    const h = () => openModal();
+    window.addEventListener('spira:open-workhours', h);
+    return () => window.removeEventListener('spira:open-workhours', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thisWeekStart]);
 
   return (
     <>

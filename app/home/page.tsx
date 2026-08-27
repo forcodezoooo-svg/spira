@@ -691,8 +691,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* 오늘의 가용시간 (Time Management) */}
-        {dayCap.baseMin > 0 && (
+        {/* 오늘의 가용시간 (Time Management) — 업무시간 미설정이어도 박스는 항상 표시 */}
+        {(
           <div className="mb-4 rounded-[20px] border p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: dayCap.overMin > 0 ? '#F3C7C7' : 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
             <div className="flex items-center justify-between mb-2.5 flex-wrap gap-x-4 gap-y-1">
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -719,16 +719,22 @@ export default function Home() {
                   );
                 })()}
               </div>
-              <div className="flex items-center gap-3 text-[12px]">
-                <span style={{ color: '#5B6560' }}>가용 <b className="tabular-nums" style={{ color: '#16211E' }}>{fmtMin(dayCap.availableProjectMin)}</b></span>
-                <span style={{ color: '#5B6560' }}>계획 <b className="tabular-nums" style={{ color: dayCap.overMin > 0 ? '#C0392B' : '#3E7A2E' }}>{fmtMin(dayCap.plannedProjectMin)}</b></span>
-                <span style={{ color: '#9AA39D' }}>Buffer <span className="tabular-nums">{fmtMin(dayCap.bufferMin)}</span></span>
+              {dayCap.baseMin > 0 ? (
+                <div className="flex items-center gap-3 text-[12px]">
+                  <span style={{ color: '#5B6560' }}>가용 <b className="tabular-nums" style={{ color: '#16211E' }}>{fmtMin(dayCap.availableProjectMin)}</b></span>
+                  <span style={{ color: '#5B6560' }}>계획 <b className="tabular-nums" style={{ color: dayCap.overMin > 0 ? '#C0392B' : '#3E7A2E' }}>{fmtMin(dayCap.plannedProjectMin)}</b></span>
+                  <span style={{ color: '#9AA39D' }}>Buffer <span className="tabular-nums">{fmtMin(dayCap.bufferMin)}</span></span>
+                </div>
+              ) : (
+                <button onClick={() => window.dispatchEvent(new CustomEvent('spira:open-workhours'))} className="text-[12px] font-semibold rounded-full px-3 py-1 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>이번 주 업무시간 설정하기 ›</button>
+              )}
+            </div>
+            {/* 진행 막대 — 업무시간 설정됐을 때만 */}
+            {dayCap.baseMin > 0 && (
+              <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: '#F0F0EA' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(capPct * 100)}%`, backgroundColor: dayCap.overMin > 0 ? '#FF696C' : '#9DFE3B' }} />
               </div>
-            </div>
-            {/* 진행 막대 */}
-            <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: '#F0F0EA' }}>
-              <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(capPct * 100)}%`, backgroundColor: dayCap.overMin > 0 ? '#FF696C' : '#9DFE3B' }} />
-            </div>
+            )}
             {dayCap.overMin > 0 && (
               <div className="mt-3 flex items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: '#FFF1F1' }}>
                 <span className="text-[12px] font-semibold" style={{ color: '#C0392B' }}>오늘 {fmtMin(dayCap.overMin)} 초과예요</span>
