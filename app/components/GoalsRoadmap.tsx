@@ -64,7 +64,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const gran: Scale = pxPerDay < 8 ? 'year' : pxPerDay < 40 ? 'month' : 'week'; // 줌 정도에 따라 눈금/라벨 밀도만 결정
   const [kanban, setKanban] = useState(false); // 칸반 탭 여부
   const [sortMode, setSortMode] = useState<'dday' | 'business'>('business'); // 로드맵 정렬: 디데이순 / 비즈니스별
-  const [ctxMenu, setCtxMenu] = useState<{ r: Row; x: number; y: number; days: number } | null>(null); // 우클릭 소요일 입력
+  const [ctxMenu, setCtxMenu] = useState<{ r: Row; x: number; y: number; days: number; start: string } | null>(null); // 우클릭 시작일·소요일 입력
   const [linkFrom, setLinkFrom] = useState<string | null>(null); // 막대 연결: 선행 산출물(todo) id 선택 중
   const [editingKey, setEditingKey] = useState<string | null>(null); // 리스트 이름 인라인 편집 중인 행
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
@@ -186,11 +186,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(t.wsId, { ...prog, deadlines });
   };
 
-  // 우클릭 → 소요 일수(N일) 입력: 시작일 고정, 완료일 = 시작일 + (N-1). 프로젝트면 하위도 함께 스케일.
-  const setBarDuration = (r: Row, days: number) => {
-    if (!r.start) return;
-    const newEnd = addDaysStr(r.start, Math.max(0, Math.round(days) - 1));
-    applyBarRange({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, r.start, newEnd, r.start, r.end ?? r.start);
+  // 우클릭 → 시작 날짜 + 소요 일수 함께 적용: 새 시작일부터 N일. 프로젝트면 하위도 함께 스케일/이동.
+  const setBarRange = (r: Row, start: string, days: number) => {
+    if (!start) return;
+    const newEnd = addDaysStr(start, Math.max(0, Math.round(days) - 1));
+    applyBarRange({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, start, newEnd, r.start ?? start, r.end ?? start);
   };
 
   // 리스트에서 프로젝트(데드라인)·산출물(todo) 이름 변경
@@ -1233,7 +1233,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
                       <div data-rm-bar={r.key} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
-                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); if (r.level > 0 && r.start && r.end) setCtxMenu({ r, x: e.clientX, y: e.clientY, days: daysBetween(r.start, r.end) + 1 }); }}
+                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); if (r.level > 0 && r.start && r.end) setCtxMenu({ r, x: e.clientX, y: e.clientY, days: daysBetween(r.start, r.end) + 1, start: r.start }); }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
                         style={{
                           left, width: Math.max(width, bl === 1 ? 14 : 6), height: barH(bl),
@@ -1280,17 +1280,23 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         <>
           <div className="fixed inset-0 z-[59]" onClick={() => setCtxMenu(null)} onContextMenu={e => { e.preventDefault(); setCtxMenu(null); }} />
           <div className="fixed z-[60] rounded-xl bg-white shadow-xl p-3" style={{ left: Math.min(ctxMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 210), top: ctxMenu.y + 6, border: '1px solid #E7E7E1', width: 196 }} onClick={e => e.stopPropagation()}>
-            <div className="text-[11px] font-bold mb-1.5 truncate" style={{ color: '#16211E' }}>{ctxMenu.r.kind === 'deadline' ? '프로젝트' : '산출물'} 소요 일수</div>
+            <div className="text-[11px] font-bold mb-1.5 truncate" style={{ color: '#16211E' }}>{ctxMenu.r.kind === 'deadline' ? '프로젝트' : '산출물'} 일정</div>
             <div className="text-[10px] mb-2 truncate" style={{ color: '#9AA39D' }}>{ctxMenu.r.name}</div>
+            <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>시작 날짜</div>
+            <input type="date" value={ctxMenu.start}
+              onChange={e => setCtxMenu(c => c ? { ...c, start: e.target.value } : c)}
+              onKeyDown={e => { if (e.key === 'Enter') { setBarRange(ctxMenu.r, ctxMenu.start, ctxMenu.days); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
+              className="w-full text-[13px] px-2 py-1.5 rounded-lg outline-none tabular-nums mb-2.5" style={{ border: '1.5px solid #C9D6C2' }} />
+            <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>소요 일수</div>
             <div className="flex items-center gap-1.5">
-              <input type="number" min={1} autoFocus value={ctxMenu.days}
+              <input type="number" min={1} value={ctxMenu.days}
                 onChange={e => setCtxMenu(c => c ? { ...c, days: Math.max(1, Number(e.target.value) || 1) } : c)}
-                onKeyDown={e => { if (e.key === 'Enter') { setBarDuration(ctxMenu.r, ctxMenu.days); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') { setBarRange(ctxMenu.r, ctxMenu.start, ctxMenu.days); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
                 className="w-16 text-[13px] px-2 py-1.5 rounded-lg outline-none tabular-nums text-center" style={{ border: '1.5px solid #C9D6C2' }} />
               <span className="text-[12px]" style={{ color: '#5B6560' }}>일</span>
-              <button onClick={() => { setBarDuration(ctxMenu.r, ctxMenu.days); setCtxMenu(null); }} className="ml-auto text-[12px] font-bold rounded-lg px-3 py-1.5 text-white" style={{ backgroundColor: '#3E6B1F' }}>적용</button>
+              <button onClick={() => { setBarRange(ctxMenu.r, ctxMenu.start, ctxMenu.days); setCtxMenu(null); }} className="ml-auto text-[12px] font-bold rounded-lg px-3 py-1.5 text-white" style={{ backgroundColor: '#3E6B1F' }}>적용</button>
             </div>
-            {ctxMenu.r.kind === 'deadline' && <div className="text-[10px] mt-2 leading-snug" style={{ color: '#9AA39D' }}>시작일 고정 · 하위 산출물도 함께 조정</div>}
+            {ctxMenu.r.kind === 'deadline' && <div className="text-[10px] mt-2 leading-snug" style={{ color: '#9AA39D' }}>시작일부터 소요 일수만큼 배치 · 하위 산출물도 함께 조정돼요.</div>}
           </div>
         </>
       )}

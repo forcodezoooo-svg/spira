@@ -2906,7 +2906,11 @@ export default function PlanPage() {
     projects: (plan.projects ?? []).map(p => p.goalId === id ? { ...p, goalId: undefined } : p), // 프로젝트는 남기고 연결만 해제
   });
   const projectsOfGoal = (goalId: string) => (plan.projects ?? []).filter(p => p.goalId === goalId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const addProjectToGoal = (goalId: string, name: string) => update({ projects: [...(plan.projects ?? []), { id: uid(), name, goalId, order: (plan.projects ?? []).filter(p => p.goalId === goalId).length, status: 'planned', areaDeliverables: [] }] });
+  const addProjectToGoal = (goalId: string, name: string) => {
+    const np: Project = { id: uid(), name, goalId, order: (plan.projects ?? []).filter(p => p.goalId === goalId).length, status: 'planned', areaDeliverables: [] };
+    update({ projects: [...(plan.projects ?? []), np] });
+    addProjectsToRoadmap(goalId, [np]);
+  };
 
   // Plan 목표 → Goals 로드맵: 목표의 프로젝트를 데드라인으로, 영역별 산출물을 할일로 만들어 날짜대로 배치
   const importGoalToGoals = (goalId: string) => {
@@ -2950,6 +2954,32 @@ export default function PlanPage() {
       order: (ws?.programs ?? []).length,
     });
     toast(`‘${goal.name}’을(를) Goals 로드맵으로 가져왔어요. 🌿`, 'success');
+  };
+  // 이미 로드맵으로 가져온 목표(fromPlan 프로그램)라면, 새로 만든 프로젝트를 로드맵 데드라인으로 자동 추가
+  const addProjectsToRoadmap = (goalId: string, newProjects: Project[]) => {
+    if (!selectedWsId || !newProjects.length) return;
+    const goal = (plan.goals ?? []).find(g => g.id === goalId);
+    if (!goal) return;
+    const siblingIds = new Set(projectsOfGoal(goalId).map(p => p.id));
+    const ws = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId);
+    // 이 목표의 다른 프로젝트가 이미 들어있는 fromPlan 프로그램을 찾는다(= 이미 가져온 목표)
+    const prog = (ws?.programs ?? []).find(pg => pg.fromPlan && (pg.deadlines ?? []).some(dl => dl.projectId && siblingIds.has(dl.projectId)));
+    if (!prog) return; // 아직 로드맵에 가져오지 않은 목표면 자동 추가하지 않음
+    const already = new Set((prog.deadlines ?? []).map(dl => dl.projectId).filter(Boolean));
+    const toAdd = newProjects.filter(p => !already.has(p.id));
+    if (!toAdd.length) return;
+    const newDeadlines = toAdd.map(p => {
+      const start = p.startDate || '';
+      const end = p.endDate || p.deadline || goal.targetDate || start || '';
+      const todos = (p.areaDeliverables ?? []).map(a => ({
+        id: uid(), name: a.area ? `${a.area}: ${a.content}` : a.content, done: !!a.done, deliverableId: a.id,
+        ...(start ? { date: start } : end ? { date: end } : {}),
+        ...(end ? { deadline: end } : {}),
+      }));
+      return { id: uid(), name: p.name, date: end, startDate: start || undefined, todos, enabled: true, projectId: p.id };
+    });
+    store.updateProgramInWs(selectedWsId, { ...prog, deadlines: [...(prog.deadlines ?? []), ...newDeadlines] });
+    toast('새 프로젝트를 Goals 로드맵에도 반영했어요. 🌿', 'success');
   };
   const updateProject = (id: string, patch: Partial<Project>) => {
     const prev = (plan.projects ?? []).find(p => p.id === id);
@@ -3168,6 +3198,8 @@ export default function PlanPage() {
       toast(`프로젝트 ${projs.length}개를 추가했어요. 🌿`, 'success');
       // 생성된 첫 프로젝트를 자동으로 펼쳐 보이게
       if (newProjects[0]) window.dispatchEvent(new CustomEvent('spira:expand-project', { detail: newProjects[0].id }));
+      // 이미 로드맵으로 가져온 목표라면 새 프로젝트도 로드맵에 자동 반영
+      addProjectsToRoadmap(goalId, newProjects);
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
     finally { setAiBusyId(null); }
   };
