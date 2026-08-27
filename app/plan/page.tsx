@@ -126,7 +126,6 @@ function SectionHeader({
     <div className="flex items-center justify-between mb-2">
       <div className="flex items-center gap-2">
         <div
-          data-teach={onAskAI ? 'plan-fill' : undefined}
           className={onAskAI ? 'flex items-center gap-1 cursor-pointer group' : 'flex items-center'}
           onClick={onAskAI}
           title={onAskAI ? 'AI에게 이 항목 묻기' : undefined}
@@ -1599,7 +1598,7 @@ function BusinessDocBox({
             <div className="flex items-center gap-1.5 mb-1">
               <label className="text-[11px] font-semibold text-neutral-400">{f.label}</label>
               {onGenerateField && aiEnabled && (
-                <button onClick={() => onGenerateField(f.key)} title="AI가 이 항목 채우기" className="text-violet-400 hover:text-violet-600 transition-colors">
+                <button onClick={() => onGenerateField(f.key)} data-teach="plan-fill" title="AI가 이 항목 채우기" className="text-violet-400 hover:text-violet-600 transition-colors">
                   <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
                 </button>
               )}

@@ -169,13 +169,11 @@ export default function Teaching() {
   const locate = useCallback(() => {
     const sels = step ? (step.targets ?? (step.target ? [step.target] : [])) : [];
     const found: DOMRect[] = [];
-    // html { zoom } 보정: getBoundingClientRect은 zoom이 반영된 좌표를 주지만
-    // fixed 오버레이(SVG/툴팁)는 window.innerWidth/Height 기준 좌표계라 어긋난다.
-    // html 실측폭 ÷ innerWidth 로 실제 배율을 구해 rect을 오버레이 좌표계로 환산.
-    const iw = window.innerWidth;
-    const hw = document.documentElement.getBoundingClientRect().width;
-    const ratio = iw > 0 && hw > 0 ? hw / iw : 1;
-    const scl = ratio > 0.5 && ratio < 2 ? ratio : 1;
+    // html { zoom } 보정: getBoundingClientRect은 zoom이 반영된 좌표를 주는데
+    // fixed 오버레이(SVG/툴팁)도 html zoom 안에서 다시 zoom배 스케일되어 좌표가 두 번 곱해진다.
+    // → rect을 html zoom으로 한 번 나눠 오버레이 좌표계에 맞춘다.
+    const zc = parseFloat(getComputedStyle(document.documentElement).zoom || '1');
+    const scl = zc && !isNaN(zc) && zc > 0.5 && zc < 3 ? zc : 1;
     for (const sel of sels) {
       const el = document.querySelector(sel);
       if (!el) continue;
