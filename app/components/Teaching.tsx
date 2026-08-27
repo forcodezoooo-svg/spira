@@ -15,6 +15,7 @@ type Step = {
   closeChat?: boolean; go?: string; last?: boolean; prefill?: string; celebrate?: boolean;
   awaitChatOpen?: boolean; awaitTodos?: boolean; awaitPlaced?: boolean; awaitTimer?: boolean;
   awaitGoals?: boolean;       // '다음'/버튼으로 사업 목표가 생성될 때까지 대기 후 진행
+  awaitProject?: boolean;     // '다음'으로 프로젝트가 생성될 때까지 대기 후 진행
   expandGoals?: boolean;      // 단계 시작 시 첫 사업 목표를 자동으로 펼침
   breakdownOnNext?: boolean;  // '다음' 클릭 시 첫 목표에 AI로 프로젝트(초안) 자동 생성
   // 다중 대상 단계에서 툴팁을 '첫 번째 대상' 바로 위에 띄우고 싶을 때 (예: 드래그할 업무 위)
@@ -34,8 +35,8 @@ const TOUR: Step[] = [
   { page: '/plan', target: '[data-teach="plan-fill"]', text: '타이틀 옆의 다이아몬드 아이콘을 클릭하면, Sparky가 해당 칸의 내용을 채워줘요.' },
   { page: '/plan', target: '[data-teach="goal-suggest"]', text: '‘AI로 목표추천’ 버튼을 눌러보세요. 사업개요의 내용에 맞춰 사업 성장 목표가 자동으로 생성되어요.', scrollCenter: true, tipLeft: true, awaitGoals: true },
   { page: '/plan', target: '[data-teach="goal-card"]', text: '사업목표를 이루기 위한 전략과 성과지표를 설정하고, 본격적인 업무 프로젝트를 설정할 수 있어요.', expandGoals: true, scrollCenter: true },
-  { page: '/plan', target: '[data-teach="goal-ai"]', text: '어떤 내용으로 채워야 할지 막막할 때는, AI가 사업개요에 맞춰 간단히 초안을 채워넣어줄 수 있어요.', scrollCenter: true, breakdownOnNext: true },
-  { page: '/plan', target: '[data-teach="goal-card"]', text: 'AI가 생성해준 내용들을 확인하고, 수정이나 보완해보세요!', scrollCenter: true },
+  { page: '/plan', target: '[data-teach="goal-ai"]', text: '어떤 내용으로 채워야 할지 막막할 때는, AI가 사업개요에 맞춰 간단히 초안을 채워넣어줄 수 있어요.', scrollCenter: true, breakdownOnNext: true, awaitProject: true },
+  { page: '/plan', target: '[data-teach="project-card"]', text: 'AI가 생성해준 내용들을 확인하고, 수정이나 보완해보세요!', scrollCenter: true },
   { page: '/plan', text: '첫 사업 목표를 세웠어요. 이제 본격적으로 시작해볼까요?', last: true, celebrate: true },
 ];
 
@@ -85,6 +86,16 @@ function readGoalCount(): number {
     const d = JSON.parse(localStorage.getItem('spira') || '{}');
     let n = 0;
     for (const e of d.workspaces ?? []) n += (e.plan?.goals ?? []).length;
+    return n;
+  } catch { return 0; }
+}
+
+// 전체 워크스페이스의 프로젝트(plan.projects) 수 — 투어의 '프로젝트 생성' 감지용
+function readProjectCount(): number {
+  try {
+    const d = JSON.parse(localStorage.getItem('spira') || '{}');
+    let n = 0;
+    for (const e of d.workspaces ?? []) n += (e.plan?.projects ?? []).length;
     return n;
   } catch { return 0; }
 }
@@ -186,6 +197,16 @@ export default function Teaching() {
     const base = readGoalCount();
     const iv = setInterval(() => {
       if (readGoalCount() > base) { clearInterval(iv); advanceTour(); }
+    }, 500);
+    return () => clearInterval(iv);
+  }, [tourActive, step, advanceTour]);
+
+  // await 감지 (프로젝트 생성) — plan.projects 수 증가 폴링
+  useEffect(() => {
+    if (!tourActive || !step?.awaitProject) return;
+    const base = readProjectCount();
+    const iv = setInterval(() => {
+      if (readProjectCount() > base) { clearInterval(iv); advanceTour(); }
     }, 500);
     return () => clearInterval(iv);
   }, [tourActive, step, advanceTour]);
@@ -319,8 +340,10 @@ export default function Teaching() {
         if (btn) { btn.click(); return; }
       }
       if (step.breakdownOnNext) {
-        // 첫 목표에 AI로 프로젝트(초안) 자동 생성 트리거 후 다음 안내로 진행
+        // 첫 목표에 AI로 프로젝트(초안) 자동 생성 트리거 → 생성 감지(awaitProject)로 다음 단계 진행
+        if (step.awaitProject) setBusy(true);
         window.dispatchEvent(new CustomEvent('spira-teach:breakdown-goals'));
+        if (step.awaitProject) return;
       }
     }
     if (step.closeChat) ui.closeChat();
@@ -443,7 +466,7 @@ export default function Teaching() {
           {busy ? (
             <div className="flex items-center gap-2 mt-3.5" style={{ color: '#5B6560' }}>
               <span className="w-4 h-4 rounded-full border-2 border-neutral-200 border-t-violet-400 animate-spin" />
-              <span className="text-[13px] font-semibold">사업 성장 목표를 만들고 있어요…</span>
+              <span className="text-[13px] font-semibold">{step.awaitProject ? '프로젝트를 만들고 있어요…' : '사업 성장 목표를 만들고 있어요…'}</span>
             </div>
           ) : (
             <div className="flex items-center justify-between mt-3.5">

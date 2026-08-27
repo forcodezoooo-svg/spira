@@ -2097,7 +2097,7 @@ function GoalsSection({
                         const pst = GOAL_STATUS_META[p.status ?? 'planned'];
                         return (
                           <Fragment key={p.id}>
-                            <div className="border border-neutral-200 rounded-xl bg-neutral-50">
+                            <div data-teach="project-card" className="border border-neutral-200 rounded-xl bg-neutral-50">
                               <div className="flex items-center gap-2 px-3 py-2">
                                 <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                                   <Chevron open={pOpen} />
