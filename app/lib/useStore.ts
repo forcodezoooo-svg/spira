@@ -229,6 +229,36 @@ export function useStore() {
   const deleteProgramInWs = (wsId: string, id: string) =>
     updateWorkspace(wsId, e => ({ ...e, programs: e.programs.filter(x => x.id !== id) }));
 
+  // 실측 반영: 특정 업무 영역(program.name)의 '완료 안 된' task 예상시간을 배율만큼 조정.
+  // 원본은 durationBase에 보존해 재적용해도 누적되지 않게 한다. 조정된 task 수 반환.
+  const applyAreaEstimate = (area: string, factor: number): number => {
+    let count = 0;
+    update(d => ({
+      ...d,
+      workspaces: d.workspaces.map(e => ({
+        ...e,
+        programs: (e.programs ?? []).map(p => p.name !== area ? p : ({
+          ...p,
+          deadlines: (p.deadlines ?? []).map(dl => ({
+            ...dl,
+            todos: (dl.todos ?? []).map(t => ({
+              ...t,
+              subtasks: (t.subtasks ?? []).map(s => {
+                if (s.done || s.status === 'done' || !s.durationMin) return s;
+                const base = s.durationBase ?? s.durationMin;
+                const adj = Math.max(5, Math.round((base * factor) / 5) * 5);
+                if (adj === s.durationMin) return s;
+                count += 1;
+                return { ...s, durationBase: base, durationMin: adj };
+              }),
+            })),
+          })),
+        })),
+      })),
+    }));
+    return count;
+  };
+
   const setWorkspaceColor = (wsId: string, color: string) =>
     updateWorkspace(wsId, e => ({ ...e, workspace: { ...e.workspace, color } }));
 
@@ -784,7 +814,7 @@ export function useStore() {
     updatePlan,
     allWorkspacesEntries,
     addProgram, updateProgram, deleteProgram, reorderPrograms,
-    addProgramToWs, updateProgramInWs, deleteProgramInWs, reorderProgramsInWs,
+    addProgramToWs, updateProgramInWs, deleteProgramInWs, reorderProgramsInWs, applyAreaEstimate,
     setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, toggleDeadlineDone, shiftAllSchedulesAfter,
     journeyFlags: appData.journeyFlags ?? [],
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask,

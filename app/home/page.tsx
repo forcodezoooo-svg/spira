@@ -5,6 +5,7 @@ import { useStore } from '../lib/useStore';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState, SuccessState } from '../components/EmptyState';
 import { useUI } from '../lib/UIContext';
+import { useToast } from '../lib/ToastContext';
 import { getGoalTasksForDate, getSubtaskTasksForDate, GoalTask, SubtaskTask, workspaceColor } from '../lib/goalTasks';
 import TaskTimerButton from '../components/TaskTimerButton';
 import TodoEditModal from '../components/TodoEditModal';
@@ -31,6 +32,7 @@ function calcDday(deadline: string): { label: string; urgent: boolean; overdue: 
 export default function Home() {
   const store = useStore();
   const router = useRouter();
+  const { toast } = useToast();
   const { closeChat } = useUI();
   const { stopTaskTimer, getDisplaySeconds } = useTimer();
   const [workspaceName, setWorkspaceName] = useState('');
@@ -862,15 +864,22 @@ export default function Home() {
         {accuracy.length > 0 && (
           <div className="bg-white border rounded-2xl p-4" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)' }}>
             <span className="text-[13px] font-black" style={{ color: '#16211E' }}>예상 vs 실제</span>
-            <p className="text-[11px] mt-0.5 mb-3 leading-relaxed" style={{ color: '#9AA39D' }}>완료한 업무의 실제 시간을 모아 예상과 비교해요. 새 업무의 예상시간 보정에 쓰여요.</p>
+            <p className="text-[11px] mt-0.5 mb-3 leading-relaxed" style={{ color: '#9AA39D' }}>완료한 업무의 실제 시간을 모았어요. ‘실측 반영’을 누르면 그 영역의 <b style={{ color: '#5B6560' }}>남은 할일 예상시간</b>이 실제 기록 기준으로 조정돼요.</p>
             <div className="space-y-2.5">
               {accuracy.slice(0, 5).map(a => {
                 const diff = Math.round((a.factor - 1) * 100);
+                const canApply = a.count >= 3 && Math.abs(diff) >= 10;
                 return (
                   <div key={a.area}>
                     <div className="flex items-center justify-between gap-2 mb-0.5">
                       <span className="text-[12px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{a.area}</span>
-                      <span className="text-[11px] font-bold flex-shrink-0" style={{ color: diff > 10 ? '#C0392B' : diff < -10 ? '#2B62C4' : '#3E7A2E' }}>{diff > 0 ? `+${diff}%` : `${diff}%`}</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-[11px] font-bold" style={{ color: diff > 10 ? '#C0392B' : diff < -10 ? '#2B62C4' : '#3E7A2E' }}>{diff > 0 ? `+${diff}%` : `${diff}%`}</span>
+                        {canApply && (
+                          <button onClick={() => { const n = store.applyAreaEstimate(a.area, a.factor); toast(n > 0 ? `‘${a.area}’ 남은 할일 ${n}개의 예상시간을 실측 기준으로 조정했어요.` : '조정할 남은 할일이 없어요.', n > 0 ? 'success' : 'info'); }}
+                            className="text-[10px] font-bold rounded-full px-2 py-0.5 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>실측 반영</button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 text-[11px]" style={{ color: '#9AA39D' }}>
                       <span>예상 {fmtMin(a.avgEstimate)}</span>

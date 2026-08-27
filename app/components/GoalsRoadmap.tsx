@@ -590,18 +590,28 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const start = dl.startDate || dl.date || todayStr;
     const anchor = start > todayStr ? start : todayStr; // 프로젝트 시작일이 미래면 그 날부터, 아니면 오늘부터 배치
     const tasks = tplTasks ?? [];
-    const nonRecDur = tasks.filter(t => !(t.days?.length)).map(t => t.durationMin ?? 0);
+    // 실측 반영: 템플릿을 불러올 때, 이 영역(프로그램)의 과거 예상 대비 실제 배율로 예상시간 보정
+    const factor = tasks.length ? areaFactor(store.allWorkspacesEntries, prog.name) : 1;
+    const adjDur = (min?: number): { durationMin?: number; durationBase?: number } => {
+      if (!min || factor === 1) return { durationMin: min };
+      const adj = Math.max(5, Math.round((min * factor) / 5) * 5);
+      return adj === min ? { durationMin: min } : { durationMin: adj, durationBase: min };
+    };
+    let adjustedCount = 0;
+    const nonRecDur = tasks.filter(t => !(t.days?.length)).map(t => adjDur(t.durationMin).durationMin ?? 0);
     const dates = nonRecDur.length ? scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, nonRecDur, anchor, dl.date || undefined, { spread: true }) : [];
     let di = 0;
     const subtasks = tasks.map(t => {
       const units = (t.units ?? []).map(u => ({ id: uid(), name: u.name, done: false, durationMin: u.durationMin }));
+      const du = adjDur(t.durationMin); if (du.durationBase != null) adjustedCount += 1;
       // 반복 task는 '반복 시작일'이 미래면 오늘부터 시작(오늘 요일부터 바로 뜨도록)
-      if (t.days?.length) return { id: uid(), name: t.name, done: false, date: anchor <= todayStr ? anchor : todayStr, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, days: t.days, units };
+      if (t.days?.length) return { id: uid(), name: t.name, done: false, date: anchor <= todayStr ? anchor : todayStr, ...du, schedulingType: t.schedulingType, priority: t.priority, days: t.days, units };
       const d = dates[di++] ?? anchor;
-      return { id: uid(), name: t.name, done: false, date: d, deadline: d, durationMin: t.durationMin, schedulingType: t.schedulingType, priority: t.priority, units };
+      return { id: uid(), name: t.name, done: false, date: d, deadline: d, ...du, schedulingType: t.schedulingType, priority: t.priority, units };
     });
     const newTodo = { id: uid(), name: n, done: false, date: start, deadline: dl.date || start, subtasks };
     store.updateProgramInWs(catTarget.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== catTarget.dlId ? d : { ...d, todos: [...d.todos, newTodo] }) });
+    if (adjustedCount > 0) toast(`실제 기록을 반영해 예상시간 ${adjustedCount}개를 조정했어요 (평균 ${Math.round((factor - 1) * 100) > 0 ? '+' : ''}${Math.round((factor - 1) * 100)}%).`, 'success');
     setCatName(''); setCatPanel(false);
   };
   // 이 카테고리(산출물)의 task 세트를 템플릿으로 저장
@@ -1083,7 +1093,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                               {isBlocked(s) && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FBF3E0', color: '#96631A' }} title="선행 작업이 아직 안 끝났어요">선행 대기</span>}
                               {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
                               {s.schedulingType && s.schedulingType !== 'flexible' && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: s.schedulingType === 'fixed' ? '#E7F0FF' : '#FBF3E0', color: s.schedulingType === 'fixed' ? '#2B62C4' : '#96631A' }}>{s.schedulingType === 'fixed' ? '고정' : '기한'}</span>}
-                              {s.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(s.durationMin)}</span> : null}
+                              {s.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0 inline-flex items-center gap-0.5" style={{ color: '#7C3AED' }}>{s.durationBase != null && s.durationBase !== s.durationMin && <span title={`실측 반영: 원래 예상 ${fmtDur(s.durationBase)}`}>↻</span>}{fmtDur(s.durationMin)}</span> : null}
                               {!s.done && <DdayBadge d={s.deadline} />}
                               <button onClick={() => kbDel(col, s.id)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
                             </div>
