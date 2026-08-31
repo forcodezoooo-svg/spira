@@ -773,14 +773,22 @@ export default function ProgramsPage() {
     // 각 원소는 '기존 카테고리(todo)'를 가리키고, 그 안에 task(subtask)를 추가한다.
     const today = todayKey;
     let total = 0, recurring = 0, addedTo = 0;
+    const norm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
+    const areaOf = (name: string) => { const m = name.match(/^(.*?)\s*[:：]/); return m ? m[1].trim() : name; };
+    // 모든 fromPlan 카테고리(todo)를 이름 매칭용으로 수집
+    const allCats = store.allWorkspacesEntries.flatMap(e => e.programs.filter(p => p.fromPlan).flatMap(p => (p.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => ({ wsId: e.workspace.id, prog: p, dl: d, todo: t })))));
     for (const it of list) {
-      const w = it.wsId, pid = it.programId, did = it.deadlineId, tid = it.todoId;
-      if (!w || !pid || !did || !tid || !it.tasks?.length) continue;
-      const entry = store.allWorkspacesEntries.find(e => e.workspace.id === w);
-      const prog = entry?.programs.find(p => p.id === pid);
-      const dl = prog?.deadlines?.find(d => d.id === did);
-      const todo = dl?.todos?.find(t => t.id === tid);
-      if (!prog || !dl || !todo) continue;
+      if (!it.tasks?.length) continue;
+      // 1) ids로 정확 매칭
+      let hit = allCats.find(c => c.wsId === it.wsId && c.prog.id === it.programId && c.dl.id === it.deadlineId && c.todo.id === it.todoId);
+      // 2) ids가 안 맞으면 카테고리 이름으로 매칭(전체 이름 또는 영역명)
+      if (!hit && it.category) {
+        const key = norm(it.category);
+        hit = allCats.find(c => norm(c.todo.name) === key || norm(areaOf(c.todo.name)) === key)
+           ?? allCats.find(c => norm(c.todo.name).includes(key) || norm(areaOf(c.todo.name)).includes(key));
+      }
+      if (!hit) continue;
+      const w = hit.wsId, prog = hit.prog, dl = hit.dl, todo = hit.todo, did = dl.id, tid = todo.id;
       const newSubs = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;
         total += 1; if (days) recurring += 1;
@@ -792,7 +800,8 @@ export default function ProgramsPage() {
       addedTo += 1;
     }
     if (total > 0) toast(`업무 ${total}개를 카테고리 ${addedTo}곳에 추가했어요${recurring ? ` (반복 ${recurring}개 포함)` : ''}. Task 보드에서 확인하세요.`, 'success');
-    else toast('추가할 대상 카테고리를 찾지 못했어요. 카테고리를 먼저 알려주세요.', 'info');
+    else if (allCats.length === 0) toast('Task 보드에 카테고리가 없어요. 먼저 목표를 가져와 프로젝트·산출물을 만들어 주세요.', 'info');
+    else toast('어느 카테고리에 넣을지 못 찾았어요. 채팅에서 카테고리 이름을 정확히 알려주세요.', 'info');
   };
 
   // 구버전 GOALS_UPDATE 조작 → 주요 add 케이스만 반영(프로그램 추가 / 루틴 추가)
