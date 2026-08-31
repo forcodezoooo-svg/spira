@@ -207,6 +207,18 @@ function extractAction(full: string): ChatAction & { display: string } | null {
     const payload = tryParse(sliceArr(after(ROUTINE_MARKER)));
     if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Process에 업무 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
   }
+  // 관대한 폴백: 마커를 빼먹고 JSON만(코드블록/본문) 쓴 경우 — items가 tasks 배열을 가지면 업무 추가로 간주
+  {
+    const fence = full.match(/```(?:json)?\s*([\s\S]*?)```/);
+    let candidate = '', startIdx = -1;
+    if (fence) { candidate = fence[1].trim(); startIdx = fence.index ?? -1; }
+    else { const s = full.indexOf('['), e = full.lastIndexOf(']'); if (s !== -1 && e > s) { candidate = full.slice(s, e + 1); startIdx = s; } }
+    const arr = candidate ? tryParse(candidate) : undefined;
+    if (Array.isArray(arr) && arr.length > 0 && arr.every((x: unknown) => !!x && typeof x === 'object' && Array.isArray((x as { tasks?: unknown }).tasks))) {
+      const display = (startIdx >= 0 ? full.slice(0, startIdx) : full).replace(/(?:위|아래)?\s*JSON[\s\S]*$/, '').trim();
+      return { kind: 'goals', marker: ROUTINE_MARKER, payload: arr, route: '/programs', label: 'Process에 업무 추가', feedback: FEEDBACK.routineAdded(arr.length), display: display || '요청하신 업무 설계안이에요. 아래 버튼으로 반영할 수 있어요.' };
+    }
+  }
   return null;
 }
 
