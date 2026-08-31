@@ -71,7 +71,7 @@ export type PlanPatch = {
 export type AISuggestedRoutine = {
   // 새 방식: 기존 Task 보드 카테고리(todo)에 task를 추가
   wsId?: string; programId?: string; deadlineId?: string; todoId?: string;
-  tasks: Array<{ name: string; days?: number[] }>;
+  tasks: Array<{ name: string; days?: number[]; date?: string; startDate?: string }>;
   // 레거시 필드(하위호환)
   name?: string;
   days?: number[];

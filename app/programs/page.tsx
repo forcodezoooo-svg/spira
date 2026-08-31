@@ -784,9 +784,8 @@ export default function ProgramsPage() {
       const newSubs = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;
         total += 1; if (days) recurring += 1;
-        return days
-          ? { id: uid(), name: t.name, done: false, date: today, days }
-          : { id: uid(), name: t.name, done: false, date: today };
+        if (days) { const start = t.startDate || t.date || today; return { id: uid(), name: t.name, done: false, date: start, days }; } // 반복: 시작일
+        const d = t.date || today; return { id: uid(), name: t.name, done: false, date: d, deadline: d }; // 일시적: 그 날짜
       });
       if (!newSubs.length) continue;
       store.updateProgramInWs(w, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== did ? d : { ...d, todos: d.todos.map(t => t.id !== tid ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...newSubs] }) }) });

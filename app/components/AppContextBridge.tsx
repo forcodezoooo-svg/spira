@@ -64,7 +64,13 @@ export default function AppContextBridge() {
           for (const dl of p.deadlines ?? []) {
             for (const t of (dl.todos ?? [])) {
               if (t.done) continue;
-              cats.push(`- wsId:${wsId} programId:${p.id} deadlineId:${dl.id} todoId:${t.id} | 프로젝트:${dl.name} / 카테고리:${t.name}`);
+              cats.push(`- wsId:${wsId} programId:${p.id} deadlineId:${dl.id} todoId:${t.id} | 프로젝트:${dl.name} / 카테고리:${t.name}${dl.date ? ` | 프로젝트 기한:${dl.date}` : ''}`);
+              const subs = (t.subtasks ?? []).filter(s => !s.done);
+              if (subs.length) {
+                cats.push(`    현재 task(순서대로): ${subs.map(s => `${s.name}${s.days?.length ? `[매주:${s.days.join(',')}]` : (s.date ? `[${s.date}]` : '')}`).join(' → ')}`);
+              } else {
+                cats.push(`    현재 task: (없음)`);
+              }
             }
           }
         }
