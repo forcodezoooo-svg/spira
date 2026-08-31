@@ -773,6 +773,8 @@ export default function ProgramsPage() {
     // 각 원소는 '기존 카테고리(todo)'를 가리키고, 그 안에 task(subtask)를 추가한다.
     const today = todayKey;
     let total = 0, recurring = 0, addedTo = 0;
+    type NewSub = { id: string; name: string; done: boolean; date: string; days?: number[]; deadline?: string };
+    const byProg = new Map<string, { wsId: string; progId: string; adds: Map<string, NewSub[]> }>();
     const norm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
     const areaOf = (name: string) => { const m = name.match(/^(.*?)\s*[:：]/); return m ? m[1].trim() : name; };
     // 모든 fromPlan 카테고리(todo)를 이름 매칭용으로 수집
@@ -789,7 +791,6 @@ export default function ProgramsPage() {
       if (!hit && it.deadlineId) hit = allCats.find(c => c.dl.id === it.deadlineId) ?? null;
       if (!hit && it.programId) hit = allCats.find(c => c.prog.id === it.programId) ?? null;
       if (!hit) continue;
-      const w = hit.wsId, prog = hit.prog, dl = hit.dl, todo = hit.todo, did = dl.id, tid = todo.id;
       const newSubs = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;
         total += 1; if (days) recurring += 1;
@@ -797,8 +798,17 @@ export default function ProgramsPage() {
         const d = t.date || today; return { id: uid(), name: t.name, done: false, date: d, deadline: d }; // 일시적: 그 날짜
       });
       if (!newSubs.length) continue;
-      store.updateProgramInWs(w, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== did ? d : { ...d, todos: d.todos.map(t => t.id !== tid ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...newSubs] }) }) });
-      addedTo += 1;
+      // 프로그램별로 todo별 추가분을 모은다 (같은 프로그램의 여러 카테고리를 개별 update하면 서로 덮어써서 유실됨)
+      const pkey = `${hit.wsId}::${hit.prog.id}`;
+      let b = byProg.get(pkey);
+      if (!b) { b = { wsId: hit.wsId, progId: hit.prog.id, adds: new Map<string, typeof newSubs>() }; byProg.set(pkey, b); }
+      b.adds.set(hit.todo.id, [...(b.adds.get(hit.todo.id) ?? []), ...newSubs]);
+    }
+    // 프로그램별로 '한 번에' 반영 (최신 스토어 상태 기준)
+    for (const b of byProg.values()) {
+      const prog = store.allWorkspacesEntries.find(e => e.workspace.id === b.wsId)?.programs.find(p => p.id === b.progId);
+      if (!prog) continue;
+      store.updateProgramInWs(b.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => { const add = b.adds.get(t.id); if (!add) return t; addedTo += 1; return { ...t, subtasks: [...(t.subtasks ?? []), ...add] }; }) })) });
     }
     if (total > 0) toast(`업무 ${total}개를 카테고리 ${addedTo}곳에 추가했어요${recurring ? ` (반복 ${recurring}개 포함)` : ''}. Task 보드에서 확인하세요.`, 'success');
     else if (allCats.length === 0) toast('Task 보드에 카테고리가 없어요. 먼저 목표를 가져와 프로젝트·산출물을 만들어 주세요.', 'info');
