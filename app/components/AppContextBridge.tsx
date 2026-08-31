@@ -56,6 +56,21 @@ export default function AppContextBridge() {
         }
       }
 
+      // Task 보드 카테고리(fromPlan 프로그램의 데드라인 아래 산출물=todo) — task는 반드시 여기에 추가
+      {
+        const cats: string[] = [];
+        for (const p of entry.programs) {
+          if (p.fromPlan !== true) continue;
+          for (const dl of p.deadlines ?? []) {
+            for (const t of (dl.todos ?? [])) {
+              if (t.done) continue;
+              cats.push(`- wsId:${wsId} programId:${p.id} deadlineId:${dl.id} todoId:${t.id} | 프로젝트:${dl.name} / 카테고리:${t.name}`);
+            }
+          }
+        }
+        if (cats.length) { lines.push(`### Task 보드 카테고리 (task는 반드시 이 중 하나에 추가)`); cats.forEach(c => lines.push(c)); }
+      }
+
       if (entry.routineSystems.length > 0) {
         lines.push(`### 루틴 시스템`);
         for (const rs of entry.routineSystems) {

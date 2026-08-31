@@ -766,32 +766,34 @@ export default function ProgramsPage() {
     }
   };
 
-  // 구버전 반복 루틴(ROUTINE_ADD) → Task 보드에 보이도록 fromPlan 프로그램 > 카테고리(todo) > 반복 subtask 로 생성
+  // ROUTINE_ADD → 사용자의 '기존 Task 보드 카테고리(todo)'에 task(subtask) 추가 (대상 ids 지정)
   applyRoutineRef.current = (routines) => {
-    const list = (routines ?? []).filter(r => r?.name);
+    const list = (routines ?? []).filter(r => r?.tasks?.length);
     if (!list.length) return;
-    const targetWs = goalWsId || wsId; // 현재 표시 중인 워크스페이스에 추가(필터 걸린 경우 대비)
+    // 각 원소는 '기존 카테고리(todo)'를 가리키고, 그 안에 task(subtask)를 추가한다.
     const today = todayKey;
-    const far = getQuarterEndDate(year, quarter);
-    const color = store.allWorkspacesEntries.find(e => e.workspace.id === targetWs)?.workspace.color || '#9DFE3B';
-    // 각 항목: days가 있으면 '매주 반복' task, 없으면 '일시적' task(오늘 날짜). 루틴 단위로 카테고리(todo) 하나씩.
-    let total = 0, recurring = 0;
-    const todos = list.map(r => {
-      const items = r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }];
-      const subtasks = items.map(t => {
+    let total = 0, recurring = 0, addedTo = 0;
+    for (const it of list) {
+      const w = it.wsId, pid = it.programId, did = it.deadlineId, tid = it.todoId;
+      if (!w || !pid || !did || !tid || !it.tasks?.length) continue;
+      const entry = store.allWorkspacesEntries.find(e => e.workspace.id === w);
+      const prog = entry?.programs.find(p => p.id === pid);
+      const dl = prog?.deadlines?.find(d => d.id === did);
+      const todo = dl?.todos?.find(t => t.id === tid);
+      if (!prog || !dl || !todo) continue;
+      const newSubs = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;
         total += 1; if (days) recurring += 1;
         return days
           ? { id: uid(), name: t.name, done: false, date: today, days }
           : { id: uid(), name: t.name, done: false, date: today };
       });
-      return { id: uid(), name: r.name, done: false, date: today, subtasks };
-    });
-    store.addProgramToWs(targetWs, {
-      name: 'AI 추가 업무', goal: '', color, fromPlan: true, year, quarter,
-      deadlines: [{ id: uid(), name: 'AI 추가 업무', date: far, startDate: today, todos, enabled: true }],
-    });
-    toast(`업무 ${total}개를 Task 보드에 추가했어요${recurring ? ` (반복 ${recurring}개 포함)` : ''}. ‘Task’ 탭에서 확인하세요.`, 'success');
+      if (!newSubs.length) continue;
+      store.updateProgramInWs(w, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== did ? d : { ...d, todos: d.todos.map(t => t.id !== tid ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...newSubs] }) }) });
+      addedTo += 1;
+    }
+    if (total > 0) toast(`업무 ${total}개를 카테고리 ${addedTo}곳에 추가했어요${recurring ? ` (반복 ${recurring}개 포함)` : ''}. Task 보드에서 확인하세요.`, 'success');
+    else toast('추가할 대상 카테고리를 찾지 못했어요. 카테고리를 먼저 알려주세요.', 'info');
   };
 
   // 구버전 GOALS_UPDATE 조작 → 주요 add 케이스만 반영(프로그램 추가 / 루틴 추가)

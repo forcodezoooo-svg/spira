@@ -829,6 +829,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
   };
   const kbTogglePin = (col: KbCol) => store.updateProgramTodo(col.p.wsId, col.p.id, col.dlId, col.todoId, { pinned: !col.pinned });
+  // 카테고리(산출물=todo) 삭제 — 안의 task도 함께 삭제. 이 삭제로 데드라인/프로그램이 비면 함께 정리.
+  const kbDelCategory = (col: KbCol) => {
+    if (!window.confirm(`카테고리 ‘${col.area}’를 삭제할까요? 안의 task도 모두 삭제돼요.`)) return;
+    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+    const deadlines = (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.filter(t => t.id !== col.todoId) })
+      .filter(dl => (dl.todos?.length ?? 0) > 0 || !!dl.projectId); // 비고 projectId 없는 데드라인은 함께 제거
+    if (deadlines.length === 0) store.deleteProgramInWs(col.p.wsId, prog.id); // 프로그램이 완전히 비면 프로그램도 삭제
+    else store.updateProgramInWs(col.p.wsId, { ...prog, deadlines });
+  };
   // 프로젝트 상태(예정/진행중/완료/보류) 변경 — Plan의 setProjectStatus와 동일하게 데드라인 done도 동기화
   const kbSetStatus = (col: KbCol, status: string) => {
     if (!col.projectId) return;
@@ -1062,6 +1071,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
                   {col.subtasks.length > 0 && <button onClick={() => saveColAsTemplate(col)} data-teach="kb-template" title="이 카테고리의 task 세트를 템플릿으로 저장" className="text-[10px] font-semibold flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ color: '#7C3AED' }}>템플릿 저장</button>}
                   <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
+                  <button onClick={() => kbDelCategory(col)} title="카테고리 삭제" className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ lineHeight: 1 }}>×</button>
                 </div>
                 {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
                 <div className="flex items-center gap-1.5 mt-1 ml-3.5">
