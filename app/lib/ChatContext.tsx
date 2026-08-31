@@ -401,12 +401,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     loadingRef.current = true;
 
     try {
-      // Plan 페이지에서는 등록 타이밍과 무관하게 항상 기획(plan) 모드로 요청 (기획서 일괄 채우기 보장)
-      const onPlanRoute = typeof window !== 'undefined' && window.location.pathname === '/plan';
+      // 라우트 기반 모드 보정 (등록 타이밍/채팅 여는 위치와 무관하게 보장)
+      const path = typeof window !== 'undefined' ? window.location.pathname : '';
+      const onPlanRoute = path === '/plan';
+      const onProgramsRoute = path === '/programs'; // Process 페이지: 업무(task) 설계·추가 모드
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current, financeMode: opts?.financeMode, appContext: appContextRef.current, reviseTarget: reviseTargetRef.current }),
+        body: JSON.stringify({ messages: apiNext, planMode: planModeRef.current || onPlanRoute, routineMode: routineModeRef.current || onProgramsRoute, financeMode: opts?.financeMode, appContext: appContextRef.current, reviseTarget: reviseTargetRef.current }),
       });
 
       if (res.status === 429) {
