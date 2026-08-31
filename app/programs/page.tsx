@@ -723,6 +723,7 @@ export default function ProgramsPage() {
           goal: '',
           color: businessColor(b.targetWs),
           workAreaId: b.areaId,
+          fromPlan: true, // 새 구조의 로드맵/Task 보드는 fromPlan만 표시하므로
           year: b.py,
           quarter: b.pq,
           quarters: [qKey(b.py, b.pq)],
@@ -763,17 +764,22 @@ export default function ProgramsPage() {
     }
   };
 
-  // 구버전 반복 루틴(ROUTINE_ADD) → 분기계획 형태로 변환해 반영(반복 task 생성)
+  // 구버전 반복 루틴(ROUTINE_ADD) → Task 보드에 보이도록 fromPlan 프로그램 > 카테고리(todo) > 반복 subtask 로 생성
   applyRoutineRef.current = (routines) => {
     const list = (routines ?? []).filter(r => r?.name);
     if (!list.length) return;
-    applyQuarterPlanRef.current(list.map(r => ({
-      wsId,
-      programs: [{
-        project: r.name, projectType: 'routine' as const,
-        deadlines: [{ name: r.name, date: '', todos: (r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }]).map(t => ({ name: t.name, days: (t.days ?? r.days) })) }],
-      }],
+    const today = todayKey;
+    const far = getQuarterEndDate(year, quarter);
+    const color = store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.workspace.color || '#9DFE3B';
+    // 한 카테고리(todo) '반복 업무' 안에, 모든 반복 항목을 매주 반복 subtask(task 카드)로
+    const subtasks = list.flatMap(r => (r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }]).map(t => ({
+      id: uid(), name: t.name, done: false, date: today, days: (t.days ?? r.days ?? []),
     })));
+    const todos = [{ id: uid(), name: '반복 업무', done: false, date: today, subtasks }];
+    store.addProgramToWs(wsId, {
+      name: '반복 업무', goal: '반복 업무', color, fromPlan: true, year, quarter,
+      deadlines: [{ id: uid(), name: '반복 업무', date: far, startDate: today, todos, enabled: true }],
+    });
   };
 
   // 구버전 GOALS_UPDATE 조작 → 주요 add 케이스만 반영(프로그램 추가 / 루틴 추가)
@@ -782,7 +788,7 @@ export default function ProgramsPage() {
       if (op.op === 'add_program') {
         const w = op.wsId || wsId;
         const color = op.data.color || store.allWorkspacesEntries.find(e => e.workspace.id === w)?.workspace.color || '#9DFE3B';
-        store.addProgramToWs(w, { name: op.data.name, goal: op.data.goal ?? op.data.name, color, deadlines: [] });
+        store.addProgramToWs(w, { name: op.data.name, goal: op.data.goal ?? op.data.name, color, fromPlan: true, deadlines: [] });
       }
       else if (op.op === 'add_routine') applyRoutineRef.current([{ name: op.data.name, days: op.data.days ?? [], tasks: op.data.tasks ?? [] }]);
     }
