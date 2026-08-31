@@ -80,6 +80,22 @@ export default function ProgramsPage() {
     return () => chat.unregisterProjectAssignHandler();
   }, [chat]);
 
+  // AI 반복 루틴 핸들러 (구버전 ROUTINE_ADD — 반복 task로 반영)
+  const applyRoutineRef = useRef<(routines: import('../lib/ChatContext').AISuggestedRoutine[]) => void>(() => {});
+  useEffect(() => {
+    if (!chat) return;
+    chat.registerRoutineHandler(routines => applyRoutineRef.current(routines));
+    return () => chat.unregisterRoutineHandler();
+  }, [chat]);
+
+  // AI 목표/프로그램 조작 핸들러 (구버전 GOALS_UPDATE — 프로그램 추가 등)
+  const applyGoalsRef = useRef<(ops: import('../lib/ChatContext').GoalsOperation[]) => void>(() => {});
+  useEffect(() => {
+    if (!chat) return;
+    chat.registerGoalsHandler(ops => applyGoalsRef.current(ops));
+    return () => chat.unregisterGoalsHandler();
+  }, [chat]);
+
   const now = new Date();
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const [year, setYear] = useState(now.getFullYear());
@@ -744,6 +760,31 @@ export default function ProgramsPage() {
         const prog = entry.programs.find(p => (p.deadlines ?? []).some(d => d.id === a.deadlineId));
         if (prog) store.setDeadlineProject(ws, prog.id, a.deadlineId, pid);
       }
+    }
+  };
+
+  // 구버전 반복 루틴(ROUTINE_ADD) → 분기계획 형태로 변환해 반영(반복 task 생성)
+  applyRoutineRef.current = (routines) => {
+    const list = (routines ?? []).filter(r => r?.name);
+    if (!list.length) return;
+    applyQuarterPlanRef.current(list.map(r => ({
+      wsId,
+      programs: [{
+        project: r.name, projectType: 'routine' as const,
+        deadlines: [{ name: r.name, date: '', todos: (r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }]).map(t => ({ name: t.name, days: (t.days ?? r.days) })) }],
+      }],
+    })));
+  };
+
+  // 구버전 GOALS_UPDATE 조작 → 주요 add 케이스만 반영(프로그램 추가 / 루틴 추가)
+  applyGoalsRef.current = (ops) => {
+    for (const op of ops ?? []) {
+      if (op.op === 'add_program') {
+        const w = op.wsId || wsId;
+        const color = op.data.color || store.allWorkspacesEntries.find(e => e.workspace.id === w)?.workspace.color || '#9DFE3B';
+        store.addProgramToWs(w, { name: op.data.name, goal: op.data.goal ?? op.data.name, color, deadlines: [] });
+      }
+      else if (op.op === 'add_routine') applyRoutineRef.current([{ name: op.data.name, days: op.data.days ?? [], tasks: op.data.tasks ?? [] }]);
     }
   };
 

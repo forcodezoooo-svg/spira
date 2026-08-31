@@ -179,27 +179,27 @@ function extractAction(full: string): ChatAction & { display: string } | null {
     if (parsed) {
       const plans = (Array.isArray(parsed) ? parsed : [parsed]) as QuarterPlan[];
       const progCount = plans.reduce((s, p) => s + (p.programs?.length ?? 0), 0);
-      return { kind: 'goals', marker: QUARTER_PLAN_MARKER, payload: plans, route: '/programs', label: 'Goals에 자동으로 채우기', feedback: FEEDBACK.quarterApplied(plans.length, progCount), display: before(QUARTER_PLAN_MARKER) };
+      return { kind: 'goals', marker: QUARTER_PLAN_MARKER, payload: plans, route: '/programs', label: 'Process에 자동으로 채우기', feedback: FEEDBACK.quarterApplied(plans.length, progCount), display: before(QUARTER_PLAN_MARKER) };
     }
   }
   if (full.includes(AREA_ASSIGN_MARKER)) {
     const payload = tryParse(sliceArr(after(AREA_ASSIGN_MARKER)));
-    if (Array.isArray(payload)) return { kind: 'goals', marker: AREA_ASSIGN_MARKER, payload, route: '/programs', label: 'Goals에 자동으로 반영', feedback: FEEDBACK.areaAssigned(payload.length), display: before(AREA_ASSIGN_MARKER) };
+    if (Array.isArray(payload)) return { kind: 'goals', marker: AREA_ASSIGN_MARKER, payload, route: '/programs', label: 'Process에 자동으로 반영', feedback: FEEDBACK.areaAssigned(payload.length), display: before(AREA_ASSIGN_MARKER) };
   }
   if (full.includes(PROJECT_ASSIGN_MARKER)) {
     const payload = tryParse(sliceArr(after(PROJECT_ASSIGN_MARKER)));
     if (Array.isArray(payload)) {
       const cnt = (payload as ProjectAssignPlan[]).reduce((s, p) => s + (p.assign?.length ?? 0), 0);
-      return { kind: 'goals', marker: PROJECT_ASSIGN_MARKER, payload, route: '/programs', label: '프로젝트로 자동 정리', feedback: `데드라인 ${cnt}개를 프로젝트로 정리했어요. Goals에서 확인해보세요. 🌿`, display: before(PROJECT_ASSIGN_MARKER) };
+      return { kind: 'goals', marker: PROJECT_ASSIGN_MARKER, payload, route: '/programs', label: '프로젝트로 자동 정리', feedback: `데드라인 ${cnt}개를 프로젝트로 정리했어요. Process에서 확인해보세요. 🌿`, display: before(PROJECT_ASSIGN_MARKER) };
     }
   }
   if (full.includes(GOALS_MARKER)) {
     const payload = tryParse(sliceArr(after(GOALS_MARKER)));
-    if (Array.isArray(payload)) return { kind: 'goals', marker: GOALS_MARKER, payload, route: '/programs', label: 'Goals에 자동으로 반영', feedback: FEEDBACK.goalsUpdated, display: before(GOALS_MARKER) };
+    if (Array.isArray(payload)) return { kind: 'goals', marker: GOALS_MARKER, payload, route: '/programs', label: 'Process에 자동으로 반영', feedback: FEEDBACK.goalsUpdated, display: before(GOALS_MARKER) };
   }
   if (full.includes(ROUTINE_MARKER)) {
     const payload = tryParse(sliceArr(after(ROUTINE_MARKER)));
-    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Goals에 반복 루틴 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
+    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Process에 반복 task 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
   }
   return null;
 }

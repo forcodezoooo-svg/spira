@@ -21,9 +21,9 @@ export const FEEDBACK = {
   // 구조화 데이터 반영 확인(안내자 톤)
   planUpdated: 'Plan에 살며시 정리해뒀어요. 마음에 안 드는 부분은 언제든 같이 다듬어요. 🌿',
   routineAdded: (count: number) => `반복 업무 ${count}개를 준비해뒀어요. 각 항목을 눌러 내용을 함께 다듬을 수 있어요.`,
-  goalsUpdated: 'Goals에 반영해뒀어요. 천천히 확인해보세요.',
-  quarterApplied: (quarters: number, programs: number) => `${quarters}개 분기에 프로그램 ${programs}개를 정리해뒀어요. Goals에서 확인해보세요. 🌿`,
-  areaAssigned: (count: number) => `미분류 목표 ${count}개를 어울리는 업무 영역에 배정해뒀어요. Goals에서 확인해보세요. 🌿`,
+  goalsUpdated: 'Process에 반영해뒀어요. 천천히 확인해보세요.',
+  quarterApplied: (quarters: number, programs: number) => `${quarters}개 분기에 프로그램 ${programs}개를 정리해뒀어요. Process에서 확인해보세요. 🌿`,
+  areaAssigned: (count: number) => `미분류 목표 ${count}개를 어울리는 업무 영역에 배정해뒀어요. Process에서 확인해보세요. 🌿`,
 };
 
 export const AI_COPY = {
@@ -38,8 +38,8 @@ export const AI_COPY = {
 export interface StarterChip { label: string; message: string }
 export const STARTERS: StarterChip[] = [
   { label: '🌱 새 기획안 만들기', message: '새로운 사업 기획안을 처음부터 같이 만들고 싶어요. 무엇부터 이야기하면 좋을까요?' },
-  { label: '🗺️ 업무 계획·일정 짜기', message: '이번 분기 업무 계획과 일정을 프로젝트(큰 목표) 단위로 같이 짜줘. 프로젝트·데드라인·할일까지 정리해서 Goals에 반영할 수 있게 해줘.' },
-  { label: '📁 기존 할 일 프로젝트로 정리', message: '지금 Goals에 있는 데드라인들을 하나도 빠짐없이 전부 프로젝트(큰 목표)로 묶어서 정리해줘. 프로젝트 없이 남는 데드라인이 없게 해줘.' },
+  { label: '🗺️ 업무 계획·일정 짜기', message: '이번 분기 업무 계획과 일정을 프로젝트(큰 목표) 단위로 같이 짜줘. 프로젝트·데드라인·할일까지 정리해서 Process에 반영할 수 있게 해줘.' },
+  { label: '📁 기존 할 일 프로젝트로 정리', message: '지금 Process에 있는 데드라인들을 하나도 빠짐없이 전부 프로젝트(큰 목표)로 묶어서 정리해줘. 프로젝트 없이 남는 데드라인이 없게 해줘.' },
   { label: '💰 자산·수익 계획 상의하기', message: '사업의 자금과 수익 구조를 상의하고 싶어요. 현실적인 수익 모델과 비용 관리 방법을 같이 정리해줘.' },
   { label: '🎯 타겟 고객 정하기', message: '제 사업의 타겟 고객 페르소나를 같이 만들어줘.' },
   { label: '🌿 오늘 일정 정리하기', message: '오늘 해야 할 일과 일정을 같이 정리하고 싶어요. 어떻게 진행하면 좋을까요?' },
@@ -55,8 +55,8 @@ export const RECOMMENDED: Record<string, RecommendedChip[]> = {
     { label: '💡 수익 구조 제안', message: '현실적인 수익 구조를 제안해줘.' },
   ],
   '/programs': [
-    { label: '🗺️ 이번 분기 계획 짜기', message: '이번 분기 실행 계획을 프로젝트(큰 목표) 단위로 같이 짜줘. 프로젝트·데드라인·할일까지 정리해서 Goals에 반영해줘.' },
-    { label: '📁 기존 할 일 프로젝트로 정리', message: '지금 Goals에 있는 데드라인들을 하나도 빠짐없이 전부 프로젝트(큰 목표)로 묶어서 정리해줘. 프로젝트 없이 남는 데드라인이 없게 해줘.' },
+    { label: '🗺️ 이번 분기 계획 짜기', message: '이번 분기 실행 계획을 프로젝트(큰 목표) 단위로 같이 짜줘. 프로젝트·데드라인·할일까지 정리해서 Process에 반영해줘.' },
+    { label: '📁 기존 할 일 프로젝트로 정리', message: '지금 Process에 있는 데드라인들을 하나도 빠짐없이 전부 프로젝트(큰 목표)로 묶어서 정리해줘. 프로젝트 없이 남는 데드라인이 없게 해줘.' },
     { label: '🔁 반복 루틴 만들기', message: '매주 반복하면 좋은 루틴 할일들을 요일까지 정해서 만들어줘.' },
   ],
   '/home': [
