@@ -779,14 +779,15 @@ export default function ProgramsPage() {
     const allCats = store.allWorkspacesEntries.flatMap(e => e.programs.filter(p => p.fromPlan).flatMap(p => (p.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => ({ wsId: e.workspace.id, prog: p, dl: d, todo: t })))));
     for (const it of list) {
       if (!it.tasks?.length) continue;
-      // 1) ids로 정확 매칭
-      let hit = allCats.find(c => c.wsId === it.wsId && c.prog.id === it.programId && c.dl.id === it.deadlineId && c.todo.id === it.todoId);
-      // 2) ids가 안 맞으면 카테고리 이름으로 매칭(전체 이름 또는 영역명)
+      // 관대한 매칭: todoId → 카테고리 이름 → deadlineId → programId 순으로 실제 카테고리를 찾는다.
+      let hit = (it.todoId && allCats.find(c => c.todo.id === it.todoId)) || null;
       if (!hit && it.category) {
         const key = norm(it.category);
         hit = allCats.find(c => norm(c.todo.name) === key || norm(areaOf(c.todo.name)) === key)
-           ?? allCats.find(c => norm(c.todo.name).includes(key) || norm(areaOf(c.todo.name)).includes(key));
+           ?? allCats.find(c => norm(c.todo.name).includes(key) || norm(areaOf(c.todo.name)).includes(key)) ?? null;
       }
+      if (!hit && it.deadlineId) hit = allCats.find(c => c.dl.id === it.deadlineId) ?? null;
+      if (!hit && it.programId) hit = allCats.find(c => c.prog.id === it.programId) ?? null;
       if (!hit) continue;
       const w = hit.wsId, prog = hit.prog, dl = hit.dl, todo = hit.todo, did = dl.id, tid = todo.id;
       const newSubs = it.tasks.filter(t => t?.name).map(t => {
