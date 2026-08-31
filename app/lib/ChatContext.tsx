@@ -153,6 +153,9 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | null>(null);
 
+// 'JSON으로 반영하겠다' 같은 안내 문구 제거(유저는 JSON을 볼 필요 없음). 마커/JSON도 함께 정리.
+const stripJsonNote = (t: string) => t.split('\n').filter(l => !/JSON/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
 // AI 응답에서 자동 반영 마커를 찾아 파싱하고, 버튼용 액션 메타로 변환한다.
 // (예전엔 즉시 자동 반영했지만, 이제는 버튼 클릭으로 반영해 '대화'와 '앱 반영(유료 기능)'을 분리)
 function extractAction(full: string): ChatAction & { display: string } | null {
@@ -161,8 +164,6 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   const sliceArr = (raw: string) => { const s = raw.indexOf('['), e = raw.lastIndexOf(']'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
   const before = (marker: string) => full.split(marker)[0].trimEnd();
   const after = (marker: string) => full.split(marker)[1]?.trim() ?? '';
-  // 'JSON으로 추가하겠다' 같은 안내 문구 제거(유저는 JSON을 볼 필요 없음)
-  const stripJsonNote = (t: string) => t.split('\n').filter(l => !/JSON/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
   if (full.includes(ITEM_REVISE_MARKER)) {
     const payload = tryParse(sliceObj(after(ITEM_REVISE_MARKER)));
@@ -466,7 +467,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', content: display };
+          updated[updated.length - 1] = { role: 'assistant', content: stripJsonNote(display) };
           return updated;
         });
       }
