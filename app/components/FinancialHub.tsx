@@ -255,7 +255,7 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
   };
   return (
     <Card title="프로젝트 투자비" teach="fin-invest-sec">
-      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 카테고리가 없어요. Goals 카테고리 보드에서 진행 중인 프로젝트·산출물을 만들어보세요.</p> : (
+      {groups.length === 0 ? <p className="text-[13px]" style={{ color: '#9AA39D' }}>진행 중인 카테고리가 없어요. Process의 Task 보드에서 진행 중인 프로젝트·산출물을 만들어보세요.</p> : (
         <div className="space-y-4">
           {groups.map(g => {
             const color = workspaceColor(store.allWorkspacesEntries, g.wsId);

@@ -967,7 +967,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       {/* 최상위 페이지 전환: 로드맵 / 카테고리 보드 */}
       <div className="flex items-center gap-2 mb-3">
         <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#EDEDE7' }}>
-          {([[false, '로드맵'], [true, '카테고리 보드']] as [boolean, string][]).map(([kb, label]) => (
+          {([[false, '로드맵'], [true, 'Task']] as [boolean, string][]).map(([kb, label]) => (
             <button key={label} onClick={() => setKanban(kb)} data-teach={kb ? 'kb-toggle' : undefined} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
           ))}
         </div>

@@ -51,7 +51,7 @@ const TOUR: Step[] = [
   // ── Goals 투어 (별도) — 로드맵이 비었을 때 '첫 목표 가져오기'로 시작 (GOALS_START부터) ──
   { page: '/programs', target: '[data-teach="roadmap-bar"]', text: '프로젝트 막대 위에 마우스를 올려놓고 우클릭하면 프로젝트 시작 날짜와 소요 기간을 설정할 수 있어요!', scrollCenter: true },
   { page: '/programs', target: '[data-teach-ctx]', text: '직접 날짜를 입력할 수도 있지만, 드래그를 통해서 기간을 조절하거나 옮기는 것도 가능해요.', openCtx: true },
-  { page: '/programs', target: '[data-teach="kb-toggle"]', text: '카테고리 보드로 이동해볼까요?' },
+  { page: '/programs', target: '[data-teach="kb-toggle"]', text: 'Task 보드로 이동해볼까요?' },
   { page: '/programs', target: '[data-teach="kb-ai"]', text: 'AI 버튼을 누르면 이 프로젝트를 위한 할일이 자동으로 생성돼요.', kbView: true, scrollCenter: true, genTasksOnNext: true, awaitTasks: true },
   { page: '/programs', target: '[data-teach="kb-task"]', text: '이 task를 위한 세부 업무도 만들어서 할 일을 좀 더 촘촘히 계획할 수 있어요. 할일 수정이나 반복 설정은 텍스트를 클릭하면 가능해요.', scrollCenter: true, forceUnitAdd: true },
   { page: '/programs', target: '[data-teach="kb-template"]', text: '이 프로세스를 다음에 또 하고 싶을 땐 템플릿 저장을 해보세요. 필요할 때 또 템플릿을 불러와서 사용할 수 있어요.', forceTemplate: true, scrollCenter: true, last: true },
