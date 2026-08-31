@@ -774,16 +774,24 @@ export default function ProgramsPage() {
     const today = todayKey;
     const far = getQuarterEndDate(year, quarter);
     const color = store.allWorkspacesEntries.find(e => e.workspace.id === targetWs)?.workspace.color || '#9DFE3B';
-    // 한 카테고리(todo) '반복 업무' 안에, 모든 반복 항목을 매주 반복 subtask(task 카드)로
-    const subtasks = list.flatMap(r => (r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }]).map(t => ({
-      id: uid(), name: t.name, done: false, date: today, days: (t.days ?? r.days ?? []),
-    })));
-    const todos = [{ id: uid(), name: '반복 업무', done: false, date: today, subtasks }];
-    store.addProgramToWs(targetWs, {
-      name: '반복 업무', goal: '반복 업무', color, fromPlan: true, year, quarter,
-      deadlines: [{ id: uid(), name: '반복 업무', date: far, startDate: today, todos, enabled: true }],
+    // 각 항목: days가 있으면 '매주 반복' task, 없으면 '일시적' task(오늘 날짜). 루틴 단위로 카테고리(todo) 하나씩.
+    let total = 0, recurring = 0;
+    const todos = list.map(r => {
+      const items = r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }];
+      const subtasks = items.map(t => {
+        const days = (t.days && t.days.length) ? t.days : undefined;
+        total += 1; if (days) recurring += 1;
+        return days
+          ? { id: uid(), name: t.name, done: false, date: today, days }
+          : { id: uid(), name: t.name, done: false, date: today };
+      });
+      return { id: uid(), name: r.name, done: false, date: today, subtasks };
     });
-    toast(`반복 업무 ${subtasks.length}개를 Task 보드에 추가했어요. ‘Task’ 탭에서 확인하세요.`, 'success');
+    store.addProgramToWs(targetWs, {
+      name: 'AI 추가 업무', goal: '', color, fromPlan: true, year, quarter,
+      deadlines: [{ id: uid(), name: 'AI 추가 업무', date: far, startDate: today, todos, enabled: true }],
+    });
+    toast(`업무 ${total}개를 Task 보드에 추가했어요${recurring ? ` (반복 ${recurring}개 포함)` : ''}. ‘Task’ 탭에서 확인하세요.`, 'success');
   };
 
   // 구버전 GOALS_UPDATE 조작 → 주요 add 케이스만 반영(프로그램 추가 / 루틴 추가)

@@ -199,7 +199,7 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   }
   if (full.includes(ROUTINE_MARKER)) {
     const payload = tryParse(sliceArr(after(ROUTINE_MARKER)));
-    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Process에 반복 task 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
+    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Process에 업무 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
   }
   return null;
 }

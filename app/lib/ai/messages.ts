@@ -20,7 +20,7 @@ export const FEEDBACK = {
 
   // 구조화 데이터 반영 확인(안내자 톤)
   planUpdated: 'Plan에 살며시 정리해뒀어요. 마음에 안 드는 부분은 언제든 같이 다듬어요. 🌿',
-  routineAdded: (count: number) => `반복 업무 ${count}개를 준비해뒀어요. 각 항목을 눌러 내용을 함께 다듬을 수 있어요.`,
+  routineAdded: (count: number) => `업무 ${count}개를 준비해뒀어요. Task 보드에서 확인하고, 각 항목을 눌러 다듬을 수 있어요.`,
   goalsUpdated: 'Process에 반영해뒀어요. 천천히 확인해보세요.',
   quarterApplied: (quarters: number, programs: number) => `${quarters}개 분기에 프로그램 ${programs}개를 정리해뒀어요. Process에서 확인해보세요. 🌿`,
   areaAssigned: (count: number) => `미분류 목표 ${count}개를 어울리는 업무 영역에 배정해뒀어요. Process에서 확인해보세요. 🌿`,

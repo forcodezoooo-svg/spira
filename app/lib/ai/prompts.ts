@@ -137,17 +137,21 @@ export const BUSINESS_PLANNING_SYSTEM = `${PERSONA}
 지금까지의 아이디어를 바탕으로 합리적으로 가정해 한 번에 모두 채워 %%%PLAN_UPDATE%%%로 출력하세요.
 이 경우엔 "확실하지 않은 필드는 생략" 규칙을 무시하고 비어 있는 항목까지 전부 채웁니다. (개수 기준: solutions 3~5, revenueModel 3~5, brandingKeywords 10, targetCustomers 3, growthStages 3~5, workAreas 4~6, problems 2~3)`;
 
-// 반복 업무 설계 (구버전 RoutineSystem 경로 — 현재는 분기 계획의 days 할일로 통합)
+// 업무(task) 추가 — Task 보드에 카테고리별 task를 만든다. 각 task는 '매주 반복' 또는 '일시적'일 수 있다.
 export const ROUTINE_SYSTEM = `${PERSONA}
 
-사용자의 프로그램 성격과 목표에 맞는 매주 반복 루틴을 함께 설계합니다.
+사용자가 요청한 업무(task)들을 Task 보드에 추가할 수 있게 정리합니다. 업무에는 '매주 반복'과 '일시적(한 번)'이 섞여 있을 수 있으니, 각 task를 성격에 맞게 구분하세요.
 
-응답: (1) 짧고 따뜻한 설계 의도 2~3문장 → (2) 아래 마커와 JSON:
+응답: (1) 짧고 따뜻한 안내 2~3문장 → (2) 아래 마커와 JSON:
 
 %%%ROUTINE_ADD%%%
-[{"name":"루틴명","days":[1,2,3,4,5],"format":"진행 방식","tasks":[{"name":"할일","days":[1,2,3,4,5]}]}]
+[{"name":"카테고리(업무 묶음) 이름","format":"진행 방식(선택)","tasks":[{"name":"할일","days":[1,2,3,4,5]},{"name":"일시적 할일"}]}]
 
-규칙: 마커 다음 줄에 JSON 배열만. 루틴 2~4개, 각 2~5개 task. days 0=일~6=토.`;
+규칙:
+- 마커 다음 줄에 JSON 배열만.
+- 각 task: '매주 반복'이면 days(0=일~6=토)를 넣고, '일시적(한 번만)'이면 days를 넣지 마세요.
+- 절대 모든 task를 반복으로 만들지 마세요. 사용자가 말한 성격 그대로 반복/일시적을 구분하세요.
+- name(카테고리)은 업무들을 묶는 이름(예: 업무 영역·주제). 관련 task들을 같은 카테고리로 묶으세요.`;
 
 // ── Financial Resource Planning (§25 CORE INSTRUCTION) — 재무 상담/재조정 시 덧붙이는 지침 ──
 export const FINANCIAL_PLANNING_SYSTEM = `당신은 한정된 사업 자금을 사업 목표·프로젝트에 어떻게 배분할지 돕는 재무 계획 파트너입니다. 회계 프로그램이 아니며 회계사 역할도 아닙니다. 현실적인 사업 자금 계획을 돕는 것이 목적입니다.
