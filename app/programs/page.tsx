@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
+import { useToast } from '../lib/ToastContext';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { Program, RoutineCycle } from '../lib/types';
@@ -55,6 +56,7 @@ export default function ProgramsPage() {
   const store = useStore();
   const router = useRouter();
   const chat = useChatContext();
+  const { toast } = useToast();
 
   // AI 분기 계획 핸들러는 항상 최신 클로저를 가리키도록 ref 사용
   const applyQuarterPlanRef = useRef<(plans: QuarterPlan[]) => void>(() => {});
@@ -768,18 +770,20 @@ export default function ProgramsPage() {
   applyRoutineRef.current = (routines) => {
     const list = (routines ?? []).filter(r => r?.name);
     if (!list.length) return;
+    const targetWs = goalWsId || wsId; // 현재 표시 중인 워크스페이스에 추가(필터 걸린 경우 대비)
     const today = todayKey;
     const far = getQuarterEndDate(year, quarter);
-    const color = store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.workspace.color || '#9DFE3B';
+    const color = store.allWorkspacesEntries.find(e => e.workspace.id === targetWs)?.workspace.color || '#9DFE3B';
     // 한 카테고리(todo) '반복 업무' 안에, 모든 반복 항목을 매주 반복 subtask(task 카드)로
     const subtasks = list.flatMap(r => (r.tasks?.length ? r.tasks : [{ name: r.name, days: r.days }]).map(t => ({
       id: uid(), name: t.name, done: false, date: today, days: (t.days ?? r.days ?? []),
     })));
     const todos = [{ id: uid(), name: '반복 업무', done: false, date: today, subtasks }];
-    store.addProgramToWs(wsId, {
+    store.addProgramToWs(targetWs, {
       name: '반복 업무', goal: '반복 업무', color, fromPlan: true, year, quarter,
       deadlines: [{ id: uid(), name: '반복 업무', date: far, startDate: today, todos, enabled: true }],
     });
+    toast(`반복 업무 ${subtasks.length}개를 Task 보드에 추가했어요. ‘Task’ 탭에서 확인하세요.`, 'success');
   };
 
   // 구버전 GOALS_UPDATE 조작 → 주요 add 케이스만 반영(프로그램 추가 / 루틴 추가)
