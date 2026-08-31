@@ -115,6 +115,8 @@ export type FinReplanProposal = { reserveTarget?: number; allocations?: Array<{ 
 
 const SESSIONS_KEY = 'spira_chat_sessions';
 const CURRENT_KEY = 'spira_chat_current';
+const CURRENT_ID_KEY = 'spira_chat_current_id'; // 현재 진행 중인 채팅의 안정적 세션 id (중복 저장 방지)
+const genSessionId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 interface ChatContextType {
   open: boolean;
@@ -251,6 +253,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const messagesRef = useRef<Message[]>([]);
   messagesRef.current = messages;
+  const currentIdRef = useRef<string | null>(null); // 현재 채팅의 세션 id (없으면 아직 미보관)
   const loadingRef = useRef(false);
   loadingRef.current = loading;
   const planHandlerRef = useRef<((patch: PlanPatch) => void) | null>(null);
@@ -315,88 +318,69 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     financeHandlerRef.current = null;
   }, []);
 
-  // 마운트 시: 이전 세션을 보관함에 저장하고, 전체 세션 목록 로드
+  // 진행 중이던 현재 채팅을 '아카이브'에 upsert(같은 id면 덮어쓰기 — 중복 방지)
+  const archiveCurrent = useCallback((msgs: Message[]) => {
+    if (!msgs.some(m => m.role === 'user')) return; // 사용자 메시지가 있을 때만 보관
+    const id = currentIdRef.current || genSessionId();
+    currentIdRef.current = id;
+    const firstUser = msgs.find(m => m.role === 'user')?.content ?? '';
+    setSessions(prev => {
+      const idx = prev.findIndex(s => s.id === id);
+      const session: ChatSession = {
+        id, title: firstUser.slice(0, 50) || '대화', messages: msgs,
+        createdAt: idx >= 0 ? prev[idx].createdAt : new Date().toISOString(),
+      };
+      const next = idx >= 0 ? prev.map((s, i) => i === idx ? session : s) : [session, ...prev];
+      try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(next)); } catch { /* empty */ }
+      return next;
+    });
+  }, []);
+
+  // 마운트 시: 세션 목록 로드 + 진행 중이던 채팅을 '복원'(아카이브 안 함 — 매 로드마다 새 세션으로 쌓이던 버그 수정)
   useEffect(() => {
     let stored: ChatSession[] = [];
+    try { stored = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]'); } catch { /* empty */ }
     try {
-      stored = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]');
-    } catch { /* empty */ }
-
-    try {
+      currentIdRef.current = localStorage.getItem(CURRENT_ID_KEY) || null;
       const prev = localStorage.getItem(CURRENT_KEY);
       if (prev) {
         const msgs: Message[] = JSON.parse(prev);
-        // 사용자가 실제로 보낸 메시지가 있을 때만 보관 (자동 안내 메시지만 있으면 저장 안 함)
-        if (msgs.some(m => m.role === 'user')) {
-          const firstUser = msgs.find(m => m.role === 'user')?.content ?? '';
-          const title = firstUser.slice(0, 50) || '대화';
-          const session: ChatSession = {
-            id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-            title,
-            messages: msgs,
-            createdAt: new Date().toISOString(),
-          };
-          stored = [session, ...stored];
-          localStorage.setItem(SESSIONS_KEY, JSON.stringify(stored));
-        }
-        localStorage.removeItem(CURRENT_KEY);
+        if (msgs.length > 0) setMessages(msgs); // 이전 채팅 이어서 표시
       }
     } catch { /* empty */ }
-
     setSessions(stored);
     setStorageReady(true);
   }, []);
 
-  // 메시지 변경 시 현재 세션을 localStorage에 저장
+  // 메시지 변경 시 현재 세션을 localStorage에 저장 (+ 현재 채팅 id도 함께 보존)
   useEffect(() => {
     if (!storageReady) return;
     if (messages.length > 0) {
       localStorage.setItem(CURRENT_KEY, JSON.stringify(messages));
+      // 사용자 메시지가 생기면 안정적 id 부여(리로드해도 같은 세션으로 이어지게)
+      if (messages.some(m => m.role === 'user')) {
+        if (!currentIdRef.current) currentIdRef.current = genSessionId();
+        try { localStorage.setItem(CURRENT_ID_KEY, currentIdRef.current); } catch { /* empty */ }
+      }
     } else {
       localStorage.removeItem(CURRENT_KEY);
     }
   }, [messages, storageReady]);
 
   const newChat = useCallback(() => {
-    const current = messagesRef.current;
-    if (current.some(m => m.role === 'user')) {
-      const firstUser = current.find(m => m.role === 'user')?.content ?? '';
-      const session: ChatSession = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-        title: firstUser.slice(0, 50) || '대화',
-        messages: current,
-        createdAt: new Date().toISOString(),
-      };
-      setSessions(prev => {
-        const next = [session, ...prev];
-        localStorage.setItem(SESSIONS_KEY, JSON.stringify(next));
-        return next;
-      });
-    }
+    archiveCurrent(messagesRef.current); // 현재 채팅을 아카이브에 upsert(중복 없이)
     setMessages([]);
-    localStorage.removeItem(CURRENT_KEY);
+    currentIdRef.current = null;
+    try { localStorage.removeItem(CURRENT_KEY); localStorage.removeItem(CURRENT_ID_KEY); } catch { /* empty */ }
     reviseHandlerRef.current = null; reviseTargetRef.current = null; setReviseTargetLabel(null); // 항목 다듬기 대상 해제
-  }, []);
+  }, [archiveCurrent]);
 
   const loadSession = useCallback((session: ChatSession) => {
-    // 현재 진행 중인 채팅이 있으면 먼저 저장 (사용자 메시지가 있을 때만)
-    const current = messagesRef.current;
-    if (current.some(m => m.role === 'user')) {
-      const firstUser = current.find(m => m.role === 'user')?.content ?? '';
-      const snap: ChatSession = {
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-        title: firstUser.slice(0, 50) || '대화',
-        messages: current,
-        createdAt: new Date().toISOString(),
-      };
-      setSessions(prev => {
-        const next = [snap, ...prev];
-        localStorage.setItem(SESSIONS_KEY, JSON.stringify(next));
-        return next;
-      });
-    }
+    archiveCurrent(messagesRef.current); // 현재 진행 중인 채팅 먼저 보관(upsert)
     setMessages(session.messages);
-  }, []);
+    currentIdRef.current = session.id; // 불러온 세션을 이어서 편집 → 저장 시 그 세션을 갱신(중복 안 만듦)
+    try { localStorage.setItem(CURRENT_ID_KEY, session.id); localStorage.setItem(CURRENT_KEY, JSON.stringify(session.messages)); } catch { /* empty */ }
+  }, [archiveCurrent]);
 
   const deleteSession = useCallback((id: string) => {
     setSessions(prev => {
