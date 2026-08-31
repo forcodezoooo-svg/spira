@@ -781,15 +781,13 @@ export default function ProgramsPage() {
     const allCats = store.allWorkspacesEntries.flatMap(e => e.programs.filter(p => p.fromPlan).flatMap(p => (p.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => ({ wsId: e.workspace.id, prog: p, dl: d, todo: t })))));
     for (const it of list) {
       if (!it.tasks?.length) continue;
-      // 관대한 매칭: todoId → 카테고리 이름 → deadlineId → programId 순으로 실제 카테고리를 찾는다.
-      let hit = (it.todoId && allCats.find(c => c.todo.id === it.todoId)) || null;
-      if (!hit && it.category) {
-        const key = norm(it.category);
-        hit = allCats.find(c => norm(c.todo.name) === key || norm(areaOf(c.todo.name)) === key)
-           ?? allCats.find(c => norm(c.todo.name).includes(key) || norm(areaOf(c.todo.name)).includes(key)) ?? null;
-      }
-      if (!hit && it.deadlineId) hit = allCats.find(c => c.dl.id === it.deadlineId) ?? null;
-      if (!hit && it.programId) hit = allCats.find(c => c.prog.id === it.programId) ?? null;
+      // 정확도 우선 매칭: 카테고리 이름(전체/영역) → todoId. 애매한 폴백(deadlineId/programId, 부분일치)은
+      // 엉뚱한 카테고리로 들어가므로 쓰지 않는다. 확실히 못 찾으면 그 항목은 건너뛴다.
+      const catKey = it.category ? norm(it.category) : '';
+      const catArea = it.category ? norm(areaOf(it.category)) : '';
+      let hit = (catKey && allCats.find(c => norm(c.todo.name) === catKey)) || null;              // 전체 이름 정확
+      if (!hit && catArea) hit = allCats.find(c => norm(areaOf(c.todo.name)) === catArea) ?? null; // 영역명 정확
+      if (!hit && it.todoId) hit = allCats.find(c => c.todo.id === it.todoId) ?? null;             // todoId 정확
       if (!hit) continue;
       const newSubs = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;

@@ -161,6 +161,8 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   const sliceArr = (raw: string) => { const s = raw.indexOf('['), e = raw.lastIndexOf(']'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
   const before = (marker: string) => full.split(marker)[0].trimEnd();
   const after = (marker: string) => full.split(marker)[1]?.trim() ?? '';
+  // 'JSON으로 추가하겠다' 같은 안내 문구 제거(유저는 JSON을 볼 필요 없음)
+  const stripJsonNote = (t: string) => t.split('\n').filter(l => !/JSON/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
   if (full.includes(ITEM_REVISE_MARKER)) {
     const payload = tryParse(sliceObj(after(ITEM_REVISE_MARKER)));
@@ -205,7 +207,7 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   }
   if (full.includes(ROUTINE_MARKER)) {
     const payload = tryParse(sliceArr(after(ROUTINE_MARKER)));
-    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Process에 업무 추가', feedback: FEEDBACK.routineAdded(payload.length), display: before(ROUTINE_MARKER) };
+    if (Array.isArray(payload)) return { kind: 'goals', marker: ROUTINE_MARKER, payload, route: '/programs', label: 'Process에 업무 추가', feedback: FEEDBACK.routineAdded(payload.length), display: stripJsonNote(before(ROUTINE_MARKER)) };
   }
   // 관대한 폴백: 마커를 빼먹고 JSON만(코드블록/본문) 쓴 경우 — items가 tasks 배열을 가지면 업무 추가로 간주
   {
@@ -215,7 +217,7 @@ function extractAction(full: string): ChatAction & { display: string } | null {
     else { const s = full.indexOf('['), e = full.lastIndexOf(']'); if (s !== -1 && e > s) { candidate = full.slice(s, e + 1); startIdx = s; } }
     const arr = candidate ? tryParse(candidate) : undefined;
     if (Array.isArray(arr) && arr.length > 0 && arr.every((x: unknown) => !!x && typeof x === 'object' && Array.isArray((x as { tasks?: unknown }).tasks))) {
-      const display = (startIdx >= 0 ? full.slice(0, startIdx) : full).replace(/(?:위|아래)?\s*JSON[\s\S]*$/, '').trim();
+      const display = stripJsonNote((startIdx >= 0 ? full.slice(0, startIdx) : full));
       return { kind: 'goals', marker: ROUTINE_MARKER, payload: arr, route: '/programs', label: 'Process에 업무 추가', feedback: FEEDBACK.routineAdded(arr.length), display: display || '요청하신 업무 설계안이에요. 아래 버튼으로 반영할 수 있어요.' };
     }
   }
