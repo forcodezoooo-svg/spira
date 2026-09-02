@@ -491,6 +491,24 @@ export function useStore() {
   const updatePlanInWs = (wsId: string, plan: PlanData) =>
     updateWorkspace(wsId, e => ({ ...e, plan }));
 
+  // ── 업무 영역 (Plan.workAreas) 직접 관리: 추가/수정/삭제 ──────────────────────
+  const WA_PALETTE = ['#7C9EF6', '#6FCF97', '#F2994A', '#BB6BD9', '#EB5757', '#56CCF2', '#F2C94C', '#27AE60'];
+  const addWorkArea = (wsId: string, a: { name: string; goal?: string; color?: string }) =>
+    updateWorkspace(wsId, e => {
+      const existing = e.plan.workAreas ?? [];
+      const color = a.color || WA_PALETTE[existing.length % WA_PALETTE.length];
+      return { ...e, plan: { ...e.plan, workAreas: [...existing, { id: uid(), name: a.name, goal: a.goal ?? '', color }] } };
+    });
+  const updateWorkArea = (wsId: string, id: string, patch: Partial<import('./types').WorkArea>) =>
+    updateWorkspace(wsId, e => ({ ...e, plan: { ...e.plan, workAreas: (e.plan.workAreas ?? []).map(x => x.id === id ? { ...x, ...patch } : x) } }));
+  // 영역 삭제 — 이 영역을 쓰던 컨테이너는 미지정으로 되돌린다(내용 유지).
+  const deleteWorkArea = (wsId: string, id: string) =>
+    updateWorkspace(wsId, e => ({
+      ...e,
+      plan: { ...e.plan, workAreas: (e.plan.workAreas ?? []).filter(x => x.id !== id) },
+      programs: e.programs.map(pr => pr.workAreaId === id ? { ...pr, workAreaId: undefined } : pr),
+    }));
+
   // ── 프로젝트 (Plan에서 정의, Goals에서 조직화) ──────────────────────────────
   const addProject = (wsId: string, p: Omit<Project, 'id'>) =>
     updateWorkspace(wsId, e => ({ ...e, plan: { ...e.plan, projects: [...(e.plan.projects ?? []), { ...p, id: uid() }] } }));
@@ -830,6 +848,7 @@ export function useStore() {
     addRoutineSystem, updateRoutineSystem, deleteRoutineSystem,
     addRoutineToWs, updateRoutineInWs, deleteRoutineInWs,
     updatePlanInWs,
+    addWorkArea, updateWorkArea, deleteWorkArea,
     addProject, updateProject, removeProject, setDeadlineProject,
     todayRoutines, toggleTask, isCompleted,
     addResource, deleteResource, deleteResourceInWs, addResourceInWs, setProjectInvestInWs,

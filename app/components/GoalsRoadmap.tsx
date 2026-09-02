@@ -96,6 +96,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [kbBiz, setKbBiz] = useState<string | null>(null); // Task 보드 비즈니스 필터 (null=전체)
   const [kbFlat, setKbFlat] = useState(false); // Task 보드 뷰: false=업무영역별, true=날짜순 목록
+  const [areaPanel, setAreaPanel] = useState(false); // 업무 영역 관리 모달
+  const [areaPanelWs, setAreaPanelWs] = useState<string | null>(null); // 관리 중인 비즈니스(null=첫번째)
+  const [newAreaName, setNewAreaName] = useState('');
   const [catName, setCatName] = useState('');
   const boardRef = useRef<HTMLDivElement>(null);
   const maxDepth = 2; // 줌과 무관하게 전체 트리(목표>프로젝트>산출물)를 기본 펼침, 화살표로 접기
@@ -1067,6 +1070,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ))}
         </div>
         {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
+        <button onClick={() => setAreaPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }} title="업무 영역 추가·수정·삭제"><svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>영역 관리</button>
       </div>
 
       {!kanban ? (
@@ -1474,6 +1478,54 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       )}
+
+      {/* 업무 영역 관리 모달 — 추가/수정/삭제 */}
+      {areaPanel && (() => {
+        const bizList = store.allWorkspacesEntries.map(e => ({ id: e.workspace.id, name: e.workspace.name || '내 비즈니스' }));
+        const targetWs = (areaPanelWs && bizList.some(b => b.id === areaPanelWs) ? areaPanelWs : bizList[0]?.id) ?? null;
+        const areas = targetWs ? (store.allWorkspacesEntries.find(e => e.workspace.id === targetWs)?.plan.workAreas ?? []) : [];
+        const AREA_PAL = ['#7C9EF6', '#6FCF97', '#F2994A', '#BB6BD9', '#EB5757', '#56CCF2', '#F2C94C', '#27AE60'];
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setAreaPanel(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-[440px] p-5 max-h-[85vh] overflow-y-auto" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>업무 영역 관리</h3>
+                <button onClick={() => setAreaPanel(false)} className="text-neutral-300 hover:text-neutral-700 text-lg leading-none">×</button>
+              </div>
+              <p className="text-[11px] mb-3" style={{ color: '#9AA39D' }}>영역 이름·색을 바꾸거나, 새로 추가·삭제할 수 있어요. 삭제해도 그 영역의 일정은 미분류로 남아요.</p>
+              {bizList.length > 1 && (
+                <div className="flex items-center gap-1 flex-wrap mb-3">
+                  {bizList.map(b => (
+                    <button key={b.id} onClick={() => setAreaPanelWs(b.id)} className="flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={targetWs === b.id ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(b.id) }} />{b.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!targetWs ? (
+                <p className="text-[13px] text-center py-6" style={{ color: '#9AA39D' }}>비즈니스를 먼저 만들어주세요.</p>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    {areas.length === 0 && <p className="text-[12px] text-center py-3" style={{ color: '#9AA39D' }}>아직 업무 영역이 없어요. 아래에서 추가해보세요.</p>}
+                    {areas.map(a => (
+                      <div key={a.id} className="flex items-center gap-2 border rounded-xl px-2.5 py-2" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                        <button onClick={() => { const i = AREA_PAL.indexOf(a.color); store.updateWorkArea(targetWs, a.id, { color: AREA_PAL[(i + 1) % AREA_PAL.length] }); }} className="w-4 h-4 rounded-full flex-shrink-0 border border-black/10" style={{ backgroundColor: a.color }} title="색 바꾸기" />
+                        <input value={a.name} onChange={e => store.updateWorkArea(targetWs, a.id, { name: e.target.value })} placeholder="영역 이름" className="flex-1 min-w-0 bg-transparent text-[13px] font-bold outline-none" style={{ color: '#16211E' }} />
+                        <button onClick={() => { if (window.confirm(`'${a.name || '이 영역'}'을(를) 삭제할까요?\n이 영역의 일정은 미분류로 남습니다.`)) store.deleteWorkArea(targetWs, a.id); }} className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0" title="영역 삭제">×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 mt-3">
+                    <input value={newAreaName} onChange={e => setNewAreaName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newAreaName.trim()) { store.addWorkArea(targetWs, { name: newAreaName.trim() }); setNewAreaName(''); } }} placeholder="새 업무 영역 (예: 마케팅)" className="flex-1 bg-neutral-50 border rounded-xl px-3 py-2 text-[13px] outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+                    <button onClick={() => { if (newAreaName.trim()) { store.addWorkArea(targetWs, { name: newAreaName.trim() }); setNewAreaName(''); } }} disabled={!newAreaName.trim()} className="px-3.5 py-2 rounded-xl text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 일괄 수정 팝업 */}
       {bulkOpen && sel.size > 0 && (
