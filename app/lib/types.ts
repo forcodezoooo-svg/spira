@@ -218,10 +218,12 @@ export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위
 // 카테고리 보드 템플릿 — 산출물(카테고리) 하나 + 그 안의 task/세부작업을 한 세트로 저장·재사용
 export interface BoardTemplateUnit { name: string; durationMin?: number }
 export interface BoardTemplateTask { name: string; durationMin?: number; schedulingType?: TaskSchedulingType; priority?: number; days?: number[]; units?: BoardTemplateUnit[] }
+export interface BoardTemplateColumn { name: string; tasks: BoardTemplateTask[] }
 export interface BoardTemplate {
   id: string;
-  name: string;        // 카테고리(산출물) 이름 (예: "디자인: 최종 UI 시안")
+  name: string;        // 카테고리(산출물) 이름, 또는 그룹 이름
   tasks: BoardTemplateTask[];
+  columns?: BoardTemplateColumn[]; // 있으면 여러 카테고리를 묶은 그룹 템플릿 (tasks는 무시)
   createdAt?: string;
 }
 export interface ProgramTodo {

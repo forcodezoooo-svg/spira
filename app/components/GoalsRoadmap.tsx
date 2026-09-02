@@ -590,10 +590,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const catTarget = kbScope.deadlineId && kbScope.program ? { wsId: kbScope.program.wsId, programId: kbScope.program.id, dlId: kbScope.deadlineId }
     : kbCols[0] ? { wsId: kbCols[0].p.wsId, programId: kbCols[0].p.id, dlId: kbCols[0].dlId } : null;
   // 새 카테고리(산출물) 생성 — 템플릿 tasks가 있으면 함께 채워 넣음(비반복은 가용시간 배치)
-  const addCategory = (name: string, tplTasks?: import('../lib/types').BoardTemplateTask[]) => {
-    const n = name.trim(); if (!n || !catTarget) return;
-    const prog = findProg(catTarget.wsId, catTarget.programId); if (!prog) return;
-    const dl = (prog.deadlines ?? []).find(d => d.id === catTarget.dlId); if (!dl) return;
+  const addCategory = (name: string, tplTasks?: import('../lib/types').BoardTemplateTask[], opts?: { batch?: boolean }) => {
+    const n = name.trim(); if (!n || !catTarget) return 0;
+    const prog = findProg(catTarget.wsId, catTarget.programId); if (!prog) return 0;
+    const dl = (prog.deadlines ?? []).find(d => d.id === catTarget.dlId); if (!dl) return 0;
     const start = dl.startDate || dl.date || todayStr;
     const anchor = start > todayStr ? start : todayStr; // 프로젝트 시작일이 미래면 그 날부터, 아니면 오늘부터 배치
     const tasks = tplTasks ?? [];
@@ -618,8 +618,29 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     });
     const newTodo = { id: uid(), name: n, done: false, date: start, deadline: dl.date || start, subtasks };
     store.updateProgramInWs(catTarget.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== catTarget.dlId ? d : { ...d, todos: [...d.todos, newTodo] }) });
+    if (opts?.batch) return adjustedCount;
     if (adjustedCount > 0) toast(`실제 기록을 반영해 예상시간 ${adjustedCount}개를 조정했어요 (평균 ${Math.round((factor - 1) * 100) > 0 ? '+' : ''}${Math.round((factor - 1) * 100)}%).`, 'success');
     setCatName(''); setCatPanel(false);
+    return adjustedCount;
+  };
+  // 그룹 템플릿 적용: 여러 카테고리를 한 번에 생성
+  const applyGroupTemplate = (cols: import('../lib/types').BoardTemplateColumn[]) => {
+    if (!catTarget) return;
+    for (const c of cols) addCategory(c.name, c.tasks, { batch: true });
+    toast(`템플릿의 카테고리 ${cols.length}개를 추가했어요.`, 'success');
+    setCatName(''); setCatPanel(false);
+  };
+  // 현재 보이는 카테고리들을 하나의 그룹 템플릿으로 저장
+  const saveBoardAsGroup = () => {
+    const cols = kbColsView.map(c => ({
+      name: c.name,
+      tasks: c.subtasks.map(s => ({ name: s.name, durationMin: s.durationMin, schedulingType: s.schedulingType, priority: s.priority, days: s.days, units: (s.units ?? []).map(u => ({ name: u.name, durationMin: u.durationMin })) })),
+    }));
+    if (cols.length === 0) return;
+    const gname = window.prompt('그룹 템플릿 이름을 입력하세요', `카테고리 ${cols.length}개 세트`);
+    if (gname == null) return;
+    store.addBoardTemplate({ name: gname.trim() || `카테고리 ${cols.length}개 세트`, tasks: [], columns: cols });
+    toast(`카테고리 ${cols.length}개를 그룹 템플릿으로 저장했어요.`, 'success');
   };
   // 이 카테고리(산출물)의 task 세트를 템플릿으로 저장
   const saveColAsTemplate = (col: KbCol) => {
@@ -1126,6 +1147,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             )}
             <div className="flex-1" />
+            {kbColsView.length > 0 && (
+              <button onClick={saveBoardAsGroup} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="현재 보이는 카테고리들을 하나의 그룹 템플릿으로 저장">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /></svg>
+                그룹 저장
+              </button>
+            )}
             {catTarget && (
               <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
@@ -1429,18 +1456,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             </div>
             {store.boardTemplates.length > 0 && (
               <>
-                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>저장된 템플릿 <span style={{ color: '#C4CCC4' }}>· 카테고리+task 세트를 불러와요</span></label>
+                <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>저장된 템플릿 <span style={{ color: '#C4CCC4' }}>· 카테고리 또는 그룹(여러 카테고리) 세트를 불러와요</span></label>
                 <div className="mt-1.5 space-y-1.5">
-                  {store.boardTemplates.map(tpl => (
-                    <div key={tpl.id} className="flex items-center gap-2 border rounded-xl px-3 py-2" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                  {store.boardTemplates.map(tpl => { const isGroup = !!tpl.columns?.length; return (
+                    <div key={tpl.id} className="flex items-center gap-2 border rounded-xl px-3 py-2" style={{ borderColor: isGroup ? '#E3D9FB' : 'var(--spira-border-subtle)', backgroundColor: isGroup ? '#FAF8FF' : undefined }}>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-bold truncate" style={{ color: '#16211E' }}>{tpl.name}</p>
-                        <p className="text-[11px]" style={{ color: '#9AA39D' }}>task {tpl.tasks.length}개</p>
+                        <p className="text-[13px] font-bold truncate flex items-center gap-1" style={{ color: '#16211E' }}>{isGroup && <span className="text-[9px] font-black rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#EDE7FB', color: '#7C3AED' }}>그룹</span>}{tpl.name}</p>
+                        <p className="text-[11px]" style={{ color: '#9AA39D' }}>{isGroup ? `카테고리 ${tpl.columns!.length}개 · task ${tpl.columns!.reduce((n, c) => n + c.tasks.length, 0)}개` : `task ${tpl.tasks.length}개`}</p>
                       </div>
-                      <button onClick={() => addCategory(tpl.name, tpl.tasks)} className="text-[12px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>적용</button>
+                      <button onClick={() => isGroup ? applyGroupTemplate(tpl.columns!) : addCategory(tpl.name, tpl.tasks)} className="text-[12px] font-bold rounded-full px-2.5 py-1 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>적용</button>
                       <button onClick={() => store.deleteBoardTemplate(tpl.id)} className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0" title="템플릿 삭제">×</button>
                     </div>
-                  ))}
+                  ); })}
                 </div>
               </>
             )}
