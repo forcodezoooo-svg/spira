@@ -1176,20 +1176,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             for (const it of flat) { const k = keyOf(it) || '__none__'; const last = groups[groups.length - 1]; if (last && last.key === k) last.items.push(it); else groups.push({ key: k, items: [it] }); }
             const fmtHead = (k: string) => k === '__none__' ? '기한 없음' : (() => { const d = new Date(k + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]})`; })();
             return (
-              <div className="flex-1 min-h-0 overflow-y-auto pb-1">
+              <div className="flex-1 min-h-0">
                 {flat.length === 0 ? (
                   <div className="h-full flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 task가 없어요.</p></div>
                 ) : (
-                  <div className="max-w-[560px] mx-auto space-y-4">
+                  <div className="h-full flex gap-3 overflow-x-auto pb-1">
                     {groups.map(g => (
-                      <div key={g.key}>
-                        <div className="flex items-center gap-2 mb-1.5 px-0.5">
-                          <span className="text-[12px] font-black" style={{ color: g.key === '__none__' ? '#9AA39D' : '#16211E' }}>{fmtHead(g.key)}</span>
+                      <div key={g.key} className="flex flex-col min-h-0 w-[300px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
+                        <div className="px-3 py-2 border-b flex items-center gap-2 flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                          <span className="text-[14px] font-black" style={{ color: g.key === '__none__' ? '#9AA39D' : '#16211E' }}>{fmtHead(g.key)}</span>
                           {g.key !== '__none__' && <DdayBadge d={g.key} />}
-                          <span className="text-[11px] tabular-nums" style={{ color: '#9AA39D' }}>{g.items.length}</span>
-                          <div className="flex-1 h-px" style={{ backgroundColor: 'var(--spira-border-subtle)' }} />
+                          <span className="text-[11px] tabular-nums ml-auto" style={{ color: '#9AA39D' }}>{g.items.length}</span>
                         </div>
-                        <div className="space-y-2">
+                        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
                           {g.items.map(({ col, s }) => renderTaskCard(col, s, true))}
                         </div>
                       </div>
