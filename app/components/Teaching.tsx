@@ -54,7 +54,7 @@ const TOUR: Step[] = [
   { page: '/programs', target: '[data-teach="kb-toggle"]', text: 'Task 보드로 이동해볼까요?' },
   { page: '/programs', target: '[data-teach="kb-ai"]', text: 'AI 버튼을 누르면 이 프로젝트를 위한 할일이 자동으로 생성돼요.', kbView: true, scrollCenter: true, genTasksOnNext: true, awaitTasks: true },
   { page: '/programs', target: '[data-teach="kb-task"]', text: '이 task를 위한 세부 업무도 만들어서 할 일을 좀 더 촘촘히 계획할 수 있어요. 할일 수정이나 반복 설정은 텍스트를 클릭하면 가능해요.', scrollCenter: true, forceUnitAdd: true },
-  { page: '/programs', target: '[data-teach="kb-template"]', text: '이 프로세스를 다음에 또 하고 싶을 땐 템플릿 저장을 해보세요. 필요할 때 또 템플릿을 불러와서 사용할 수 있어요.', forceTemplate: true, scrollCenter: true, last: true },
+  { page: '/programs', target: '[data-teach="kb-template"]', text: '이 프로세스를 다음에 또 하고 싶을 땐 그룹 저장을 눌러 원하는 카테고리를 골라 템플릿으로 저장해보세요. 필요할 때 또 불러와서 사용할 수 있어요.', forceTemplate: true, scrollCenter: true, last: true },
 ];
 // Goals 투어 시작 인덱스(위 온보딩 8단계 다음). '첫 목표 가져오기' 시 이 인덱스로 점프.
 const GOALS_START = 8;
