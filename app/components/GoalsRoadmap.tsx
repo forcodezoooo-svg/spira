@@ -958,6 +958,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbUpdateUnit = (col: KbCol, s: Sub, uId: string, name: string, durMin?: number) => updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, name, durationMin: durMin } : u) });
   const kbToggleUnit = (col: KbCol, s: Sub, uId: string) => { if ((s.days?.length ?? 0) > 0) return; updateSub(col, s.id, { units: (s.units ?? []).map(u => u.id === uId ? { ...u, done: !u.done } : u) }); }; // 반복업무 세부작업은 카테고리보드에서 완료 체크하지 않음(요일별 Home 관리)
   // 다른 산출물 칸으로 task 이동 (드래그)
+  // 날짜순 뷰에서 task를 다른 날짜 칼럼으로 옮기면 수행날짜(기한)를 그 날짜로 맞춤
+  const kbMoveTaskToDate = (sId: string, dateKey: string) => {
+    const from = kbColsView.find(c => c.subtasks.some(s => s.id === sId)); if (!from) return;
+    const s = from.subtasks.find(x => x.id === sId); if (!s) return;
+    const val = dateKey === '__none__' ? undefined : dateKey;
+    const recurring = (s.days?.length ?? 0) > 0;
+    if ((s.deadline || s.date || '') === (val || '')) return; // 같은 날짜면 변화 없음
+    // 반복 task는 요일 기반이라 시작일(date)은 유지하고 기한만 갱신, 일시적 task는 날짜·기한 함께 이동
+    updateSub(from, sId, recurring ? { deadline: val } : { date: val, deadline: val });
+  };
   const kbMoveTask = (sId: string, from: KbCol, to: KbCol) => {
     if (from.todoId === to.todoId) return;
     const prog = findProg(from.p.wsId, from.p.id); if (!prog) return;
@@ -1178,7 +1188,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 ) : (
                   <div className="h-full flex gap-3 overflow-x-auto pb-1">
                     {groups.map(g => (
-                      <div key={g.key} className="flex flex-col min-h-0 w-[300px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
+                      <div key={g.key} className="flex flex-col min-h-0 w-[300px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: kbDrag ? '#C9B8F5' : 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
+                        onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) kbMoveTaskToDate(kbDrag, g.key); setKbDrag(null); }}>
                         <div className="px-3 py-2 border-b flex items-center gap-2 flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
                           <span className="text-[14px] font-black" style={{ color: g.key === '__none__' ? '#9AA39D' : '#16211E' }}>{fmtHead(g.key)}</span>
                           {g.key !== '__none__' && <DdayBadge d={g.key} />}
