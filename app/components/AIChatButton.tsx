@@ -351,6 +351,13 @@ export default function AIChatButton() {
                         </span>
                       )}
                     </div>
+                    {/* 답변 텍스트는 끝났지만 아직 반영 버튼(숨은 JSON)이 생성 중 — 로딩 표시 */}
+                    {msg.role === 'assistant' && !msg.action && msg.pendingAction && loading && i === messages.length - 1 && (
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold" style={{ backgroundColor: '#F1F1EB', color: '#9AA39D' }}>
+                        <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        반영 버튼 준비 중…
+                      </div>
+                    )}
                     {/* 대화 내용에서 인식된 '앱에 자동 반영' 버튼 (클릭 시 반영 — 무료는 유료 안내 팝업) */}
                     {msg.role === 'assistant' && msg.action && (
                       <button

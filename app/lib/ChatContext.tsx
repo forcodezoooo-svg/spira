@@ -24,6 +24,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   action?: ChatAction;
+  pendingAction?: boolean; // 스트리밍 중 마커를 감지 — 반영 버튼(숨은 JSON) 생성 중임을 표시
 }
 
 // sendMessage 옵션: 온보딩 자동 생성 등에서 사용
@@ -465,9 +466,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           ? full.split(PROJECT_ASSIGN_MARKER)[0].trimEnd()
           : full;
 
+        // 마커가 등장했으면(=반영 JSON을 만드는 중) 버튼이 뜰 때까지 로딩 표시를 켠다
+        const pendingAction = [ITEM_REVISE_MARKER, FIN_REPLAN_MARKER, PLAN_MARKER, ROUTINE_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, GOALS_MARKER].some(m => full.includes(m));
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', content: stripJsonNote(display) };
+          updated[updated.length - 1] = { role: 'assistant', content: stripJsonNote(display), pendingAction };
           return updated;
         });
       }
