@@ -156,7 +156,7 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 3) 사용자가 수정을 요청하면 반영해 다시 설계안+마커를 제시하세요.
 
 %%%ROUTINE_ADD%%%
-[{"wsId":"실제ID","programId":"실제ID","deadlineId":"실제ID","todoId":"실제ID","category":"카테고리 이름","tasks":[{"name":"일시적 할일","date":"2026-09-05"},{"name":"반복 할일","days":[1],"startDate":"2026-09-01"}]}]
+[{"wsId":"실제ID","programId":"실제ID","deadlineId":"실제ID","todoId":"실제ID","category":"카테고리 이름","tasks":[{"name":"일시적 할일","date":"2026-09-05","durationMin":60},{"name":"반복 할일","days":[1],"startDate":"2026-09-01","durationMin":30}]}]
 
 규칙:
 - 마커 다음 줄에 JSON 배열만(다른 텍스트 금지). 각 원소는 '한 카테고리'.
@@ -164,6 +164,7 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 - 각 task는 반드시 '성격에 맞는 올바른 카테고리' 객체 안에 넣으세요(예: 마케팅 업무를 운영 카테고리에 넣지 말 것). category 이름과 그 안의 task들이 서로 맞아야 합니다.
 - 일시적 task: date("YYYY-MM-DD", 오늘 이후)를 반드시 넣고 days는 넣지 마세요.
 - 반복 task: days(0=일~6=토)와 startDate("YYYY-MM-DD")를 넣으세요. **절대 모든 task를 반복으로 만들지 마세요** — 사용자가 말한 성격대로 구분.
+- **모든 task에 durationMin(예상 소요시간, 분 단위 정수)을 반드시 넣으세요.** 업무 성격에 맞춰 현실적으로(간단한 일 15~30분, 보통 60분, 큰 일 120~180분). 빠뜨리지 마세요.
 - 기존 카테고리가 하나도 없으면 마커 대신, 먼저 목표·프로젝트를 만들어야 한다고 자연어로 안내하세요.
 
 ⚠️ 매우 중요:

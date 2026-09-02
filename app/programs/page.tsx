@@ -773,7 +773,9 @@ export default function ProgramsPage() {
     // 각 원소는 '기존 카테고리(todo)'를 가리키고, 그 안에 task(subtask)를 추가한다.
     const today = todayKey;
     let total = 0, recurring = 0, addedTo = 0;
-    type NewSub = { id: string; name: string; done: boolean; date: string; days?: number[]; deadline?: string };
+    type NewSub = { id: string; name: string; done: boolean; date: string; days?: number[]; deadline?: string; durationMin: number };
+    // 소요시간 보정: AI가 준 값이 있으면 5분 단위로, 없으면 기본 30분 → 모든 업무에 시간이 붙게
+    const normDur = (m?: number) => { const v = (typeof m === 'number' && m > 0) ? m : 30; return Math.max(5, Math.round(v / 5) * 5); };
     const byProg = new Map<string, { wsId: string; progId: string; adds: Map<string, NewSub[]> }>();
     const norm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
     const areaOf = (name: string) => { const m = name.match(/^(.*?)\s*[:：]/); return m ? m[1].trim() : name; };
@@ -789,11 +791,12 @@ export default function ProgramsPage() {
       if (!hit && catArea) hit = allCats.find(c => norm(areaOf(c.todo.name)) === catArea) ?? null; // 영역명 정확
       if (!hit && it.todoId) hit = allCats.find(c => c.todo.id === it.todoId) ?? null;             // todoId 정확
       if (!hit) continue;
-      const newSubs = it.tasks.filter(t => t?.name).map(t => {
+      const newSubs: NewSub[] = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;
+        const durationMin = normDur(t.durationMin);
         total += 1; if (days) recurring += 1;
-        if (days) { const start = t.startDate || t.date || today; return { id: uid(), name: t.name, done: false, date: start, days }; } // 반복: 시작일
-        const d = t.date || today; return { id: uid(), name: t.name, done: false, date: d, deadline: d }; // 일시적: 그 날짜
+        if (days) { const start = t.startDate || t.date || today; return { id: uid(), name: t.name, done: false, date: start, days, durationMin }; } // 반복: 시작일
+        const d = t.date || today; return { id: uid(), name: t.name, done: false, date: d, deadline: d, durationMin }; // 일시적: 그 날짜
       });
       if (!newSubs.length) continue;
       // 프로그램별로 todo별 추가분을 모은다 (같은 프로그램의 여러 카테고리를 개별 update하면 서로 덮어써서 유실됨)
