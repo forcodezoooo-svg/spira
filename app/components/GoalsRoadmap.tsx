@@ -1032,6 +1032,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const offDates = Object.entries(store.capacity.dateOverrides ?? {}).filter(([, h]) => h === 0).map(([d]) => d).filter(d => d >= rangeStart && daysBetween(rangeStart, d) < span).sort();
   const offBands: { start: string; end: string }[] = [];
   for (const d of offDates) { const last = offBands[offBands.length - 1]; if (last && daysBetween(last.end, d) === 1) last.end = d; else offBands.push({ start: d, end: d }); }
+  // 막대 span 안의 오프(휴무) 일수 — 프로젝트를 그만큼 '연장'해 보이게(오프 기간엔 아무 것도 없게)
+  const allOffSet = new Set(Object.entries(store.capacity.dateOverrides ?? {}).filter(([, h]) => h === 0).map(([d]) => d));
+  const offDaysInSpan = (start: string, end: string) => { let n = 0, d = start; for (let i = 0; i < 400 && d <= end; i++) { if (allOffSet.has(d)) n++; d = addDaysStr(d, 1); } return n; };
 
   const onTrackDrop = (e: React.DragEvent) => { e.preventDefault(); let payload = dragPayloadRef.current; if (!payload) { try { const raw = e.dataTransfer.getData('text/plain'); if (raw) payload = JSON.parse(raw); } catch { /* empty */ } } const date = dateFromClientX(e.clientX); if (payload && date) dropOnDate(payload, date); dragPayloadRef.current = null; };
 
@@ -1361,12 +1364,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               )}
               {dayLines.map((x, i) => <div key={`d${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#EEEEE8' }} />)}
               {strongLines.map((x, i) => <div key={`s${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#E2E2DA' }} />)}
-              {/* 오프(휴무) 밴드 */}
-              {offBands.map(b => (
-                <div key={`off${b.start}`} className="absolute top-0 bottom-0 flex items-start justify-center overflow-hidden" style={{ left: xOf(b.start), width: wOf(b.start, b.end), background: 'repeating-linear-gradient(45deg, rgba(150,99,26,0.12), rgba(150,99,26,0.12) 5px, rgba(150,99,26,0.04) 5px, rgba(150,99,26,0.04) 10px)' }}>
-                  <span className="text-[9px] font-bold mt-0.5 px-1 rounded-full whitespace-nowrap" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>
-                </div>
-              ))}
+              {/* 오프(휴무) 밴드는 막대 위 마스크로 그림(아래 참고) */}
               {todayStr >= rangeStart && daysBetween(rangeStart, todayStr) < span && <div className="absolute top-0 bottom-0 w-px" style={{ left: todayX, backgroundColor: '#9DFE3B' }} />}
             </div>
             {rowsDraw.length === 0 ? (
@@ -1390,6 +1388,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const pgIdx = pgIdx0;
               const left = placed ? xOf(r.start!) : 0;
               const width = placed ? wOf(r.start!, r.end!) : 0;
+              const offSpan = placed && r.level === 1 ? offDaysInSpan(r.start!, r.end!) : 0; // 프로젝트 span 안 휴무일수 → 연장 표시
               const dragging = calDrag?.key === r.key;
               const bl = sortMode === 'dday' ? 2 : r.level; // 시작일순에서는 산출물 막대를 비즈니스별 산출물(2단계) 디자인과 동일하게
               return (
@@ -1459,10 +1458,25 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         )}
                       </div>
                     )}
+                    {/* 휴무일수만큼 프로젝트 연장 표시(오프 기간은 위 마스크로 비워짐) */}
+                    {placed && offSpan > 0 && (
+                      <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" title={`휴무 ${offSpan}일만큼 연장`}
+                        style={{ left: xOf(addDaysStr(r.end!, 1)), width: offSpan * pxPerDay, height: barH(bl), backgroundColor: `${r.color}2E`, border: `1px dashed ${r.color}`, borderRadius: bl === 1 ? 8 : 6, opacity: 0.85, zIndex: 2 }} />
+                    )}
                   </div>
                 </div>
               );
             })}
+            {/* 오프(휴무) 마스크 — 막대 위를 덮어 오프 기간엔 아무 것도 없게 */}
+            {offBands.length > 0 && (
+              <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: LABEL_W, width: contentWidth, zIndex: 7 }}>
+                {offBands.map(b => (
+                  <div key={`offmask${b.start}`} className="absolute top-0 bottom-0 overflow-hidden flex items-start justify-center" style={{ left: xOf(b.start), width: wOf(b.start, b.end), borderLeft: '1px solid #E7E0D2', borderRight: '1px solid #E7E0D2', background: 'repeating-linear-gradient(45deg, #EFE7D6, #EFE7D6 5px, #F6F1E6 5px, #F6F1E6 10px)' }}>
+                    <span className="text-[9px] font-bold mt-1 px-1 rounded-full whitespace-nowrap" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
