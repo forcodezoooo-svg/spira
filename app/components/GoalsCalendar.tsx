@@ -310,11 +310,10 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
             const recurring = (s.days?.length ?? 0) > 0;
             // 완료한 일회성 업무는 회색 톤 + 드래그 불가(readOnly)로 표시. 반복 업무는 요일별 관리라 완료로 치지 않음.
             const isDone = s.done && !recurring;
-            let start = s.date || s.deadline!;
-            const end = s.deadline || s.date!;
-            if (start > end) start = end;
-            if (isDone && end >= todayKey) continue; // 완료 업무는 '지난 날짜'만 회색 표시 — 오늘/미래 완료는 숨김(유령 항목 방지)
-            real.push({ key: `s-${s.id}`, level: 'subtask', start, end, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: isDone ? '#C7CEC7' : pColor, done: isDone, readOnly: isDone || undefined });
+            // 업무는 '배정된 하루'에만 표시(시작~기한으로 뻗지 않음) — 실제 그 날 목록과 일치, 다른 날로 새는 유령 막대 방지
+            const day = s.date || s.deadline!;
+            if (isDone && day >= todayKey) continue; // 완료 업무는 '지난 날짜'만 회색 표시 — 오늘/미래 완료는 숨김
+            real.push({ key: `s-${s.id}`, level: 'subtask', start: day, end: day, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: isDone ? '#C7CEC7' : pColor, done: isDone, readOnly: isDone || undefined });
           }
         }
       }
