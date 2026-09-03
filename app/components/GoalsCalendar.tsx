@@ -12,7 +12,7 @@ type CalLevel = 'program' | 'deadline' | 'todo' | 'subtask';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
 type Payload = { level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string };
-type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; ghost?: boolean; readOnly?: boolean; done?: boolean };
+type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; ghost?: boolean; readOnly?: boolean; done?: boolean; recurring?: boolean };
 
 export interface GoalsCalendarHandle {
   focus: (level: CalLevel, key: string, start?: string, end?: string, name?: string) => void;
@@ -319,7 +319,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                 const beforeEnd = !s.deadline || s.deadline >= ds;
                 if (!(afterStart && beforeEnd && s.days!.includes(dow))) continue;
                 const dOne = (s.doneDates ?? []).includes(ds);
-                real.push({ key: `s-${s.id}-${ds}`, level: 'subtask', start: ds, end: ds, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: dOne ? '#C7CEC7' : pColor, done: dOne, readOnly: true });
+                real.push({ key: `s-${s.id}-${ds}`, level: 'subtask', start: ds, end: ds, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: dOne ? '#C7CEC7' : pColor, done: dOne, readOnly: true, recurring: true });
               }
               continue;
             }
@@ -466,13 +466,13 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                       <div
                         key={`${li}-${bi}`}
                         data-cal-bar={b.r.key}
-                        style={{ gridColumn: `${b.sc + 1} / ${b.ec + 2}`, gridRow: li + 1 }}
+                        style={{ gridColumn: `${b.sc + 1} / ${b.ec + 2}`, gridRow: li + 1, ...(b.r.recurring ? { border: `1.4px dashed ${b.r.color}`, borderRadius: 8, backgroundColor: `${b.r.color}12` } : {}) }}
                         className={`group/bar relative flex flex-col justify-start min-w-0 select-none ${b.r.readOnly ? '' : 'cursor-grab active:cursor-grabbing'} ${dragging ? 'opacity-90' : ''}`}
                         onMouseDown={b.r.readOnly ? undefined : e => startCalDrag(b.r, 'move', e)}
-                        title={b.r.readOnly ? `${b.r.name} (프로젝트 기간 개요)` : `${b.r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
+                        title={b.r.recurring ? `${b.r.name} (매주 반복 업무)` : b.r.readOnly ? `${b.r.name} (프로젝트 기간 개요)` : `${b.r.name} — 드래그로 이동, 양끝을 잡아 기간 조절`}
                       >
                         {hot && <span className="absolute -inset-x-1.5 -top-1 -bottom-1 rounded-lg animate-pulse pointer-events-none z-0" style={{ backgroundColor: b.r.color, opacity: 0.2, boxShadow: `0 0 0 2px ${b.r.color}` }} />}
-                        <div className="relative h-[3px] mt-2.5 rounded-full" style={{ backgroundColor: b.r.color, opacity: dragging || hot ? 1 : 0.9 }}>
+                        <div className="relative h-[3px] mt-2 rounded-full" style={{ backgroundColor: b.r.color, opacity: dragging || hot ? 1 : 0.9 }}>
                           {!b.r.readOnly && b.startsHere && (
                             <div onMouseDown={e => startCalDrag(b.r, 'resize-start', e)} className="absolute -left-2 -top-2 w-4 h-[17px] flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절">
                               <span className="w-[9px] h-[9px] rounded-full" style={{ backgroundColor: b.r.color, boxShadow: '0 0 0 2px #fff' }} />
@@ -484,7 +484,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                             </div>
                           )}
                         </div>
-                        <span className={`relative z-10 mt-1.5 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: b.r.done ? '#B4BCB4' : hot ? '#16211E' : '#7A857E', textDecoration: b.r.done ? 'line-through' : 'none' }}>{b.r.name}</span>
+                        <span className={`relative z-10 mt-1 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: b.r.done ? '#B4BCB4' : hot ? '#16211E' : '#7A857E', textDecoration: b.r.done ? 'line-through' : 'none' }}>{b.r.recurring ? '↻ ' : ''}{b.r.name}</span>
                       </div>
                     );
                   }))}
