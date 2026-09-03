@@ -323,6 +323,52 @@ export function proposeReplan(
   };
 }
 
+// ── 앞당기기(pull forward): 가용시간이 남는 날에 다른(뒤) 날 업무를 끌어와 채우기 ──
+export interface PullMove { task: SubtaskTask; fromDate: string; }
+export interface PullProposal {
+  date: string;        // 대상 날짜(가용시간 남는 날)
+  freeMin: number;     // 이 날의 남는 가용시간(분)
+  pull: PullMove[];    // 앞으로 당길 업무들
+  filledMin: number;   // 당겨서 채워지는 시간(분)
+}
+
+export function proposePullForward(
+  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string,
+  horizonDays = 21,
+): PullProposal {
+  const dc = computeDayCapacity(entries, schedule, capacity, date);
+  const initialFree = Math.max(0, dc.availableProjectMin - dc.plannedProjectMin);
+  let free = initialFree;
+  const idx = buildSubIndex(entries);
+  // 향후 날짜들의 이동 가능한(고정·반복·완료 제외) task를 수집
+  const cands: { task: SubtaskTask; from: string }[] = [];
+  for (let i = 1; i <= horizonDays; i++) {
+    const ds = addDays(date, i);
+    for (const t of getSubtaskTasksForDate(entries, ds, { onlyFromPlan: true })) {
+      if (t.done || t.schedulingType === 'fixed' || (t.days?.length)) continue;
+      cands.push({ task: t, from: ds });
+    }
+  }
+  // 임박 기한 먼저 → 가까운 날짜 먼저 → 우선순위 높은 것 먼저
+  cands.sort((a, b) =>
+    (a.task.deadline ?? '9999').localeCompare(b.task.deadline ?? '9999')
+    || a.from.localeCompare(b.from)
+    || (b.task.priority ?? 0) - (a.task.priority ?? 0));
+  const pull: PullMove[] = [];
+  let filled = 0;
+  for (const c of cands) {
+    if (free <= 0) break;
+    const dur = c.task.durationMin ?? 0;
+    if (!(dur > 0)) continue;               // 소요시간 없는 건 채움 계산 불가 → 제외
+    if (dur > free) continue;               // 남는 시간에 안 들어가면 다음 후보
+    const depEarliest = earliestFromDeps(idx, c.task.dependsOn); // 선행이 대상일 이후면 못 당김
+    if (depEarliest && date < depEarliest) continue;
+    pull.push({ task: c.task, fromDate: c.from });
+    free -= dur; filled += dur;
+  }
+  return { date, freeMin: initialFree, pull, filledMin: filled };
+}
+
 // ── 예상 vs 실제 학습 (§15) ──
 export interface AreaAccuracy {
   area: string;       // 업무 영역(programName)

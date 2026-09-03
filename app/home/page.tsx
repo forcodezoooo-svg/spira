@@ -13,10 +13,11 @@ import MusicTimer from '../components/MusicTimer';
 import GoalsCalendar from '../components/GoalsCalendar';
 import WorkHoursPanel from '../components/WorkHoursPanel';
 import ReplanProposalModal from '../components/ReplanProposalModal';
+import PullForwardModal from '../components/PullForwardModal';
 import ActualTimeModal from '../components/ActualTimeModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, proposeReplan, buildSubIndex, earliestFromDeps, estimateAccuracy, fmtMin, nextWorkingDay, isWorkingDay, ReplanProposal, ReplanMove } from '../lib/capacity';
+import { computeDayCapacity, proposeReplan, proposePullForward, buildSubIndex, earliestFromDeps, estimateAccuracy, fmtMin, nextWorkingDay, isWorkingDay, ReplanProposal, ReplanMove, PullProposal } from '../lib/capacity';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -42,6 +43,7 @@ export default function Home() {
   const [showYesterday, setShowYesterday] = useState(false);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null); // 캘린더에서 클릭한 날짜(그 날짜 업무 목록)
   const [replanOpen, setReplanOpen] = useState(false); // 재배치 제안 모달
+  const [pullOpen, setPullOpen] = useState(false); // 업무 앞당기기 제안 모달
   const [aiReplan, setAiReplan] = useState<{ proposal: ReplanProposal; reply: string } | null>(null); // AI가 만든 재배치 제안
   const [aiReplanBusy, setAiReplanBusy] = useState(false);
   const [urgentOpen, setUrgentOpen] = useState(false); // 긴급 업무 입력
@@ -250,6 +252,17 @@ export default function Home() {
       store.updateProgramSubtask(m.task.wsId, m.task.programId, m.task.deadlineId, m.task.todoId, m.task.subtaskId, patch);
     }
     setReplanOpen(false); setAiReplan(null);
+  };
+  // 앞당기기 제안 — 가용시간이 남고(초과 아님) 여유가 있을 때만 계산
+  const dayFreeMin = Math.max(0, dayCap.availableProjectMin - dayCap.plannedProjectMin);
+  const pullProposal: PullProposal | null = (dayCap.baseMin > 0 && dayCap.overMin === 0 && dayFreeMin > 0)
+    ? proposePullForward(entries, store.workSchedule, store.capacity, dateStr) : null;
+  const applyPull = (p: PullProposal) => {
+    for (const m of p.pull) {
+      store.updateProgramSubtask(m.task.wsId, m.task.programId, m.task.deadlineId, m.task.todoId, m.task.subtaskId, { date: dateStr, deadline: dateStr });
+    }
+    setPullOpen(false);
+    if (p.pull.length) toast(`업무 ${p.pull.length}개를 오늘로 당겨왔어요.`, 'success');
   };
   // AI에게 더 나은 재배치 제안 요청 (§23) — 규칙 제안의 이동후보 + 향후 14일 여유를 넘김
   const requestAiReplan = async () => {
@@ -768,6 +781,12 @@ export default function Home() {
                 <button onClick={() => setReplanOpen(true)} className="text-[12px] font-bold rounded-full px-3 py-1 transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>재배치 제안 보기</button>
               </div>
             )}
+            {pullProposal && pullProposal.pull.length > 0 && (
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: '#F3FAEC' }}>
+                <span className="text-[12px] font-semibold" style={{ color: '#3E6B1F' }}>{fmtMin(dayFreeMin)} 여유 · 다른 날 업무를 당겨올 수 있어요</span>
+                <button onClick={() => setPullOpen(true)} className="text-[12px] font-bold rounded-full px-3 py-1 transition-transform hover:-translate-y-0.5 flex-shrink-0" style={{ backgroundColor: '#16211E', color: '#fff' }}>앞당기기 제안 보기</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1020,6 +1039,10 @@ export default function Home() {
           aiActive={!!aiReplan}
           aiEnabled
         />
+      )}
+
+      {pullOpen && pullProposal && (
+        <PullForwardModal proposal={pullProposal} onApply={applyPull} onClose={() => setPullOpen(false)} />
       )}
     </div>
   );
