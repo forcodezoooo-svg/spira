@@ -30,6 +30,17 @@ export function baseMinForDate(schedule: WorkSchedule, capacity: CapacitySetting
   return Math.max(0, toMin(wd.end) - toMin(wd.start));
 }
 
+// 그 날짜가 근무일인지 (휴무=요일 off 또는 날짜 override 0 이면 false)
+export function isWorkingDay(schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string): boolean {
+  return baseMinForDate(schedule, capacity, date) > 0;
+}
+// 주어진 날짜부터(포함) 가장 가까운 근무일을 반환 — 휴무일에 자동 배치되지 않도록
+export function nextWorkingDay(schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string): string {
+  let d = date;
+  for (let i = 0; i < 366; i++) { if (isWorkingDay(schedule, capacity, d)) return d; d = addDays(d, 1); }
+  return date; // 안전장치: 근무일이 하나도 없으면 원래 날짜
+}
+
 // 그 요일에 활성인 루틴 task의 예상 소요시간(분) 합 — Capacity에서 차감
 export function routineMinForDate(entries: WorkspaceEntry[], date: string): number {
   const dow = dowOf(date);

@@ -16,7 +16,7 @@ import ReplanProposalModal from '../components/ReplanProposalModal';
 import ActualTimeModal from '../components/ActualTimeModal';
 import { useTimer } from '../lib/TimerContext';
 import { ProgramTodo } from '../lib/types';
-import { computeDayCapacity, proposeReplan, buildSubIndex, earliestFromDeps, estimateAccuracy, fmtMin, ReplanProposal, ReplanMove } from '../lib/capacity';
+import { computeDayCapacity, proposeReplan, buildSubIndex, earliestFromDeps, estimateAccuracy, fmtMin, nextWorkingDay, isWorkingDay, ReplanProposal, ReplanMove } from '../lib/capacity';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -71,6 +71,8 @@ export default function Home() {
     if (!store.ready) return;
     const t = new Date(); t.setHours(0, 0, 0, 0);
     const todayS = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    // 오늘이 휴무면 다음 근무일로 이월(휴무일에 업무가 몰리지 않도록)
+    const rollTo = nextWorkingDay(store.workSchedule, store.capacity, todayS);
     for (const e of store.allWorkspacesEntries) {
       for (const p of e.programs) {
         if (!p.fromPlan) continue;
@@ -80,7 +82,10 @@ export default function Home() {
           return { ...dl, todos: dl.todos.map(todo => ({ ...todo, subtasks: (todo.subtasks ?? []).map(s => {
             if ((s.days?.length ?? 0) > 0 || s.done) return s; // 반복·완료는 이월 안 함
             const d = s.date || s.deadline;
-            if (d && d < todayS) { changed = true; return { ...s, date: todayS, deadline: todayS }; }
+            if (!d) return s;
+            // 지난 미완료 → 다음 근무일로 이월 / 미래인데 휴무일에 있으면 → 다음 근무일로 이동
+            const target = d < todayS ? rollTo : (!isWorkingDay(store.workSchedule, store.capacity, d) ? nextWorkingDay(store.workSchedule, store.capacity, d) : null);
+            if (target && target !== d) { changed = true; return { ...s, date: target, deadline: target }; }
             return s;
           }) })) };
         });

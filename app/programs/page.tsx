@@ -22,6 +22,7 @@ const IMPORTANCE_META: Record<number, { label: string; color: string; bg: string
   3: { label: '높음', color: '#C24B4B', bg: '#FCEBEB' },
 };
 import { uid } from '../lib/store';
+import { nextWorkingDay } from '../lib/capacity';
 import { useChatContext, QuarterPlan, AreaAssignment, ProjectAssignPlan } from '../lib/ChatContext';
 import MemoPanel from '../components/MemoPanel';
 import GoalsRoadmap, { GoalsRoadmapHandle } from '../components/GoalsRoadmap';
@@ -796,7 +797,9 @@ export default function ProgramsPage() {
         const durationMin = normDur(t.durationMin);
         total += 1; if (days) recurring += 1;
         if (days) { const start = t.startDate || t.date || today; return { id: uid(), name: t.name, done: false, date: start, days, durationMin }; } // 반복: 시작일
-        const d = t.date || today; return { id: uid(), name: t.name, done: false, date: d, deadline: d, durationMin }; // 일시적: 그 날짜
+        // 일시적: 그 날짜 — 휴무일이면 다음 근무일로 맞춤(휴무일 자동 배치 방지)
+        const d = nextWorkingDay(store.workSchedule, store.capacity, t.date || today);
+        return { id: uid(), name: t.name, done: false, date: d, deadline: d, durationMin };
       });
       if (!newSubs.length) continue;
       // 프로그램별로 todo별 추가분을 모은다 (같은 프로그램의 여러 카테고리를 개별 update하면 서로 덮어써서 유실됨)
