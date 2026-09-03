@@ -12,7 +12,7 @@ type CalLevel = 'program' | 'deadline' | 'todo' | 'subtask';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
 type Payload = { level: CalLevel; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string };
-type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; ghost?: boolean; readOnly?: boolean };
+type CalRange = { key: string; level: CalLevel; start: string; end: string; color: string; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; ghost?: boolean; readOnly?: boolean; done?: boolean };
 
 export interface GoalsCalendarHandle {
   focus: (level: CalLevel, key: string, start?: string, end?: string, name?: string) => void;
@@ -306,12 +306,14 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
       for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done)) {
         for (const t of dl.todos) {
           for (const s of (t.subtasks ?? [])) {
-            if (s.done) continue;
             if (!s.date && !s.deadline) continue;
+            const recurring = (s.days?.length ?? 0) > 0;
+            // 완료한 일회성 업무는 회색 톤 + 드래그 불가(readOnly)로 표시(숨기지 않음). 반복 업무는 요일별 관리라 완료로 치지 않음.
+            const isDone = s.done && !recurring;
             let start = s.date || s.deadline!;
             const end = s.deadline || s.date!;
             if (start > end) start = end;
-            real.push({ key: `s-${s.id}`, level: 'subtask', start, end, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: pColor });
+            real.push({ key: `s-${s.id}`, level: 'subtask', start, end, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: isDone ? '#C7CEC7' : pColor, done: isDone, readOnly: isDone || undefined });
           }
         }
       }
@@ -485,7 +487,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                             </div>
                           )}
                         </div>
-                        <span className={`relative z-10 mt-1.5 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: hot ? '#16211E' : '#7A857E' }}>{b.r.name}</span>
+                        <span className={`relative z-10 mt-1.5 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: b.r.done ? '#B4BCB4' : hot ? '#16211E' : '#7A857E', textDecoration: b.r.done ? 'line-through' : 'none' }}>{b.r.name}</span>
                         {!b.r.readOnly && b.endsHere && (
                           <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearOneSchedule(b.r); }} className="absolute left-1/2 -translate-x-1/2 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="이 일정을 캘린더에서 삭제 (내용 유지)">×</button>
                         )}

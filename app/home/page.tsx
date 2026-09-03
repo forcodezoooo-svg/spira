@@ -66,6 +66,30 @@ export default function Home() {
     return () => { closeChat(); };
   }, [closeChat]);
 
+  // 지난 날짜에 수행하지 못한(완료 안 된) 일회성 업무를 오늘로 자동 이월 — 반복 업무·완료 업무는 제외
+  useEffect(() => {
+    if (!store.ready) return;
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const todayS = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    for (const e of store.allWorkspacesEntries) {
+      for (const p of e.programs) {
+        if (!p.fromPlan) continue;
+        let changed = false;
+        const deadlines = (p.deadlines ?? []).map(dl => {
+          if (dl.done) return dl;
+          return { ...dl, todos: dl.todos.map(todo => ({ ...todo, subtasks: (todo.subtasks ?? []).map(s => {
+            if ((s.days?.length ?? 0) > 0 || s.done) return s; // 반복·완료는 이월 안 함
+            const d = s.date || s.deadline;
+            if (d && d < todayS) { changed = true; return { ...s, date: todayS, deadline: todayS }; }
+            return s;
+          }) })) };
+        });
+        if (changed) store.updateProgramInWs(e.workspace.id, { ...p, deadlines });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.ready]);
+
   // 다가오는 목표: 컨테이너 폭에 맞춰 열 개수 측정 (콜백 ref로 조기 return보다 앞에서 hook 선언 — 순서 고정)
   const [journeyCols, setJourneyCols] = useState(5);
   const journeyRoRef = useRef<ResizeObserver | null>(null);
