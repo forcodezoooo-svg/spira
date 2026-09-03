@@ -1145,52 +1145,9 @@ function WorkAreasSection({
   onRemove: (id: string) => void;
   onGenerate?: () => void;
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const [color, setColor] = useState(BUSINESS_COLORS[0]);
-  const [goal, setGoal] = useState('');
-
   const nextColor = () => BUSINESS_COLORS[areas.length % BUSINESS_COLORS.length];
-
-  const startAdd = () => { setName(''); setColor(nextColor()); setGoal(''); setAdding(true); setEditingId(null); };
-  const startEdit = (a: WorkArea) => { setName(a.name); setColor(a.color); setGoal(a.goal); setEditingId(a.id); setAdding(false); };
-  const saveAdd = () => {
-    if (!name.trim()) return;
-    onAdd({ id: uid(), name: name.trim(), color, goal: goal.trim() });
-    setAdding(false);
-  };
-  const saveEdit = (id: string) => {
-    if (!name.trim()) return;
-    onUpdate(id, { name: name.trim(), color, goal: goal.trim() });
-    setEditingId(null);
-  };
-  const quickAdd = (label: string) => {
-    onAdd({ id: uid(), name: label, color: BUSINESS_COLORS[areas.length % BUSINESS_COLORS.length], goal: '' });
-  };
-
-  const editForm = (onSave: () => void, onCancel: () => void, isAdd: boolean) => (
-    <div className="space-y-2.5">
-      <input
-        autoFocus
-        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400 transition-colors"
-        placeholder="영역 이름 (예: 디자인)"
-        value={name}
-        onChange={e => setName(e.target.value)}
-      />
-      <textarea
-        rows={2}
-        className="w-full resize-none bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm text-neutral-900 outline-none focus:border-violet-400 transition-colors leading-relaxed"
-        placeholder="이 영역의 목표 (예: 일관된 브랜드 경험 구축)"
-        value={goal}
-        onChange={e => setGoal(e.target.value)}
-      />
-      <div className="flex gap-3 pt-1 border-t border-neutral-100">
-        <button onClick={onSave} className="text-xs text-neutral-700 hover:text-neutral-900 font-medium transition-colors">{isAdd ? '추가' : '저장'}</button>
-        <button onClick={onCancel} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">취소</button>
-      </div>
-    </div>
-  );
+  const add = (label: string) => { const n = label.trim(); if (!n) return; onAdd({ id: uid(), name: n, color: nextColor(), goal: '' }); setName(''); };
 
   return (
     <section>
@@ -1201,7 +1158,7 @@ function WorkAreasSection({
             onClick={onGenerate}
             title={onGenerate ? 'AI가 업무 영역 제안' : undefined}
           >
-            <h2 className={`text-sm font-semibold text-neutral-900 ${onGenerate ? 'group-hover:text-neutral-700 transition-colors' : ''}`}>업무 영역별 목표</h2>
+            <h2 className={`text-sm font-semibold text-neutral-900 ${onGenerate ? 'group-hover:text-neutral-700 transition-colors' : ''}`}>업무 영역</h2>
             {onGenerate && (
               <svg className="w-3 h-3 text-neutral-500 group-hover:text-neutral-600 transition-colors ml-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" />
@@ -1209,58 +1166,47 @@ function WorkAreasSection({
             )}
           </div>
           <div onClick={e => e.stopPropagation()}>
-            <Hint text="사업을 만들어가는 데 필요한 업무 영역(디자인·기획·마케팅·개발 등)을 나누고, 각 영역의 목표를 설정하세요. 이후 업무를 이 영역에 맞춰 관리할 수 있습니다." />
+            <Hint text="업무를 분류할 카테고리예요. 필요한 영역(디자인·기획·마케팅·개발 등)을 추가하거나 삭제하세요." />
           </div>
         </div>
-        <button onClick={startAdd} className="text-xs text-neutral-600 hover:text-neutral-900 transition-colors">+ 영역 추가</button>
       </div>
 
-      {areas.length === 0 && !adding ? (
-        <div className="bg-white border border-neutral-200 rounded-xl px-5 py-6">
-          <p className="text-sm text-neutral-400 mb-3">업무 영역을 나눠 각 영역의 목표를 설정하세요</p>
-          <div className="flex flex-wrap gap-1.5">
-            {DEFAULT_WORK_AREAS.map(label => (
-              <button
-                key={label}
-                onClick={() => quickAdd(label)}
-                className="flex items-center gap-1.5 text-xs text-neutral-700 bg-neutral-50 border border-neutral-200 hover:border-violet-300 hover:bg-violet-50 rounded-full px-3 py-1.5 transition-colors"
-              >
-                + {label}
-              </button>
+      <div className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
+        {areas.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2.5">
+            {areas.map(a => (
+              <span key={a.id} className="group/area inline-flex items-center gap-1.5 rounded-full pl-2.5 pr-1.5 py-1 border" style={{ borderColor: a.color, backgroundColor: `${a.color}14` }}>
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
+                <input
+                  value={a.name}
+                  onChange={e => onUpdate(a.id, { name: e.target.value })}
+                  className="bg-transparent text-[13px] font-semibold text-neutral-800 outline-none min-w-0"
+                  style={{ width: `${Math.max(2, a.name.length + 1)}ch` }}
+                  title="이름 수정"
+                />
+                <button onClick={() => onRemove(a.id)} className="text-neutral-300 hover:text-red-500 text-sm leading-none flex-shrink-0" title="삭제">×</button>
+              </span>
             ))}
           </div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) add(name); }}
+            placeholder="새 업무 영역 (예: 마케팅)"
+            className="flex-1 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-[13px] outline-none focus:border-violet-400 transition-colors"
+          />
+          <button onClick={() => add(name)} disabled={!name.trim()} className="px-3 py-1.5 rounded-lg text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2.5">
-          {areas.map(a => (
-            <div
-              key={a.id}
-              className={`bg-white border rounded-xl px-4 py-3 transition-all ${editingId === a.id ? 'ring-2 ring-violet-400 border-violet-300 col-span-2' : 'border-neutral-200'}`}
-            >
-              {editingId === a.id ? (
-                editForm(() => saveEdit(a.id), () => setEditingId(null), false)
-              ) : (
-                <div className="group/area">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-neutral-900 flex-1 truncate">{a.name}</p>
-                    <button onClick={() => startEdit(a)} className="text-xs text-neutral-400 hover:text-neutral-700 transition-colors opacity-0 group-hover/area:opacity-100 flex-shrink-0">수정</button>
-                    <button onClick={() => onRemove(a.id)} className="text-neutral-300 hover:text-red-500 text-xs transition-colors opacity-0 group-hover/area:opacity-100 flex-shrink-0">×</button>
-                  </div>
-                  <p className={`text-xs leading-relaxed mt-1.5 ${a.goal ? 'text-neutral-600' : 'text-neutral-300'}`}>
-                    {a.goal || '목표 미설정'}
-                  </p>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {adding && (
-            <div className="bg-white border border-violet-300 ring-2 ring-violet-400 rounded-xl px-4 py-3 col-span-2">
-              {editForm(saveAdd, () => setAdding(false), true)}
-            </div>
-          )}
-        </div>
-      )}
+        {areas.length === 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
+            {DEFAULT_WORK_AREAS.map(label => (
+              <button key={label} onClick={() => add(label)} className="text-xs text-neutral-700 bg-neutral-50 border border-neutral-200 hover:border-violet-300 hover:bg-violet-50 rounded-full px-3 py-1.5 transition-colors">+ {label}</button>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
