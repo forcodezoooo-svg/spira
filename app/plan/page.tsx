@@ -2538,6 +2538,7 @@ export default function PlanPage() {
   const storeRef = useRef(store);
   const selectedWsIdRef = useRef(selectedWsId);
   const planRef = useRef(plan);
+  const genFieldTargetRef = useRef<keyof BusinessOverview | null>(null); // 항목별 다이아 버튼: 이 항목만 반영
   storeRef.current = store;
   selectedWsIdRef.current = selectedWsId;
   planRef.current = plan;
@@ -2616,6 +2617,24 @@ export default function PlanPage() {
       // next를 만든 뒤 setPlan + store 갱신을 setState 업데이터 '밖에서' 수행한다.
       const prev = planRef.current;
       if (prev) {
+        // patch에서 특정 사업개요 항목 값을 뽑아냄(문제/솔루션은 문자열 우선, 배열 폴백)
+        const ovVal = (f: keyof BusinessOverview): string | undefined => {
+          if (f === 'problem') return patch.problem ?? (patch.problems?.length ? patch.problems.filter(Boolean).join('\n') : undefined);
+          if (f === 'solution') return patch.solution ?? (patch.solutions?.length ? patch.solutions.map(s => typeof s === 'string' ? s : (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n') : undefined);
+          return (patch as Record<string, unknown>)[f] as string | undefined;
+        };
+        // 항목별 다이아 버튼: 그 항목 하나만 반영하고 종료
+        const fieldTarget = genFieldTargetRef.current; genFieldTargetRef.current = null;
+        if (fieldTarget) {
+          const val = ovVal(fieldTarget);
+          if (val === undefined || val === '') return;
+          const baseOv = prev.overview ?? deriveOverview(prev);
+          const nextOne: PlanData = { ...prev, overview: { ...baseOv, [fieldTarget]: val } };
+          setPlan(nextOne);
+          const wsId1 = selectedWsIdRef.current;
+          if (wsId1) storeRef.current.updatePlanInWs(wsId1, nextOne); else storeRef.current.updatePlan(nextOne);
+          return;
+        }
         const next: PlanData = {
           ...prev,
           ...(patch.tagline !== undefined && { tagline: patch.tagline }),
@@ -2673,12 +2692,13 @@ export default function PlanPage() {
         };
         // AI가 채운 값을 새 '사업 개요'(overview)에도 반영 — 새 레이아웃이 overview를 표시하므로.
         const nextOverview: BusinessOverview = { ...(prev.overview ?? deriveOverview(prev)) };
+        if (patch.category !== undefined) nextOverview.category = patch.category;
         if (patch.tagline !== undefined) nextOverview.tagline = patch.tagline;
         if (patch.concept !== undefined) nextOverview.concept = patch.concept;
         if (patch.mission !== undefined) nextOverview.mission = patch.mission;
         if (patch.vision !== undefined) nextOverview.vision = patch.vision;
-        if (patch.problems?.length) nextOverview.problem = patch.problems.filter(Boolean).join('\n');
-        if (patch.solutions?.length) nextOverview.solution = patch.solutions.map(s => typeof s === 'string' ? s : (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n');
+        { const p = ovVal('problem'); if (p !== undefined) nextOverview.problem = p; }
+        { const s = ovVal('solution'); if (s !== undefined) nextOverview.solution = s; }
         next.overview = nextOverview;
         setPlan(next);
         const wsId = selectedWsIdRef.current;
@@ -2853,16 +2873,17 @@ export default function PlanPage() {
   };
 
   // 항목별 채우기 — API엔 상세 명령(마커 지시) 전송, 화면 말풍선엔 자연어만 표시
-  const genField = (apiPrompt: string, display: string) => {
+  const genField = (apiPrompt: string, display: string, opts?: { autoApply?: boolean }) => {
     if (!chat || chat.loading) return;
     // AI 자동 채우기는 Pro 전용 → 유료 플랜 알림 팝업.
     // 단, 온보딩 투어 중에는 제한을 풀어 기능을 끝까지 체험하게 한다.
     if (userPlan.tier !== 'pro' && !isOnboardingActive()) {
+      genFieldTargetRef.current = null;
       showUpgrade('autofill');
       return;
     }
     chat.setOpen(true);
-    chat.sendMessage(apiPrompt, display);
+    chat.sendMessage(apiPrompt, display, opts);
   };
   const handleGenerateValueProp = () => genField(buildValuePropPrompt(buildContext()), '핵심 가치 제안을 채워줘');
   const handleGenerateSolutions = () => genField(buildSolutionsPrompt(buildContext()), '솔루션/제품을 제안해줘');
@@ -2879,16 +2900,21 @@ export default function PlanPage() {
     '문제 정의를 작성해줘');
   // 사업 개요(overview) 항목별 AI 채우기 — 각 항목을 대응하는 plan 필드로 출력하게 지시(핸들러가 overview로 동기화)
   const OVERVIEW_FIELD_PROMPT: Partial<Record<keyof BusinessOverview, string>> = {
-    tagline: "이 사업의 '한 줄 소개'를 매력적인 한 문장으로 작성해줘. JSON 키는 tagline(문자열).",
-    concept: "이 브랜드의 '컨셉'(핵심 아이디어·방향성·감성)을 한두 문장으로 작성해줘. JSON 키는 concept(문자열).",
-    problem: "이 사업이 해결하려는 '핵심 문제'를 2~3개로 구체적으로 정의해줘. JSON 키는 problems(문자열 배열).",
-    solution: "그 문제를 해결하는 '솔루션'을 구체적으로 정리해줘. JSON 키는 solutions([{title, memo}]).",
-    mission: "이 사업의 '미션'(존재 이유와 목적)을 한두 문장으로 작성해줘. JSON 키는 mission(문자열).",
-    vision: "이 사업의 '비전'(궁극적으로 이루려는 모습)을 한두 문장으로 작성해줘. JSON 키는 vision(문자열).",
+    category: "이 사업의 '업종'을 한 단어~짧은 구로 정해줘(예: 서비스/콘텐츠/스튜디오/자영업). JSON 키는 category(문자열) 하나만.",
+    tagline: "이 사업의 '한 줄 소개'를 매력적인 한 문장으로 작성해줘. JSON 키는 tagline(문자열) 하나만.",
+    concept: "이 브랜드의 '컨셉'(핵심 아이디어·방향성·감성)을 한두 문장으로 작성해줘. JSON 키는 concept(문자열) 하나만.",
+    problem: "이 사업이 해결하려는 '핵심 문제'를 한 문단(1~3문장)으로 정의해줘. JSON 키는 problem(문자열) 하나만.",
+    solution: "그 문제를 해결하는 '솔루션'을 한 문단(1~3문장)으로 정리해줘. JSON 키는 solution(문자열) 하나만.",
+    mission: "이 사업의 '미션'(존재 이유와 목적)을 한두 문장으로 작성해줘. JSON 키는 mission(문자열) 하나만.",
+    vision: "이 사업의 '비전'(궁극적으로 이루려는 모습)을 한두 문장으로 작성해줘. JSON 키는 vision(문자열) 하나만.",
   };
-  const handleGenerateOverviewField = (field: keyof BusinessOverview) => genField(
-    `아래 사업 정보를 바탕으로 ${OVERVIEW_FIELD_PROMPT[field]} 조언만 하지 말고, 추가 질문 없이 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 해당 JSON을 출력해서 바로 반영되게 해줘.\n\n${buildContext()}`,
-    '사업 개요 항목을 채워줘');
+  const handleGenerateOverviewField = (field: keyof BusinessOverview) => {
+    genFieldTargetRef.current = field; // 이 항목만 반영하도록 표시
+    window.setTimeout(() => { if (genFieldTargetRef.current === field) genFieldTargetRef.current = null; }, 20000); // 미반영 시 스코프 누수 방지
+    genField(
+      `아래 사업 정보를 바탕으로 ${OVERVIEW_FIELD_PROMPT[field]} 다른 항목은 절대 포함하지 말고, 조언만 하지 말고, 추가 질문 없이 반드시 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 그 하나의 JSON만 출력해서 바로 반영되게 해줘.\n\n${buildContext()}`,
+      '사업 개요 항목을 채워줘', { autoApply: true });
+  };
 
   // 업로드한 사업계획서(PDF·텍스트)를 서버에서 분석해 사업 개요 항목을 자동 채움
   const analyzeDocToOverview = async (d: PlanDoc) => {

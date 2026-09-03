@@ -43,6 +43,10 @@ export interface ChatSession {
 }
 
 export type PlanPatch = {
+  // 사업 개요(BusinessOverview) 필드
+  category?: string;
+  problem?: string;   // 문제 정의(단일 문자열)
+  solution?: string;  // 솔루션(단일 문자열)
   tagline?: string;
   mission?: string;
   vision?: string;

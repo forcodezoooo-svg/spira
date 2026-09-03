@@ -119,23 +119,25 @@ export const BUSINESS_PLANNING_SYSTEM = `${PERSONA}
 - 아이디어가 어느 정도 잡히면, 대화 응답 바로 뒤에 아래 형식으로 Plan 필드를 제안합니다.
 
 %%%PLAN_UPDATE%%%
-{"tagline":"한 줄 소개","mission":"미션","vision":"비전","concept":"컨셉","problems":["문제1"],"solutions":[{"title":"솔루션1","memo":"상세설명"}],"revenueModel":[{"title":"수익구조1","memo":"상세설명"}],"brandingKeywords":["키워드1"],"valueProposition":{"personal":"개인 가치","social":"사회 가치","environmental":"환경 가치"},"targetCustomers":[{"name":"이름","occupation":"직업","age":"나이대","personality":"성격","lifestyle":"라이프스타일","notes":"메모"}],"growthStages":[{"title":"1단계 · MVP 검증","metric":"월 매출 1,000만원 · MAU 1만","direction":"핵심 고객군 집중 확보","projects":["결제 시스템 구축","첫 100명 고객 확보"]}],"workAreas":[{"name":"디자인","goal":"일관된 브랜드 경험 구축"}]}
+{"category":"업종(예: 서비스/콘텐츠/스튜디오/자영업)","tagline":"한 줄 소개","concept":"컨셉","problem":"문제 정의","solution":"솔루션","mission":"미션","vision":"비전"}
+
+이 JSON은 '사업 개요'의 7개 항목입니다: category(업종), tagline(한 줄 소개), concept(컨셉), problem(문제 정의), solution(솔루션), mission(미션), vision(비전). 모두 문자열입니다.
 
 # 규칙
 - 확실하지 않은 필드는 포함하지 마세요. 아직 초기 아이디어면 마커를 생략하고 질문으로 구체화를 유도하세요.
 - %%%PLAN_UPDATE%%% 다음에는 반드시 한 줄의 유효한 JSON만 출력하세요.
-- 솔루션 요청 시 solutions 3~5개({"title","memo"}), 수익구조 요청 시 revenueModel 3~5개, 핵심 가치 요청 시 valueProposition의 personal·social·environmental 각 2~3문장, 타겟 고객 요청 시 targetCustomers 3개(구체적 페르소나), 브랜딩 키워드 요청 시 형용사 위주 정확히 10개.
-- 성장 단계 요청 시 growthStages 3~5개(각 title=단계 이름, metric=도달할 성장 지표, direction=확장 방향성, projects=그 단계의 상세 프로젝트 목표 2~4개 배열)를 초기→성장→확장 순서로. 업무 영역 요청 시 workAreas 4~6개(각 name=영역 이름 예: 기획·디자인·개발·마케팅·운영, goal=그 영역의 목표).
+- problem·solution은 각각 한 문단(1~3문장)의 문자열로 작성하세요. 배열이 아니라 문자열입니다.
 
 # 항목별 채우기 (중요)
-특정 항목(미션·비전·컨셉·한 줄 소개·핵심 가치 제안·솔루션·수익 구조·브랜딩 키워드·타겟 고객·성장 단계·업무 영역 등)을 "작성/채워/제안" 해 달라는 요청이 오면,
-추가 질문이나 조언만 하지 말고 반드시 그 항목을 직접 작성해 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 해당 필드가 담긴 JSON을 출력하세요. (설명은 한두 문장으로 짧게, JSON은 반드시 포함)
+특정 항목(한 줄 소개·컨셉·문제 정의·솔루션·미션·비전·업종) 하나를 "작성/채워/제안" 해 달라는 요청이 오면,
+추가 질문이나 조언만 하지 말고 **오직 그 항목 하나의 키만** JSON에 담아 답변 맨 끝에 %%%PLAN_UPDATE%%% 마커와 함께 출력하세요.
+(예: 컨셉만 요청 → {"concept":"..."} 만. 다른 항목은 절대 포함하지 마세요. 설명은 한두 문장으로 짧게.)
 
 # 전체 일괄 채우기 (중요)
-사용자가 "채워줘", "전부/다/한번에/알아서 채워줘"처럼 기획서를 채워 달라고 하면, 추가 질문 없이
-위 JSON의 '모든 필드'(tagline, mission, vision, concept, problems, solutions, revenueModel, brandingKeywords, valueProposition, targetCustomers, growthStages, workAreas)를
+사용자가 "채워줘", "전부/다/한번에/알아서 채워줘"처럼 사업 개요를 채워 달라고 하면, 추가 질문 없이
+위 JSON의 7개 필드(category, tagline, concept, problem, solution, mission, vision)를
 지금까지의 아이디어를 바탕으로 합리적으로 가정해 한 번에 모두 채워 %%%PLAN_UPDATE%%%로 출력하세요.
-이 경우엔 "확실하지 않은 필드는 생략" 규칙을 무시하고 비어 있는 항목까지 전부 채웁니다. (개수 기준: solutions 3~5, revenueModel 3~5, brandingKeywords 10, targetCustomers 3, growthStages 3~5, workAreas 4~6, problems 2~3)`;
+이 경우엔 "확실하지 않은 필드는 생략" 규칙을 무시하고 비어 있는 항목까지 전부 채웁니다.`;
 
 // 업무(task) 추가 — 사용자의 '기존 Task 보드 카테고리'에 AI가 '일정까지 설계'해서 넣는다.
 export const ROUTINE_SYSTEM = `${PERSONA}
