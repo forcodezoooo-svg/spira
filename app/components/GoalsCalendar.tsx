@@ -301,15 +301,30 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   const buildCalRanges = (): CalRange[] => {
     const real: CalRange[] = [];
     void dlPeriod; void resolveProject; void calLevel;
+    // 현재 보이는 달의 날짜들 — 반복 업무를 그 달의 반복 요일마다 펼치기 위해 사용
+    const vy = calMonth.getFullYear(), vm = calMonth.getMonth();
+    const monthDays = Array.from({ length: new Date(vy, vm + 1, 0).getDate() }, (_, i) => dstr(vy, vm, i + 1));
     for (const p of programs) {
       const pColor = businessColor(p.wsId);
       for (const dl of (p.deadlines ?? []).filter(dl => dl.enabled !== false && !dl.done)) {
         for (const t of dl.todos) {
           for (const s of (t.subtasks ?? [])) {
-            if (!s.date && !s.deadline) continue;
+            if (!s.date && !s.deadline && !(s.days?.length)) continue;
             const recurring = (s.days?.length ?? 0) > 0;
-            // 완료한 일회성 업무는 회색 톤 + 드래그 불가(readOnly)로 표시. 반복 업무는 요일별 관리라 완료로 치지 않음.
-            const isDone = s.done && !recurring;
+            if (recurring) {
+              // 반복(주기적) 업무: 이 달의 '반복 요일'마다 하루짜리 막대 — 밑의 날짜별 리스트 로직과 동일하게 표시
+              for (const ds of monthDays) {
+                const dow = new Date(ds + 'T00:00:00').getDay();
+                const afterStart = !s.date || s.date <= ds || ds >= todayKey;
+                const beforeEnd = !s.deadline || s.deadline >= ds;
+                if (!(afterStart && beforeEnd && s.days!.includes(dow))) continue;
+                const dOne = (s.doneDates ?? []).includes(ds);
+                real.push({ key: `s-${s.id}-${ds}`, level: 'subtask', start: ds, end: ds, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: dOne ? '#C7CEC7' : pColor, done: dOne, readOnly: true });
+              }
+              continue;
+            }
+            // 완료한 일회성 업무는 회색 톤 + 드래그 불가(readOnly)로 표시.
+            const isDone = s.done;
             // 업무는 '배정된 하루'에만 표시(시작~기한으로 뻗지 않음) — 실제 그 날 목록과 일치, 다른 날로 새는 유령 막대 방지
             const day = s.date || s.deadline!;
             if (isDone && day >= todayKey) continue; // 완료 업무는 '지난 날짜'만 회색 표시 — 오늘/미래 완료는 숨김
