@@ -79,6 +79,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [offStart, setOffStart] = useState('');
   const [offEnd, setOffEnd] = useState('');
   const [kbDrag, setKbDrag] = useState<string | null>(null); // 칸반 드래그 중인 task key
+  const [kbDragOver, setKbDragOver] = useState<{ todoId: string; index: number } | null>(null); // 삽입 위치 표시(카테고리 todoId + 인덱스)
   const [kbAiBusy, setKbAiBusy] = useState<string | null>(null); // AI task 생성 중인 산출물(todoId)
   const [kbUnitAiBusy, setKbUnitAiBusy] = useState<string | null>(null); // AI 세부작업 생성 중인 task(subtaskId)
   const [selMode, setSelMode] = useState(false); // 다중 선택 모드
@@ -975,50 +976,43 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     updateSub(from, sId, recurring ? { deadline: val } : { date: val, deadline: val });
   };
   // 같은 카테고리(칼럼) 안에서 task를 대상 task 위치로 재배치 — 순서를 옮기고 수행날짜도 대상 위치에 맞춤
-  const kbReorderInCol = (col: KbCol, draggedId: string, targetId: string) => {
-    if (draggedId === targetId) return;
-    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => {
-      if (t.id !== col.todoId) return t;
-      const subs = [...(t.subtasks ?? [])];
-      const di = subs.findIndex(s => s.id === draggedId); const target = subs.find(s => s.id === targetId);
-      if (di < 0 || !target) return t;
-      const [moved] = subs.splice(di, 1);
-      const val = target.deadline || target.date || undefined;
-      const recurring = (moved.days?.length ?? 0) > 0;
-      const movedNew = recurring ? { ...moved, deadline: val } : { ...moved, date: val, deadline: val };
-      const ti = subs.findIndex(s => s.id === targetId); // splice 이후 대상 인덱스 재계산
-      subs.splice(ti < 0 ? subs.length : ti, 0, movedNew);
-      return { ...t, subtasks: subs };
-    }) }) });
+  // 표시(정렬)된 index 위치에 task를 삽입 — 카테고리 칼럼 내 정확한 위치로 재배치.
+  // 삽입 위치의 '위 카드' 날짜에 맞춰 수행날짜를 정하고, 같은 날짜끼리는 배열 순서로 위/아래를 확정.
+  const kbInsertAt = (toCol: KbCol, draggedId: string, index: number) => {
+    const from = kbColsView.find(c => c.subtasks.some(s => s.id === draggedId)); if (!from) return;
+    const movingOrig = from.subtasks.find(s => s.id === draggedId); if (!movingOrig) return;
+    const disp = toCol.subtasks;
+    // 자기 자신은 이웃 계산에서 제외
+    let ai = index - 1; while (ai >= 0 && disp[ai]?.id === draggedId) ai--;
+    let bi = index; while (bi < disp.length && disp[bi]?.id === draggedId) bi++;
+    const aboveId = ai >= 0 ? disp[ai]?.id : undefined;
+    const belowId = bi < disp.length ? disp[bi]?.id : undefined;
+    const sameTodo = from.todoId === toCol.todoId && from.dlId === toCol.dlId && from.p.id === toCol.p.id;
+    if (sameTodo && (draggedId === disp[index]?.id || draggedId === disp[index - 1]?.id)) { setKbDragOver(null); return; } // 제자리
+    const dateOf = (id?: string) => { const s = id ? disp.find(x => x.id === id) : undefined; return s ? (s.deadline || s.date) : undefined; };
+    const recurring = (movingOrig.days?.length ?? 0) > 0;
+    const newDate = dateOf(aboveId) || dateOf(belowId) || colStartAnchor(toCol);
+    const movedNew = recurring ? { ...movingOrig, deadline: newDate } : { ...movingOrig, date: newDate, deadline: newDate };
+    // 대상 todo 배열에서 draggedId 제거 후 aboveId 뒤(없으면 맨 앞)에 삽입
+    const insertInto = (subs: Sub[]) => {
+      const arr = subs.filter(s => s.id !== draggedId);
+      let at = 0;
+      if (aboveId) { const idx = arr.findIndex(s => s.id === aboveId); at = idx < 0 ? arr.length : idx + 1; }
+      arr.splice(at, 0, movedNew);
+      return arr;
+    };
+    if (sameTodo) {
+      const prog = findProg(toCol.p.wsId, toCol.p.id); if (!prog) return;
+      store.updateProgramInWs(toCol.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== toCol.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== toCol.todoId ? t : { ...t, subtasks: insertInto(t.subtasks ?? []) }) }) });
+    } else {
+      // 다른 카테고리에서 옮겨오는 경우: 소스에서 제거 후 대상에 삽입(스토어 동기 갱신)
+      const fromProg = findProg(from.p.wsId, from.p.id);
+      if (fromProg) store.updateProgramInWs(from.p.wsId, { ...fromProg, deadlines: (fromProg.deadlines ?? []).map(dl => dl.id !== from.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== from.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== draggedId) }) }) });
+      const toProg = findProg(toCol.p.wsId, toCol.p.id);
+      if (toProg) store.updateProgramInWs(toCol.p.wsId, { ...toProg, deadlines: (toProg.deadlines ?? []).map(dl => dl.id !== toCol.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== toCol.todoId ? t : { ...t, subtasks: insertInto(t.subtasks ?? []) }) }) });
+    }
+    setKbDragOver(null);
   };
-  // task 카드 위에 드롭했을 때 — 같은 칼럼이면 그 위치로 재배치, 다른 칼럼이면 카테고리 이동 + 대상 날짜로 맞춤
-  const kbDropOnCard = (toCol: KbCol, target: Sub) => {
-    const sId = kbDrag; setKbDrag(null);
-    if (!sId || sId === target.id) return;
-    const from = kbColsView.find(c => c.subtasks.some(s => s.id === sId)); if (!from) return;
-    if (from.todoId === toCol.todoId) { kbReorderInCol(toCol, sId, target.id); return; }
-    const moving = from.subtasks.find(s => s.id === sId); if (!moving) return;
-    kbMoveTask(sId, from, toCol);
-    const val = target.deadline || target.date || undefined;
-    const recurring = (moving.days?.length ?? 0) > 0;
-    updateSub(toCol, sId, recurring ? { deadline: val } : { date: val, deadline: val });
-  };
-  const kbMoveTask = (sId: string, from: KbCol, to: KbCol) => {
-    if (from.todoId === to.todoId) return;
-    const prog = findProg(from.p.wsId, from.p.id); if (!prog) return;
-    const moving = from.subtasks.find(s => s.id === sId); if (!moving) return;
-    store.updateProgramInWs(from.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => {
-      const isFrom = dl.id === from.dlId, isTo = dl.id === to.dlId;
-      if (!isFrom && !isTo) return dl;
-      return { ...dl, todos: dl.todos.map(t => {
-        if (isFrom && t.id === from.todoId) return { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== sId) };
-        if (isTo && t.id === to.todoId) return { ...t, subtasks: [...(t.subtasks ?? []), moving] };
-        return t;
-      }) };
-    }) });
-  };
-
   // ── 그리드/눈금/오늘 (px, 범위 전체) ──
   const dayLines: number[] = []; const strongLines: number[] = []; const labels: { x: number; text: string }[] = [];
   for (let i = 0; i < span; i++) {
@@ -1050,10 +1044,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const recurring = (s.days?.length ?? 0) > 0;   // 반복 업무는 완료 체크를 표시하지 않음(요일별 관리)
     const showDone = s.done && !recurring;
     return (
-      <div key={s.id} data-teach="kb-task" draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => setKbDrag(null)}
-        {...(!showCat ? { onDragOver: (e: React.DragEvent) => { if (kbDrag && kbDrag !== s.id) { e.preventDefault(); e.stopPropagation(); } }, onDrop: (e: React.DragEvent) => { if (kbDrag) { e.stopPropagation(); kbDropOnCard(col, s); } } } : {})}
+      <div key={s.id} data-teach="kb-task" draggable onDragStart={() => setKbDrag(s.id)} onDragEnd={() => { setKbDrag(null); setKbDragOver(null); }}
+        {...(!showCat ? {
+          onDragOver: (e: React.DragEvent) => {
+            if (!kbDrag) return;
+            e.preventDefault(); e.stopPropagation();
+            const idx = col.subtasks.findIndex(x => x.id === s.id);
+            const rect = e.currentTarget.getBoundingClientRect();
+            const after = e.clientY > rect.top + rect.height / 2; // 카드 아래 절반이면 이 카드 다음에 삽입
+            const next = { todoId: col.todoId, index: after ? idx + 1 : idx };
+            setKbDragOver(prev => (prev && prev.todoId === next.todoId && prev.index === next.index) ? prev : next);
+          },
+          onDrop: (e: React.DragEvent) => { if (kbDrag) { e.stopPropagation(); const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.findIndex(x => x.id === s.id); kbInsertAt(col, kbDrag, at); setKbDrag(null); } },
+        } : {})}
         data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}task · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'} / 카테고리: ${col.area}] task: ${s.name}`}
-        className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: kbDrag && kbDrag !== s.id && !showCat ? '#C9B8F5' : 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.5 : 1 }}>
+        className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }}>
         {showCat && (
           <div className="flex items-center gap-1 mb-1 min-w-0">
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
@@ -1246,7 +1251,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbColsView.map(col => (
             <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
-              onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const from = kbColsView.find(c => c.subtasks.some(s => s.id === kbDrag)); if (from) kbMoveTask(kbDrag, from, col); } setKbDrag(null); }}>
+              onDragOver={e => { if (kbDrag) { e.preventDefault(); const end = col.subtasks.length; setKbDragOver(prev => (prev && prev.todoId === col.todoId && prev.index === end) ? prev : { todoId: col.todoId, index: end }); } }}
+              onDrop={() => { if (kbDrag) { const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.length; kbInsertAt(col, kbDrag, at); setKbDrag(null); } }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
               <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
                 {/* 어떤 비즈니스의 카테고리인지 */}
@@ -1276,7 +1282,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               {/* 태스크 */}
               <div className="flex-1 min-h-0 overflow-y-auto p-2">
                     <div className="space-y-2">
-                      {col.subtasks.map(s => renderTaskCard(col, s))}
+                      {col.subtasks.map((s, i) => (
+                        <div key={s.id}>
+                          {kbDrag && kbDrag !== s.id && kbDragOver?.todoId === col.todoId && kbDragOver.index === i && <div className="h-[3px] rounded-full mb-2" style={{ backgroundColor: '#7C3AED' }} />}
+                          {renderTaskCard(col, s)}
+                        </div>
+                      ))}
+                      {kbDrag && kbDragOver?.todoId === col.todoId && kbDragOver.index >= col.subtasks.length && <div className="h-[3px] rounded-full" style={{ backgroundColor: '#7C3AED' }} />}
                       <div className="flex gap-1.5">
                         <button onClick={() => kbAddTask(col)} className="flex-1 py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task</button>
                         <button onClick={() => kbAiTasks(col)} data-teach="kb-ai" disabled={!!kbAiBusy} title="AI로 이 산출물의 task 생성" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
