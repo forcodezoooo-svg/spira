@@ -1906,8 +1906,8 @@ function GoalsSection({
     );
   };
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
-  const areaRow = (area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void) => (
-    <div className="flex items-start gap-2" data-ask data-ask-label={area || '항목'} data-ask-content={area ? `${area}: ${content}` : content}>
+  const areaRow = (rowKey: string, area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void) => (
+    <div key={rowKey} className="flex items-start gap-2" data-ask data-ask-label={area || '항목'} data-ask-content={area ? `${area}: ${content}` : content}>
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
           className={`flex-shrink-0 mt-1.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
@@ -2038,6 +2038,7 @@ function GoalsSection({
                     </div>
                     <div className="space-y-1.5">
                       {(g.strategies ?? []).map(s => areaRow(
+                        s.id,
                         s.area, s.content,
                         v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, area: v } : x) }),
                         v => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: v } : x) }),
@@ -2143,6 +2144,7 @@ function GoalsSection({
                                     <label className="text-[10px] font-semibold text-neutral-400 block mb-1">업무 영역별 산출물{(() => { const ads = p.areaDeliverables ?? []; const d = ads.filter(x => x.done).length; return ads.length ? ` · ${d}/${ads.length} 완료` : ''; })()}</label>
                                     <div className="space-y-1.5">
                                       {(p.areaDeliverables ?? []).map(a => areaRow(
+                                        a.id,
                                         a.area, a.content,
                                         v => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, area: v } : x) }),
                                         v => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, content: v } : x) }),
@@ -3438,6 +3440,15 @@ export default function PlanPage() {
           onGenerateField={chat && !chat.loading ? handleGenerateOverviewField : undefined}
           aiEnabled={!!chat && !chat.loading}
           analyzing={analyzingDoc}
+        />
+
+        {/* 업무 영역 — 이 비즈니스의 업무 영역 추가·수정·삭제 */}
+        <WorkAreasSection
+          areas={plan.workAreas ?? []}
+          onAdd={a => update({ workAreas: [...(plan.workAreas ?? []), a] })}
+          onUpdate={(id, patch) => update({ workAreas: (plan.workAreas ?? []).map(x => x.id === id ? { ...x, ...patch } : x) })}
+          onRemove={id => update({ workAreas: (plan.workAreas ?? []).filter(x => x.id !== id) })}
+          onGenerate={chat && !chat.loading ? handleGenerateWorkAreas : undefined}
         />
 
         {/* 하단: 사업 목표 (Goal > Strategy > Project > Area Deliverable) */}
