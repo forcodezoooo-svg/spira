@@ -2537,8 +2537,16 @@ export default function PlanPage() {
   };
   const storeRef = useRef(store);
   const selectedWsIdRef = useRef(selectedWsId);
+  const planRef = useRef(plan);
   storeRef.current = store;
   selectedWsIdRef.current = selectedWsId;
+  planRef.current = plan;
+  // setPlan 업데이터(렌더 단계)에서 store를 직접 갱신하면 "다른 컴포넌트 setState" 경고가 나므로,
+  // 업데이터 안에서는 이 헬퍼로 마이크로태스크에 미뤄 커밋한다.
+  const commitPlanLater = (next: PlanData) => queueMicrotask(() => {
+    const wsId = selectedWsIdRef.current;
+    if (wsId) storeRef.current.updatePlanInWs(wsId, next); else storeRef.current.updatePlan(next);
+  });
 
   // 마이그레이션(1회): 옛 bizGoals/growthStages → 새 goals + projects(공유). 비파괴(bizGoals 보존).
   useEffect(() => {
@@ -2604,8 +2612,10 @@ export default function PlanPage() {
   useEffect(() => {
     if (!chat) return;
     chat.registerPlanHandler((patch) => {
-      setPlan(prev => {
-        if (!prev) return prev;
+      // 렌더 도중 store를 갱신하면 안 되므로(다른 컴포넌트 setState 경고), 최신 plan을 ref로 읽어
+      // next를 만든 뒤 setPlan + store 갱신을 setState 업데이터 '밖에서' 수행한다.
+      const prev = planRef.current;
+      if (prev) {
         const next: PlanData = {
           ...prev,
           ...(patch.tagline !== undefined && { tagline: patch.tagline }),
@@ -2670,11 +2680,11 @@ export default function PlanPage() {
         if (patch.problems?.length) nextOverview.problem = patch.problems.filter(Boolean).join('\n');
         if (patch.solutions?.length) nextOverview.solution = patch.solutions.map(s => typeof s === 'string' ? s : (s.memo ? `${s.title} — ${s.memo}` : s.title)).filter(Boolean).join('\n');
         next.overview = nextOverview;
+        setPlan(next);
         const wsId = selectedWsIdRef.current;
         if (wsId) storeRef.current.updatePlanInWs(wsId, next);
         else storeRef.current.updatePlan(next);
-        return next;
-      });
+      }
     });
     return () => chat.unregisterPlanHandler();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2941,8 +2951,7 @@ export default function PlanPage() {
           });
           next = { ...next, goals: newGoals, projects: [...(prev.projects ?? []), ...newProjects] };
         }
-        const wsId = selectedWsIdRef.current;
-        if (wsId) store.updatePlanInWs(wsId, next);
+        commitPlanLater(next);
         return next;
       });
       toast('사업계획서를 분석해 개요와 사업 목표를 채웠어요. 🌿', 'success');
@@ -3164,8 +3173,7 @@ export default function PlanPage() {
         successCriteria: g.successCriteria.filter(c => c.type === 'metric').map(c => ({ id: uid(), type: 'metric' as const, name: c.name, currentValue: c.current, targetValue: c.target, unit: c.unit, measurementPeriod: c.measurementPeriod })),
       }));
       const next = { ...prev, goals: [...base, ...newGoals] };
-      const wsId = selectedWsIdRef.current;
-      if (wsId) store.updatePlanInWs(wsId, next);
+      commitPlanLater(next);
       return next;
     });
     setGoalPlanOpen(false);
@@ -3220,8 +3228,7 @@ export default function PlanPage() {
       setPlan(prev => {
         if (!prev) return prev;
         const next = { ...prev, projects: [...(prev.projects ?? []), ...newProjects] };
-        const wsId = selectedWsIdRef.current;
-        if (wsId) store.updatePlanInWs(wsId, next);
+        commitPlanLater(next);
         return next;
       });
       toast(`프로젝트 ${projs.length}개를 추가했어요. 🌿`, 'success');
@@ -3242,8 +3249,7 @@ export default function PlanPage() {
         areaDeliverables: (p.areaDeliverables ?? []).map(a => ({ id: uid(), area: a.area, content: a.content })),
       }));
       const next = { ...prev, projects: [...others, ...newProjects] };
-      const wsId = selectedWsIdRef.current;
-      if (wsId) store.updatePlanInWs(wsId, next);
+      commitPlanLater(next);
       return next;
     });
     setReviseGoalId(null);
@@ -3271,8 +3277,7 @@ export default function PlanPage() {
           finalDeliverable: p.finalDeliverable || fd,
           areaDeliverables: [...(p.areaDeliverables ?? []), ...ads.map(a => ({ id: uid(), area: a.area, content: a.content }))],
         } : p) };
-        const wsId = selectedWsIdRef.current;
-        if (wsId) store.updatePlanInWs(wsId, next);
+        commitPlanLater(next);
         return next;
       });
       toast('산출물을 채웠어요. 🌿', 'success');
