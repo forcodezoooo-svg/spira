@@ -308,11 +308,12 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
           for (const s of (t.subtasks ?? [])) {
             if (!s.date && !s.deadline) continue;
             const recurring = (s.days?.length ?? 0) > 0;
-            // 완료한 일회성 업무는 회색 톤 + 드래그 불가(readOnly)로 표시(숨기지 않음). 반복 업무는 요일별 관리라 완료로 치지 않음.
+            // 완료한 일회성 업무는 회색 톤 + 드래그 불가(readOnly)로 표시. 반복 업무는 요일별 관리라 완료로 치지 않음.
             const isDone = s.done && !recurring;
             let start = s.date || s.deadline!;
             const end = s.deadline || s.date!;
             if (start > end) start = end;
+            if (isDone && end >= todayKey) continue; // 완료 업무는 '지난 날짜'만 회색 표시 — 오늘/미래 완료는 숨김(유령 항목 방지)
             real.push({ key: `s-${s.id}`, level: 'subtask', start, end, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: isDone ? '#C7CEC7' : pColor, done: isDone, readOnly: isDone || undefined });
           }
         }
@@ -322,24 +323,6 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
   };
   const calRanges: CalRange[] = buildCalRanges().map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
   const realRanges = calRanges.filter(r => !r.ghost);
-
-  const clearTodoDates = (todos: Deadline['todos']) => todos.map(t => ({ ...t, date: undefined, deadline: undefined }));
-  const clearOneSchedule = (r: CalRange) => {
-    const entry = store.allWorkspacesEntries.find(e => e.workspace.id === r.wsId);
-    const prog = entry?.programs.find(p => p.id === r.programId);
-    if (!prog) return;
-    if (r.level === 'program') {
-      if (!window.confirm(`'${r.name}' 업무 영역의 일정을 캘린더에서 삭제할까요?\n하위 데드라인·업무 일정도 함께 사라집니다. (내용은 유지)`)) return;
-      store.updateProgramInWs(r.wsId, { ...prog, startDate: undefined, deadline: undefined, deadlines: (prog.deadlines ?? []).map(dl => ({ ...dl, date: '', startDate: undefined, todos: clearTodoDates(dl.todos) })) });
-      return;
-    }
-    const deadlines = (prog.deadlines ?? []).map(dl => {
-      if (dl.id !== r.deadlineId) return dl;
-      if (r.level === 'deadline') return { ...dl, date: '', startDate: undefined };
-      return { ...dl, todos: dl.todos.map(t => t.id === r.todoId ? { ...t, date: undefined, deadline: undefined } : t) };
-    });
-    store.updateProgramInWs(r.wsId, { ...prog, deadlines });
-  };
 
   const calY = calMonth.getFullYear();
   const calMo = calMonth.getMonth();
@@ -488,9 +471,6 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                           )}
                         </div>
                         <span className={`relative z-10 mt-1.5 text-center text-[10px] leading-none truncate px-1 ${hot ? 'font-bold' : ''}`} style={{ color: b.r.done ? '#B4BCB4' : hot ? '#16211E' : '#7A857E', textDecoration: b.r.done ? 'line-through' : 'none' }}>{b.r.name}</span>
-                        {!b.r.readOnly && b.endsHere && (
-                          <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); clearOneSchedule(b.r); }} className="absolute left-1/2 -translate-x-1/2 -top-2 z-30 w-4 h-4 rounded-full bg-neutral-400 hover:bg-neutral-600 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-pointer" title="이 일정을 캘린더에서 삭제 (내용 유지)">×</button>
-                        )}
                       </div>
                     );
                   }))}
