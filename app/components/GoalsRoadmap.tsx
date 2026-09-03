@@ -446,9 +446,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       for (const t of todos) {
         // 산출물(2단계)이 로드맵의 최하위 — 하위 task들은 칸반 탭에서 관리
         const tKey = `t-${t.id}`;
-        // 산출물은 '배정된 하루'에만 표시(시작~기한으로 뻗지 않게) — 휴무일 등 다른 날로 새는 막대 방지
-        const td = t.date || t.deadline;
-        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: td, end: td, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
+        const ts = t.date || t.deadline, te = t.deadline || t.date;
+        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
       }
       // 산출물이 이미 있어도 '여기서 바로 추가' 행을 항상 노출 (프로젝트 아래에 산출물 직접 추가)
       if (todos.length > 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
