@@ -1437,7 +1437,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                           // 위계: 프로젝트=진한 단색(흰 글씨), 산출물=연한 채움+테두리
                           backgroundColor: bl === 1 ? r.color : `${r.color}33`,
                           border: bl === 1 ? `1px solid ${r.color}` : `1.5px solid ${r.color}`,
-                          borderRadius: bl === 1 ? 8 : 6,
+                          borderRadius: offSpan > 0 ? (bl === 1 ? '8px 0 0 8px' : '6px 0 0 6px') : (bl === 1 ? 8 : 6),
                           opacity: dragging ? 0.95 : 1,
                           boxShadow: hl ? `0 0 0 2px #fff, 0 0 0 3px ${r.color}` : (bl === 1 ? '0 2px 5px rgba(0,0,0,0.15)' : 'none'),
                           zIndex: hl ? 6 : bl === 1 ? 4 : 1,
@@ -1463,23 +1463,26 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         )}
                       </div>
                     )}
-                    {/* 오프 기간 위에서는 막대를 얇은 선으로: 막대 두께를 오프 톤으로 덮고 그 위에 가는 연결선 */}
+                    {/* 연장: 막대 자체가 늘어난 것처럼 솔리드로 이어 붙임(막대 오른쪽에 바로 연결) */}
+                    {placed && offSpan > 0 && (
+                      <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" title={`휴무 ${offSpan}일만큼 연장`}
+                        style={{ left: xOf(addDaysStr(r.end!, 1)), width: offSpan * pxPerDay, height: barH(bl), zIndex: 3,
+                          backgroundColor: bl === 1 ? r.color : `${r.color}33`, border: bl === 1 ? `1px solid ${r.color}` : `1.5px solid ${r.color}`, borderLeft: 'none',
+                          borderTopRightRadius: bl === 1 ? 8 : 6, borderBottomRightRadius: bl === 1 ? 8 : 6 }} />
+                    )}
+                    {/* 오프 구간: 막대를 반투명 + 점선으로 이어지게(솔리드 두께를 오프 톤으로 지우고 반투명 점선 세그먼트) */}
                     {placed && offSpan > 0 && offBands.map(b => {
                       const s = b.start > r.start! ? b.start : r.start!;
-                      const e = b.end < r.end! ? b.end : r.end!;
+                      const e = b.end < (r.end!) ? b.end : r.end!;
                       if (s > e) return null;
+                      const rowBg = pgIdx % 2 === 1 ? '#FBFBF9' : '#fff';
                       return (
                         <div key={`off${r.key}${b.start}`}>
-                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl) + 2, zIndex: 7, background: 'repeating-linear-gradient(45deg, #F1E9D9, #F1E9D9 5px, #F8F3E9 5px, #F8F3E9 10px)' }} />
-                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none rounded-full" style={{ left: xOf(s), width: wOf(s, e), height: 2, backgroundColor: r.color, zIndex: 8 }} />
+                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl) + 2, zIndex: 7, backgroundColor: rowBg }} />
+                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl), zIndex: 8, backgroundColor: `${r.color}26`, border: `1.4px dashed ${r.color}`, borderRadius: bl === 1 ? 8 : 6 }} />
                         </div>
                       );
                     })}
-                    {/* 휴무일수만큼 프로젝트 연장 표시 */}
-                    {placed && offSpan > 0 && (
-                      <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" title={`휴무 ${offSpan}일만큼 연장`}
-                        style={{ left: xOf(addDaysStr(r.end!, 1)), width: offSpan * pxPerDay, height: barH(bl), backgroundColor: `${r.color}2E`, border: `1px dashed ${r.color}`, borderRadius: bl === 1 ? 8 : 6, opacity: 0.85, zIndex: 2 }} />
-                    )}
                   </div>
                 </div>
               );
