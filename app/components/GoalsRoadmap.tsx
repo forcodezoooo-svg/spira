@@ -533,7 +533,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   // ── 카테고리 보드: 업무 영역을 '칸'으로, 그 안에서 산출물별로 구분, 하위 task 카드 ──
   type Sub = NonNullable<Deadline['todos'][number]['subtasks']>[number];
-  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; due: string; pinned: boolean; subtasks: Sub[]; projectId?: string; status?: string };
+  type KbCol = { p: CalProgram; dlId: string; dlName: string; todoId: string; name: string; area: string; goalSub: string; start: string; dlStart: string; due: string; pinned: boolean; subtasks: Sub[]; projectId?: string; status?: string };
+  // 이 카테고리(칼럼) 안의 새 task 시작 기준일: 카테고리 자체 시작일과 프로젝트 시작일 중 '더 늦은' 날.
+  // 그 날이 미래면 그 날부터, 이미 지났으면 오늘부터 배치한다.
+  const colStartAnchor = (col: { start?: string; dlStart?: string }) => {
+    const cands = [col.start, col.dlStart].filter(Boolean) as string[];
+    const s = cands.length ? cands.sort()[cands.length - 1] : '';
+    return s && s > todayStr ? s : todayStr;
+  };
   const parseArea = (name: string) => { const m = name.match(/^(.*?)\s*[:：]\s*(.*)$/); return { area: (m ? m[1] : name).trim(), goalSub: m ? m[2].trim() : '' }; };
   const kbScope = resolveChain(selectedKey);
   const kbCols: KbCol[] = [];
@@ -555,7 +562,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         const rawStatus = dl.projectId ? (resolveProject(p.wsId, dl.projectId)?.status ?? 'planned') : undefined;
         // 시작일이 지난(예정) 프로젝트는 표시상 '진행중'으로 (데이터 변경 없이 파생)
         const status = rawStatus === 'planned' && startStr && startStr <= todayStr ? 'active' : rawStatus;
-        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: startStr, due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs, projectId: dl.projectId, status });
+        kbCols.push({ p, dlId: dl.id, dlName: dl.name, todoId: t.id, name: t.name, area, goalSub, start: startStr, dlStart: dl.startDate || '', due: t.deadline || t.date || '', pinned: !!t.pinned, subtasks: subs, projectId: dl.projectId, status });
       }
     }
   }
@@ -659,9 +666,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         if (!dlVisible(p.wsId, dl)) continue;
         for (const t of dl.todos) {
           if (t.done) continue; // 완료 산출물 제외
-          // 카테고리(산출물) 자체 시작일 우선 → 없으면 프로젝트 시작일 → 그것도 없으면 오늘부터
-          const catStart = t.date || dl.startDate;
-          const earliest = catStart && catStart > todayStr ? catStart : todayStr;
+          // 카테고리 자체 시작일과 프로젝트 시작일 중 더 늦은 날 기준(둘 다 없으면 오늘)
+          const earliest = colStartAnchor({ start: t.date || '', dlStart: dl.startDate || '' });
           const cap = t.deadline || dl.date || undefined; // 상한 = 산출물/프로젝트 실제 기한
           const tasks: ParallelTask[] = [];
           for (const s of (t.subtasks ?? [])) {
@@ -842,7 +848,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[]) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     const recurring = !!days?.length;
-    const d = todayStr; // 날짜 자동 지정 = 오늘
+    const d = colStartAnchor(col); // 카테고리 시작일(미래면 그 날, 아니면 오늘)부터 배치
     const sub = recurring
       ? { id: uid(), name, done: false, date: d, durationMin: durMin, schedulingType, priority, days, dependsOn: dependsOn?.length ? dependsOn : undefined }
       : { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority, dependsOn: dependsOn?.length ? dependsOn : undefined };
@@ -923,7 +929,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const adj = (min?: number) => (min && factor !== 1 ? Math.max(15, Math.round((min * factor) / 15) * 15) : min);
       const durMins = tasks.map(tk => adj(tk.durationMin) ?? 0);
       // 카테고리(프로젝트) 시작일이 미래면 그 날부터, 이미 시작했으면 오늘부터 가용시간에 맞춰 '하루 하나씩 펼쳐' 배치
-      const startAnchor = col.start && col.start > todayStr ? col.start : todayStr;
+      const startAnchor = colStartAnchor(col);
       const dates = scheduleTasksByCapacity(store.allWorkspacesEntries, store.workSchedule, store.capacity, durMins, startAnchor, col.due || undefined, { spread: true });
       store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: [...(t.subtasks ?? []), ...tasks.map((tk, i) => { const d = dates[i]; return { id: uid(), name: tk.name, done: false, date: d, deadline: d, durationMin: adj(tk.durationMin) }; })] }) }) });
     } catch { /* ignore */ }
