@@ -1364,7 +1364,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               )}
               {dayLines.map((x, i) => <div key={`d${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#EEEEE8' }} />)}
               {strongLines.map((x, i) => <div key={`s${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#E2E2DA' }} />)}
-              {/* 오프(휴무) 밴드는 막대 위 마스크로 그림(아래 참고) */}
+              {/* 오프(휴무) 밴드 — 전체 열 배경 톤(막대는 아래에서 얇은 선으로 지나감) */}
+              {offBands.map(b => (
+                <div key={`off${b.start}`} className="absolute top-0 bottom-0 flex items-start justify-center overflow-hidden" style={{ left: xOf(b.start), width: wOf(b.start, b.end), borderLeft: '1px solid #EDE4D2', borderRight: '1px solid #EDE4D2', background: 'repeating-linear-gradient(45deg, #F1E9D9, #F1E9D9 5px, #F8F3E9 5px, #F8F3E9 10px)' }}>
+                  <span className="text-[9px] font-bold mt-0.5 px-1 rounded-full whitespace-nowrap" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>
+                </div>
+              ))}
               {todayStr >= rangeStart && daysBetween(rangeStart, todayStr) < span && <div className="absolute top-0 bottom-0 w-px" style={{ left: todayX, backgroundColor: '#9DFE3B' }} />}
             </div>
             {rowsDraw.length === 0 ? (
@@ -1458,7 +1463,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         )}
                       </div>
                     )}
-                    {/* 휴무일수만큼 프로젝트 연장 표시(오프 기간은 위 마스크로 비워짐) */}
+                    {/* 오프 기간 위에서는 막대를 얇은 선으로: 막대 두께를 오프 톤으로 덮고 그 위에 가는 연결선 */}
+                    {placed && offSpan > 0 && offBands.map(b => {
+                      const s = b.start > r.start! ? b.start : r.start!;
+                      const e = b.end < r.end! ? b.end : r.end!;
+                      if (s > e) return null;
+                      return (
+                        <div key={`off${r.key}${b.start}`}>
+                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl) + 2, zIndex: 7, background: 'repeating-linear-gradient(45deg, #F1E9D9, #F1E9D9 5px, #F8F3E9 5px, #F8F3E9 10px)' }} />
+                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none rounded-full" style={{ left: xOf(s), width: wOf(s, e), height: 2, backgroundColor: r.color, zIndex: 8 }} />
+                        </div>
+                      );
+                    })}
+                    {/* 휴무일수만큼 프로젝트 연장 표시 */}
                     {placed && offSpan > 0 && (
                       <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" title={`휴무 ${offSpan}일만큼 연장`}
                         style={{ left: xOf(addDaysStr(r.end!, 1)), width: offSpan * pxPerDay, height: barH(bl), backgroundColor: `${r.color}2E`, border: `1px dashed ${r.color}`, borderRadius: bl === 1 ? 8 : 6, opacity: 0.85, zIndex: 2 }} />
@@ -1467,16 +1484,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 </div>
               );
             })}
-            {/* 오프(휴무) 마스크 — 막대 위를 덮어 오프 기간엔 아무 것도 없게 */}
-            {offBands.length > 0 && (
-              <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: LABEL_W, width: contentWidth, zIndex: 7 }}>
-                {offBands.map(b => (
-                  <div key={`offmask${b.start}`} className="absolute top-0 bottom-0 overflow-hidden flex items-start justify-center" style={{ left: xOf(b.start), width: wOf(b.start, b.end), borderLeft: '1px solid #E7E0D2', borderRight: '1px solid #E7E0D2', background: 'repeating-linear-gradient(45deg, #EFE7D6, #EFE7D6 5px, #F6F1E6 5px, #F6F1E6 10px)' }}>
-                    <span className="text-[9px] font-bold mt-1 px-1 rounded-full whitespace-nowrap" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
