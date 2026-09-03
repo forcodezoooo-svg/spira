@@ -1470,7 +1470,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                           backgroundColor: bl === 1 ? r.color : `${r.color}33`, border: bl === 1 ? `1px solid ${r.color}` : `1.5px solid ${r.color}`, borderLeft: 'none',
                           borderTopRightRadius: bl === 1 ? 8 : 6, borderBottomRightRadius: bl === 1 ? 8 : 6 }} />
                     )}
-                    {/* 오프 구간: 막대를 반투명 + 점선으로 이어지게(솔리드 두께를 오프 톤으로 지우고 반투명 점선 세그먼트) */}
+                    {/* 오프 구간을 가로지르는 막대 부분은 그레이톤 + 점선으로 표시 */}
                     {placed && offSpan > 0 && offBands.map(b => {
                       const s = b.start > r.start! ? b.start : r.start!;
                       const e = b.end < (r.end!) ? b.end : r.end!;
@@ -1479,7 +1479,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       return (
                         <div key={`off${r.key}${b.start}`}>
                           <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl) + 2, zIndex: 7, backgroundColor: rowBg }} />
-                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl), zIndex: 8, backgroundColor: `${r.color}26`, border: `1.4px dashed ${r.color}`, borderRadius: bl === 1 ? 8 : 6 }} />
+                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: xOf(s), width: wOf(s, e), height: barH(bl), zIndex: 8, backgroundColor: '#E3E3DE', border: '1.4px dashed #B8B8B0', borderRadius: bl === 1 ? 8 : 6 }} />
                         </div>
                       );
                     })}
