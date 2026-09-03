@@ -2091,6 +2091,12 @@ function GoalsSection({
                   {/* Projects (진행 순서 → 화살표) */}
                   <div>
                     <p className="text-[11px] font-semibold text-neutral-400 mb-1.5">프로젝트</p>
+                    {aiBusyId === g.id && (
+                      <div className="flex items-center gap-2 mb-1.5 rounded-xl px-3 py-2" style={{ backgroundColor: '#F3F0FF' }}>
+                        <span className="w-3.5 h-3.5 rounded-full border-2 animate-spin flex-shrink-0" style={{ borderColor: '#7C3AED', borderTopColor: 'transparent' }} />
+                        <span className="text-[12px] font-semibold" style={{ color: '#7C3AED' }}>AI가 프로젝트를 만들고 있어요…</span>
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                       {projects.map((p, pi) => {
                         const pOpen = openProjects.has(p.id);

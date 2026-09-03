@@ -1019,7 +1019,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const d = addDaysStr(rangeStart, i); const dd = new Date(d); const x = i * pxPerDay; const dow = dd.getDay(); const dom = dd.getDate();
     if (gran === 'year') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: dd.getMonth() === 0 ? `${dd.getFullYear()}년` : `${dd.getMonth() + 1}월` }); } }
     else if (gran === 'month') { if (dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getFullYear()}.${dd.getMonth() + 1}` }); } else if (dow === 1) { dayLines.push(x); labels.push({ x, text: `${dom}` }); } }
-    else { if (dow === 1 || dom === 1) { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}` }); } else dayLines.push(x); }
+    else {
+      // 주 단위(확대): 모든 날짜에 라벨. 월요일·1일은 'M/D'로 강조, 나머지는 일(day) 숫자만.
+      const strong = dow === 1 || dom === 1;
+      if (strong) { strongLines.push(x); labels.push({ x, text: `${dd.getMonth() + 1}/${dom}` }); }
+      else { dayLines.push(x); labels.push({ x, text: `${dom}` }); }
+    }
   }
   const todayX = xOf(todayStr) + pxPerDay / 2;
   void schedule; void DOW;
