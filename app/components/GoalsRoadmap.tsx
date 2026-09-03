@@ -1388,7 +1388,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const pgIdx = pgIdx0;
               const left = placed ? xOf(r.start!) : 0;
               const width = placed ? wOf(r.start!, r.end!) : 0;
-              const offSpan = placed && r.level === 1 ? offDaysInSpan(r.start!, r.end!) : 0; // 프로젝트 span 안 휴무일수 → 연장 표시
+              const offSpan = placed && r.level >= 1 ? offDaysInSpan(r.start!, r.end!) : 0; // 프로젝트·영역별 산출물 span 안 휴무일수 → 연장 표시
               const dragging = calDrag?.key === r.key;
               const bl = sortMode === 'dday' ? 2 : r.level; // 시작일순에서는 산출물 막대를 비즈니스별 산출물(2단계) 디자인과 동일하게
               return (
