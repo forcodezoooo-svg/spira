@@ -42,47 +42,115 @@ const Check = () => (
 
 // ── 제품 UI 미니목업 (Resources·Home은 코드로 재현, Plan·Goals는 에셋 사용) ──
 
-// Resources: 이번 달 수익/지출 카드 2개
-function ResourceCard({ income, expense, net }: { income: string; expense: string; net: string }) {
-  const negative = net.startsWith('-');
+// 작은 Sparky 아이콘 (초록 원 + 마스코트)
+function SparkyDot() {
   return (
-    <div className="bg-white rounded-2xl px-5 py-4 w-full" style={{ boxShadow: '0 14px 34px rgba(0,0,0,0.08)', border: '1px solid #EFEFEA' }}>
-      <p className="text-[11px] font-semibold mb-3" style={{ color: '#9AA39D' }}>이번 달 수익/지출</p>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[12px]" style={{ color: '#5B6560' }}>수익</span>
-        <span className="font-mono text-[14px] font-semibold tabular-nums" style={{ color: INK }}>{income}</span>
-      </div>
-      <div className="flex items-center justify-between mb-2.5">
-        <span className="text-[12px]" style={{ color: '#5B6560' }}>비용</span>
-        <span className="font-mono text-[14px] font-semibold tabular-nums" style={{ color: INK }}>{expense}</span>
-      </div>
-      <div className="h-px mb-2.5" style={{ backgroundColor: '#F0F0EA' }} />
-      <div className="flex items-baseline justify-between">
-        <span className="text-[12px] font-semibold" style={{ color: INK }}>순이익</span>
-        <span className="font-mono text-[22px] font-black tabular-nums tracking-[-0.01em]" style={{ color: negative ? '#FF696C' : INK }}>{net}</span>
-      </div>
+    <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#5FD93A', color: INK, boxShadow: '0 6px 16px rgba(95,217,58,0.45)' }}>
+      <svg viewBox="0 0 37 34" style={{ width: 20, height: 18 }} fill="currentColor">
+        <path d="M24.2739 8.23248C31.1271 8.23248 36.7056 13.811 36.7056 20.6642H32.3406C32.3406 16.2162 28.7219 12.5976 24.2739 12.5976V8.23248Z" />
+        <path d="M11.1655 6.10352e-05C15.7008 6.10352e-05 19.3937 3.69291 19.3937 8.22822H16.504C16.504 5.28616 14.1076 2.88974 11.1655 2.88974V6.10352e-05Z" />
+        <path d="M25.588 6.10352e-05C21.0527 6.10352e-05 17.3599 3.69291 17.3599 8.22822H20.2495C20.2495 5.28616 22.646 2.88974 25.588 2.88974V6.10352e-05Z" />
+        <path d="M12.4317 8.73444C5.57856 8.73444 0 14.313 0 21.1662H4.36507C4.36507 16.7182 7.98372 13.0995 12.4317 13.0995V8.73444Z" />
+        <path d="M20.5376 13.3572H16.2206C16.2206 17.7572 12.6412 21.3365 8.24121 21.3365V25.6536C12.6412 25.6536 16.2206 29.2329 16.2206 33.6329H20.5376C20.5376 29.2329 24.117 25.6536 28.517 25.6536V21.3365C24.117 21.3365 20.5376 17.7572 20.5376 13.3572ZM18.3769 26.6837C17.517 25.4353 16.4344 24.3528 15.1904 23.4972C16.4388 22.6373 17.5214 21.5548 18.3769 20.3107C19.2368 21.5591 20.3194 22.6417 21.5634 23.4972C20.315 24.3572 19.2325 25.4397 18.3769 26.6837Z" />
+        <path d="M18.3764 10.1924C20.2616 10.1924 21.7899 8.66418 21.7899 6.77896C21.7899 4.89375 20.2616 3.36548 18.3764 3.36548C16.4912 3.36548 14.9629 4.89375 14.9629 6.77896C14.9629 8.66418 16.4912 10.1924 18.3764 10.1924Z" />
+      </svg>
+    </span>
+  );
+}
+
+const flowArrow = (
+  <svg className="w-4 h-4 my-1" viewBox="0 0 16 16" fill="none" style={{ color: '#C4CCC4' }}><path d="M8 3v9M4.5 8.5L8 12l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+
+// 목표 → Task 계층 흐름
+function HierarchyMock() {
+  const solid = (label: string) => (
+    <div className="rounded-full px-7 py-2.5 text-center text-[13px] font-bold w-full" style={{ backgroundColor: LIME, color: INK, boxShadow: '0 8px 20px rgba(157,254,59,0.45)' }}>{label}</div>
+  );
+  const outline = (label: string) => (
+    <div className="rounded-full px-7 py-2.5 text-center text-[13px] font-bold w-full bg-white" style={{ color: INK, border: `1.5px solid ${LIME}`, boxShadow: '0 8px 20px rgba(0,0,0,0.06)' }}>{label}</div>
+  );
+  return (
+    <div className="flex flex-col items-center w-full" style={{ maxWidth: 210 }}>
+      {solid('사업목표')}
+      {flowArrow}
+      {solid('프로젝트')}
+      {flowArrow}
+      {outline('업무영역별 산출물')}
+      {flowArrow}
+      {outline('Task')}
     </div>
   );
 }
 
-// Home: 이번 주 집중 박스
-function HomeMock() {
-  const task = (name: string) => (
-    <div className="flex items-center gap-2 bg-white rounded-full px-3.5 py-2.5" style={{ border: '1.5px solid #BCE89A' }}>
-      <span className="w-3.5 h-3.5 rounded-full border-2 flex-shrink-0" style={{ borderColor: '#C7CEC7' }} />
+// 오늘 가용시간 카드 + task
+function CapacityMock() {
+  const row = (name: string) => (
+    <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2.5" style={{ border: '1px solid #EFEFEA', boxShadow: '0 8px 20px rgba(0,0,0,0.05)' }}>
+      <span className="w-4 h-4 rounded-full border-2 flex-shrink-0" style={{ borderColor: '#C7CEC7' }} />
       <span className="text-[12px] font-bold flex-1 min-w-0 truncate" style={{ color: INK }}>{name}</span>
-      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>D-day</span>
+      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>매주</span>
+      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0" style={{ backgroundColor: '#DDF4C4', color: '#3E7A2E' }}>30분</span>
     </div>
   );
   return (
-    <div className="rounded-2xl px-4 pt-4 pb-4 w-full" style={{ backgroundColor: '#F4FBEA', border: '1.5px solid #BCE89A', maxWidth: 320, boxShadow: '0 10px 28px rgba(0,0,0,0.10)' }}>
-      <div className="flex items-center gap-2 mb-3 px-1">
-        <span className="text-[13px] font-bold" style={{ color: INK }}>마케팅</span>
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5" style={{ color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>🎯 이번 주 집중</span>
+    <div className="w-full space-y-2" style={{ maxWidth: 300 }}>
+      <div className="bg-white rounded-2xl px-4 py-3.5" style={{ boxShadow: '0 14px 34px rgba(0,0,0,0.08)', border: '1px solid #EFEFEA' }}>
+        <div className="flex items-center justify-between mb-2.5 gap-2">
+          <span className="text-[13px] font-black flex-shrink-0" style={{ color: INK }}>오늘 가용시간</span>
+          <span className="text-[10px]" style={{ color: '#9AA39D' }}>가용 <b style={{ color: INK }}>5.5h</b> · 계획 <b style={{ color: '#3E7A2E' }}>4h30m</b> · Buffer 30m</span>
+        </div>
+        <div className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: '#F0F0EA' }}>
+          <div className="h-full rounded-full" style={{ width: '82%', backgroundColor: LIME }} />
+        </div>
       </div>
-      <div className="space-y-2">
-        {task('첫 번째 게시글 업로드')}
-        {task('두 번째 게시글 기획')}
+      {row('첫 번째 게시글 업로드')}
+      {row('두 번째 게시글 계획')}
+    </div>
+  );
+}
+
+// 재무 스탯 흐름
+function FinanceMock() {
+  const pill = (label: string, value: string, dark?: boolean) => (
+    <div className="rounded-2xl px-3 py-2 text-center flex-shrink-0" style={{ backgroundColor: dark ? DARK : '#fff', border: dark ? 'none' : `1.5px solid ${LIME}`, boxShadow: dark ? '0 10px 24px rgba(22,39,27,0.35)' : '0 8px 20px rgba(157,254,59,0.28)' }}>
+      <p className="text-[9px] font-bold mb-0.5 whitespace-nowrap" style={{ color: dark ? '#9FB3A0' : '#9AA39D' }}>{label}</p>
+      <p className="text-[13px] font-black tabular-nums whitespace-nowrap" style={{ color: dark ? LIME : INK }}>{value}</p>
+    </div>
+  );
+  const op = (s: string) => <span className="text-[13px] font-bold flex-shrink-0" style={{ color: '#C4CCC4' }}>{s}</span>;
+  return (
+    <div className="w-full flex items-center justify-center gap-1.5 flex-wrap" style={{ maxWidth: 330 }}>
+      {pill('수익', '₩0')}
+      {op('−')}
+      {pill('고정비용', '₩92,471')}
+      {op('−')}
+      {pill('프로젝트 투자비', '₩0')}
+      {op('−')}
+      {pill('비상금 10%', '₩0')}
+      {op('=')}
+      {pill('개인순이익', '-₩92,471', true)}
+    </div>
+  );
+}
+
+// Sparky 재조정 채팅 카드
+function RescheduleMock() {
+  return (
+    <div className="w-full" style={{ maxWidth: 300 }}>
+      <div className="flex items-start gap-2.5">
+        <SparkyDot />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[12px] leading-relaxed" style={{ backgroundColor: '#F1F1EB', color: '#3E4A44', boxShadow: '0 10px 26px rgba(0,0,0,0.06)' }}>
+            새로운 프로젝트를 담을 영역까지 정해뒀고, 구체적인 산출물까지 설정해뒀어요. 각 업무의 목표와 필요한 일정에 맞춰 재조정도 진행했어요.
+            <br /><br />
+            반복 업무 3개를 완료했어요. 각 항목을 눌러 내용을 정확히 다듬을 수 있어요.
+          </div>
+          <button className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold" style={{ backgroundColor: LIME, color: INK, boxShadow: '0 8px 20px rgba(157,254,59,0.45)' }}>
+            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.3l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            반영 완료
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -107,42 +175,27 @@ const FLOW = [
 // 기능 섹션 (좌우 교차)
 const FEATURES = [
   {
-    icon: '/plan_icon.svg',
-    title: '비즈니스의 기획과\n방향성을 정리해요',
-    desc: <>Plan에서 <Em>비즈니스의 방향과 성장 목표</Em>를 체계적으로 정리하세요. 막연한 부분은 <Em>Sparky의 도움</Em>을 받아 채우고, 완성된 계획은 하나의 문서로 확인할 수 있어요.</>,
-    mock: (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src="/feature-plan.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300, filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.10))' }} />
-    ),
+    title: '큰 목표를 실행 가능한 일로',
+    desc: '사업의 방향과 목표부터 프로젝트, 영역별 업무, Task까지 단계적으로 계획하세요.',
+    mock: <HierarchyMock />,
     reverse: false,
   },
   {
-    icon: '/goals_icon.svg',
-    title: '각기 다른 성격의 일들도\n일정을 나눠서 차근차근',
-    desc: <>Process에서 <Em>업무 영역별 목표와 데드라인</Em>을 정하고, 필요한 일들을 일정에 맞춰 관리하세요. 복잡한 업무 정리와 일정 계획은 <Em>Sparky가 함께 도와줘요.</Em></>,
-    mock: (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src="/feature-goals.svg" alt="" className="w-full h-auto" style={{ maxWidth: 300 }} />
-    ),
+    title: '내 시간 안에서 가능한 계획으로',
+    desc: '하루에 담을 수 있는 시간을 바탕으로 무리하지 않는 일정을 만드세요.',
+    mock: <CapacityMock />,
     reverse: true,
   },
   {
-    icon: '/resources_icon.svg',
-    title: '비용과 수익을 관리하며\n비즈니스 성장을 직관적으로',
-    desc: <>Financial에서 <Em>수익과 비용을 기록</Em>하고 매달 달라지는 <Em>비즈니스의 성장</Em>을 확인하세요. 다음 목표를 설정하면 <Em>Sparky가 계획도 함께 세워줘요.</Em></>,
-    mock: (
-      <div className="w-full space-y-3" style={{ maxWidth: 300 }}>
-        <ResourceCard income="+124,000" expense="-78,000" net="+46,000" />
-        <ResourceCard income="+58,000" expense="-78,000" net="-20,000" />
-      </div>
-    ),
+    title: '계획과 돈을 함께',
+    desc: '현재 자금과 앞으로 필요한 비용까지 고려해 사업의 자금 계획을 세우세요.',
+    mock: <FinanceMock />,
     reverse: false,
   },
   {
-    icon: '/home_icon.svg',
-    title: '오늘 할 일에만 집중하면\n목표를 향해 나아가요',
-    desc: <>Home에서 <Em>오늘 할 일과 데드라인</Em>, 프로젝트 진행 상황을 한눈에 확인하세요. 업무를 시작하면 <Em>타이머로 실제 작업 시간까지 기록</Em>할 수 있어요.</>,
-    mock: <HomeMock />,
+    title: '계획이 틀어져도 다시',
+    desc: '새로운 일이 생기거나 일정이 밀려도 전체 계획을 다시 조율하세요.',
+    mock: <RescheduleMock />,
     reverse: true,
   },
 ];
@@ -285,11 +338,7 @@ export default function LandingPage() {
           <div key={f.title} className="grid md:grid-cols-2 gap-10 md:gap-8 items-center">
             {/* 텍스트 */}
             <div className={f.reverse ? 'md:order-2' : ''}>
-              {/* 실제 서비스 메뉴바의 '활성' 아이콘 모습 — 라임 라운드 네모 + 딥틸 아이콘 */}
-              <span className="inline-flex w-[46px] h-[46px] rounded-[15px] items-center justify-center" style={{ backgroundColor: LIME, boxShadow: '0 6px 16px rgba(157,254,59,0.50)' }}>
-                <MaskIcon src={f.icon} size={21} color={EMBLEM} />
-              </span>
-              <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mt-4 mb-3 whitespace-pre-line" style={{ color: INK }}>
+              <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mb-3 whitespace-pre-line" style={{ color: INK }}>
                 {f.title}
               </h3>
               <p className="text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#5B6560' }}>{f.desc}</p>
