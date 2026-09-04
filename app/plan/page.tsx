@@ -1998,7 +1998,7 @@ function GoalsSection({
                         () => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).filter(x => x.id !== s.id) }),
                         '업무 영역', '이 영역의 전략 방향',
                         undefined, undefined,
-                        () => chat?.openWithTarget(`업무 영역별 전략${s.area ? ` · ${s.area}` : ''} (목표: ${g.name})`, s.content, text => onUpdateGoal(g.id, { strategies: (g.strategies ?? []).map(x => x.id === s.id ? { ...x, content: text } : x) })),
+                        undefined, // AI 다이아 버튼 제거
                       ))}
                       <button onClick={() => onUpdateGoal(g.id, { strategies: [...(g.strategies ?? []), { id: uid(), area: '', content: '' }] })} className="text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">+ 전략 추가</button>
                     </div>
