@@ -66,9 +66,6 @@ const PAGE_TIPS: Record<string, Step[]> = {
     { target: '[data-teach="hp-timer"]', text: '오늘의 업무를 진행하며 플레이버튼을 누르면 소요 시간을 기록하고, 다음에 비슷한 일을 할 때 평균 소요 시간을 반영해 계획할 수 있어요.', scrollCenter: true },
     { target: '[data-teach="hp-clockin"]', text: '출근, 퇴근 버튼을 통해 총 업무시간을 기록하고 업무와 일상을 분리할 수 있게 도와줘요.', scrollCenter: true, last: true },
   ],
-  '/task': [
-    { text: 'Task에서는 날짜별 업무를 관리하고, 타이머로 집중한 작업 시간을 기록할 수 있어요.', last: true },
-  ],
   '/resources': [
     { text: 'Financial에서는 비즈니스 자금을 운영 계획에 맞춰 관리할 수 있어요.' },
     { targets: ['[data-teach="fin-income"]', '[data-teach="fin-income-sec"]'], text: '이번 달 수익을 카테고리로 나눠서 기록할 수 있어요.', finSection: 'income', scrollCenter: true },

@@ -14,7 +14,7 @@ export default function FloatingTimer() {
   // Home은 자체 대시보드 타이머 유지. 상단 전역 타이머 바가 뜨는 페이지도 제외(중복 방지).
   // → Task·Goals·Resources·Plan(자체 타이머 제거함) 등 비-Home·비-상단바 페이지에서 floating 표시.
   if (path === '/home') return null;
-  const hasTopBar = path !== '/task' && path !== '/programs' && path !== '/resources' && path !== '/plan' && !path.startsWith('/pricing');
+  const hasTopBar = path !== '/programs' && path !== '/resources' && path !== '/plan' && !path.startsWith('/pricing');
   if (hasTopBar) return null;
   if (!hasSpecificTask) return null;
 
