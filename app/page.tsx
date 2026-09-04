@@ -118,7 +118,7 @@ function FinanceMock() {
   );
   const op = (s: string) => <span className="text-[15px] font-bold flex-shrink-0" style={{ color: '#C4CCC4' }}>{s}</span>;
   return (
-    <div className="flex items-center justify-center gap-1.5 flex-nowrap mx-auto w-max">
+    <div className="flex items-center justify-center gap-1.5 flex-nowrap mx-auto w-max" style={{ transform: 'scale(1.15)', transformOrigin: 'center' }}>
       {pill('수익', '₩3,200,000')}
       {op('−')}
       {pill('고정비용', '₩1,200,000')}
@@ -338,7 +338,7 @@ export default function LandingPage() {
           <div key={f.title}>
             <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mb-3 whitespace-pre-line" style={{ color: INK }}>{f.title}</h3>
             <p className="text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#5B6560' }}>{f.desc}</p>
-            <div className="mt-5 w-full overflow-x-auto pt-3 pb-7 px-1">{f.mock}</div>
+            <div className="mt-5 w-full overflow-x-auto pt-5 pb-10 px-1">{f.mock}</div>
           </div>
         ) : (
           <div key={f.title} className="grid md:grid-cols-2 gap-10 md:gap-8 items-center">
