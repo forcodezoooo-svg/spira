@@ -11,8 +11,8 @@ function getClient() {
 
 // 온보딩 전용 — 사업 설명·첫 목표를 분석해 기획서 초안 + 분기별 목표 + 업무 영역을 JSON으로 반환.
 export async function POST(request: Request) {
-  // 로그인 필수 + 무료 하루 한도 (비로그인 외부 호출 차단 → 비용 남용 방지)
-  const access = await checkAiAccess();
+  // 로그인 필수. 단, 온보딩은 첫 경험이므로 하루 한도 카운트에서 제외(비로그인 외부 호출은 여전히 차단)
+  const access = await checkAiAccess({ count: false });
   if ('error' in access) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const { name, category, description, goal } = await request.json();
