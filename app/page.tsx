@@ -332,7 +332,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ 기능 4개 (좌우 교차) ══ */}
-      <section className="max-w-4xl mx-auto px-6 pb-8 space-y-24 sm:space-y-28">
+      <section className="max-w-4xl mx-auto px-6 pt-4 pb-8 space-y-36 sm:space-y-44">
         {FEATURES.map(f => ('full' in f && f.full) ? (
           // 전체폭: 텍스트 위, 그래픽은 한 줄로 아래에 길게
           <div key={f.title}>
