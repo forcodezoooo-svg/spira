@@ -108,26 +108,26 @@ function CapacityMock() {
   );
 }
 
-// 재무 스탯 흐름
+// 재무 스탯 흐름 — 모든 박스 동일 폭, 계산식 일치(수익−고정비용−투자비−비상금=개인순이익, 양수)
 function FinanceMock() {
   const pill = (label: string, value: string, dark?: boolean) => (
-    <div className="rounded-2xl px-3 py-2 text-center flex-shrink-0" style={{ backgroundColor: dark ? DARK : '#fff', border: dark ? 'none' : `1.5px solid ${LIME}`, boxShadow: dark ? '0 10px 24px rgba(22,39,27,0.35)' : '0 8px 20px rgba(157,254,59,0.28)' }}>
+    <div className="rounded-2xl px-2.5 py-2 text-center flex-shrink-0" style={{ width: 98, backgroundColor: dark ? DARK : '#fff', border: dark ? 'none' : `1.5px solid ${LIME}`, boxShadow: dark ? '0 6px 16px rgba(22,39,27,0.28)' : '0 6px 15px rgba(157,254,59,0.30)' }}>
       <p className="text-[9px] font-bold mb-0.5 whitespace-nowrap" style={{ color: dark ? '#9FB3A0' : '#9AA39D' }}>{label}</p>
-      <p className="text-[13px] font-black tabular-nums whitespace-nowrap" style={{ color: dark ? LIME : INK }}>{value}</p>
+      <p className="text-[12px] font-black tabular-nums whitespace-nowrap" style={{ color: dark ? LIME : INK }}>{value}</p>
     </div>
   );
-  const op = (s: string) => <span className="text-[15px] font-bold flex-shrink-0 mx-0.5" style={{ color: '#C4CCC4' }}>{s}</span>;
+  const op = (s: string) => <span className="text-[15px] font-bold flex-shrink-0" style={{ color: '#C4CCC4' }}>{s}</span>;
   return (
-    <div className="flex items-center justify-center gap-2 flex-nowrap mx-auto w-max">
-      {pill('수익', '₩0')}
+    <div className="flex items-center justify-center gap-1.5 flex-nowrap mx-auto w-max">
+      {pill('수익', '₩3,200,000')}
       {op('−')}
-      {pill('고정비용', '₩92,471')}
+      {pill('고정비용', '₩1,200,000')}
       {op('−')}
-      {pill('프로젝트 투자비', '₩0')}
+      {pill('프로젝트 투자비', '₩600,000')}
       {op('−')}
-      {pill('비상금 10%', '₩0')}
+      {pill('비상금 10%', '₩320,000')}
       {op('=')}
-      {pill('개인순이익', '-₩92,471', true)}
+      {pill('개인순이익', '+₩1,080,000', true)}
     </div>
   );
 }
@@ -265,7 +265,7 @@ export default function LandingPage() {
           <h2 className="text-[18px] sm:text-[21px] font-black text-center mb-7" style={{ color: INK }}>
             나만의 비즈니스를 준비하면서<br />이런 경험 있나요?
           </h2>
-          <ul className="space-y-3.5 mx-auto">
+          <ul className="space-y-3.5 w-fit max-w-full mx-auto">
             {PAINS.map((t, i) => (
               <li key={i} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#3E4A44' }}>
                 <Check /><span>{t}</span>
@@ -338,7 +338,7 @@ export default function LandingPage() {
           <div key={f.title}>
             <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mb-3 whitespace-pre-line" style={{ color: INK }}>{f.title}</h3>
             <p className="text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#5B6560' }}>{f.desc}</p>
-            <div className="mt-8 w-full overflow-x-auto pb-1">{f.mock}</div>
+            <div className="mt-5 w-full overflow-x-auto pt-3 pb-7 px-1">{f.mock}</div>
           </div>
         ) : (
           <div key={f.title} className="grid md:grid-cols-2 gap-10 md:gap-8 items-center">
