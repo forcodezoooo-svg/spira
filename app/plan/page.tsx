@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo, forwardRef, Fragment } from 'react';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
+import { useRouter } from 'next/navigation';
 import { ListSkeleton } from '../components/Skeleton';
 import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Deliverable, AreaDeliverable, BusinessOverview, PlanDoc, Goal, Strategy, Project, ProjectStatus, SuccessCriterion } from '../lib/types';
 
@@ -1760,7 +1761,7 @@ function GoalsSection({
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
   onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects, onToggleAreaDone, onSetProjectStatus,
-  aiBusyId, aiEnabled, focusGoal, onFocusHandled,
+  aiBusyId, aiEnabled, focusGoal, onFocusHandled, deliverableTaskCount, onOpenTasks,
 }: {
   goals: Goal[];
   projectsOfGoal: (goalId: string) => Project[];
@@ -1782,6 +1783,8 @@ function GoalsSection({
   onResequenceProjects?: (goalId: string) => void;
   onToggleAreaDone?: (projectId: string, deliverableId: string) => void;
   onSetProjectStatus?: (projectId: string, status: ProjectStatus) => void;
+  deliverableTaskCount?: (deliverableId: string) => number;
+  onOpenTasks?: () => void;
   aiBusyId: string | null;
   aiEnabled?: boolean;
 }) {
@@ -1852,7 +1855,7 @@ function GoalsSection({
     );
   };
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
-  const areaRow = (rowKey: string, area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void) => (
+  const areaRow = (rowKey: string, area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void, taskCount?: number, onTasks?: () => void) => (
     <div key={rowKey} className="flex items-start gap-2" data-ask data-ask-label={area || '항목'} data-ask-content={area ? `${area}: ${content}` : content}>
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
@@ -1864,11 +1867,15 @@ function GoalsSection({
       <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
         <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
       </div>
-      {onDiscuss && (
+      {onTasks ? (
+        <button onClick={onTasks} title="이 산출물의 task 보기·추가 (Process의 Task 페이지로 이동)" className="flex-shrink-0 mt-1.5 text-[12px] font-bold px-2 py-1 rounded-md transition-colors hover:bg-violet-50 whitespace-nowrap" style={{ color: (taskCount ?? 0) > 0 ? '#7C3AED' : '#9AA39D' }}>
+          task {taskCount ?? 0}개
+        </button>
+      ) : onDiscuss ? (
         <button onClick={onDiscuss} title="AI와 이 내용을 다듬기" className="flex-shrink-0 mt-1.5 w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-violet-50" style={{ color: '#7C3AED' }}>
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
         </button>
-      )}
+      ) : null}
       <button onClick={onDel} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0 mt-1.5">×</button>
     </div>
   );
@@ -2098,7 +2105,9 @@ function GoalsSection({
                                         '업무 영역', '이 영역의 결과물',
                                         a.done,
                                         () => (onToggleAreaDone ? onToggleAreaDone(p.id, a.id) : onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, done: !x.done } : x) })),
-                                        () => chat?.openWithTarget(`영역별 산출물${a.area ? ` · ${a.area}` : ''} (프로젝트: ${p.name})`, a.content, text => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, content: text } : x) })),
+                                        undefined, // AI 다이아 버튼 제거
+                                        deliverableTaskCount ? deliverableTaskCount(a.id) : 0,
+                                        onOpenTasks,
                                       ))}
                                       <button onClick={() => onUpdateProject(p.id, { areaDeliverables: [...(p.areaDeliverables ?? []), { id: uid(), area: '', content: '' }] })}
                                         className="w-full py-1.5 rounded-lg border-2 border-dashed border-neutral-200 text-[12px] text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물</button>
@@ -2439,6 +2448,7 @@ function deriveBizGoals(plan: PlanData): BizGoal[] {
 
 export default function PlanPage() {
   const store = useStore();
+  const router = useRouter();
   const { toast } = useToast();
   const { plan: userPlan } = usePlan();
   const { showUpgrade } = useUpgrade();
@@ -2736,6 +2746,15 @@ export default function PlanPage() {
   const selectedWs = store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId)?.workspace;
   const selectedWsName = selectedWs?.name ?? '';
   const selectedWsColor = selectedWs?.color;
+
+  // 영역별 산출물(deliverable) → 로드맵 산출물(todo)의 task(subtask) 개수 맵
+  const deliverableTaskCounts: Record<string, number> = {};
+  for (const p of store.allWorkspacesEntries.find(e => e.workspace.id === selectedWsId)?.programs ?? [])
+    for (const dl of p.deadlines ?? [])
+      for (const t of dl.todos ?? [])
+        if (t.deliverableId) deliverableTaskCounts[t.deliverableId] = (t.subtasks ?? []).length;
+  // 'task N개' 클릭 → Process의 Task 페이지로 이동
+  const openTaskBoard = () => { try { localStorage.setItem('spira_open_task_board', '1'); } catch { /* empty */ } router.push('/programs'); };
 
   const isLastBusiness = store.allWorkspacesEntries.length <= 1;
   const handleDeleteBusiness = () => {
@@ -3417,6 +3436,8 @@ export default function PlanPage() {
           onResequenceProjects={resequenceProjects}
           onToggleAreaDone={toggleAreaDeliverableDone}
           onSetProjectStatus={setProjectStatus}
+          deliverableTaskCount={id => deliverableTaskCounts[id] ?? 0}
+          onOpenTasks={openTaskBoard}
           aiBusyId={aiBusyId}
           aiEnabled={!!chat && !chat.loading}
           focusGoal={focusGoal}

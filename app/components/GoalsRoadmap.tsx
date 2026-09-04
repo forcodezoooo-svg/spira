@@ -310,6 +310,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calDrag?.key, calDrag?.mode]);
   useEffect(() => { if (!notPlaced) return; const t = setTimeout(() => setNotPlaced(null), 2800); return () => clearTimeout(t); }, [notPlaced]);
+  // Plan의 'task N개'에서 넘어온 경우 마운트 시 Task 보드로 바로 전환
+  useEffect(() => { try { if (localStorage.getItem('spira_open_task_board')) { localStorage.removeItem('spira_open_task_board'); setKanban(true); } } catch { /* empty */ } }, []);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
   useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
