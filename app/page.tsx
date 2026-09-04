@@ -62,23 +62,21 @@ const flowArrow = (
   <svg className="w-4 h-4 my-1" viewBox="0 0 16 16" fill="none" style={{ color: '#C4CCC4' }}><path d="M8 3v9M4.5 8.5L8 12l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
 
-// 목표 → Task 계층 흐름
+// 목표 → Task 계층 흐름 (초록 → 화이트 그라데이션)
 function HierarchyMock() {
-  const solid = (label: string) => (
-    <div className="rounded-full px-7 py-2.5 text-center text-[13px] font-bold w-full" style={{ backgroundColor: LIME, color: INK, boxShadow: '0 8px 20px rgba(157,254,59,0.45)' }}>{label}</div>
-  );
-  const outline = (label: string) => (
-    <div className="rounded-full px-7 py-2.5 text-center text-[13px] font-bold w-full bg-white" style={{ color: INK, border: `1.5px solid ${LIME}`, boxShadow: '0 8px 20px rgba(0,0,0,0.06)' }}>{label}</div>
+  // 위에서 아래로 진해진 초록 → 점점 연해져 화이트
+  const tier = (label: string, bg: string, border: string, glow: string) => (
+    <div className="rounded-full px-7 py-2.5 text-center text-[13px] font-bold w-full" style={{ backgroundColor: bg, color: INK, border: `1.5px solid ${border}`, boxShadow: `0 8px 20px ${glow}` }}>{label}</div>
   );
   return (
-    <div className="flex flex-col items-center w-full" style={{ maxWidth: 210 }}>
-      {solid('사업목표')}
+    <div className="flex flex-col items-center w-full" style={{ maxWidth: 220 }}>
+      {tier('사업목표', LIME, LIME, 'rgba(157,254,59,0.45)')}
       {flowArrow}
-      {solid('프로젝트')}
+      {tier('프로젝트', '#C6FB86', '#C6FB86', 'rgba(157,254,59,0.30)')}
       {flowArrow}
-      {outline('업무영역별 산출물')}
+      {tier('업무영역별 산출물', '#E6FDCB', '#E6FDCB', 'rgba(157,254,59,0.18)')}
       {flowArrow}
-      {outline('Task')}
+      {tier('Task', '#FFFFFF', '#E3F3D2', 'rgba(0,0,0,0.06)')}
     </div>
   );
 }
@@ -118,9 +116,9 @@ function FinanceMock() {
       <p className="text-[13px] font-black tabular-nums whitespace-nowrap" style={{ color: dark ? LIME : INK }}>{value}</p>
     </div>
   );
-  const op = (s: string) => <span className="text-[13px] font-bold flex-shrink-0" style={{ color: '#C4CCC4' }}>{s}</span>;
+  const op = (s: string) => <span className="text-[15px] font-bold flex-shrink-0 mx-0.5" style={{ color: '#C4CCC4' }}>{s}</span>;
   return (
-    <div className="w-full flex items-center justify-center gap-1.5 flex-wrap" style={{ maxWidth: 330 }}>
+    <div className="flex items-center justify-center gap-2 flex-nowrap mx-auto w-max">
       {pill('수익', '₩0')}
       {op('−')}
       {pill('고정비용', '₩92,471')}
@@ -191,6 +189,7 @@ const FEATURES = [
     desc: '현재 자금과 앞으로 필요한 비용까지 고려해 사업의 자금 계획을 세우세요.',
     mock: <FinanceMock />,
     reverse: false,
+    full: true,
   },
   {
     title: '계획이 틀어져도 다시',
@@ -261,12 +260,12 @@ export default function LandingPage() {
       {/* 표지(히어로) 아래 설명 영역 전체를 10% 확대 (이미지·텍스트 함께) */}
       <div style={{ zoom: 1.1 }}>
       {/* ══ 공감 카드 ══ */}
-      <section className="max-w-2xl mx-auto px-6 pt-14 pb-20">
-        <div className="rounded-[26px] px-7 py-9 sm:px-10 sm:py-11 bg-white" style={{ border: '1px solid #EFEFEA', boxShadow: '0 20px 50px rgba(0,0,0,0.06)' }}>
+      <section className="max-w-3xl mx-auto px-6 pt-14 pb-20">
+        <div className="rounded-[26px] px-7 py-9 sm:px-12 sm:py-11 bg-white" style={{ border: '1px solid #EFEFEA', boxShadow: '0 20px 50px rgba(0,0,0,0.06)' }}>
           <h2 className="text-[18px] sm:text-[21px] font-black text-center mb-7" style={{ color: INK }}>
             나만의 비즈니스를 준비하면서<br />이런 경험 있나요?
           </h2>
-          <ul className="space-y-3.5 max-w-md mx-auto">
+          <ul className="space-y-3.5 mx-auto">
             {PAINS.map((t, i) => (
               <li key={i} className="flex items-start gap-3 text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#3E4A44' }}>
                 <Check /><span>{t}</span>
@@ -334,7 +333,14 @@ export default function LandingPage() {
 
       {/* ══ 기능 4개 (좌우 교차) ══ */}
       <section className="max-w-4xl mx-auto px-6 pb-8 space-y-24 sm:space-y-28">
-        {FEATURES.map(f => (
+        {FEATURES.map(f => ('full' in f && f.full) ? (
+          // 전체폭: 텍스트 위, 그래픽은 한 줄로 아래에 길게
+          <div key={f.title}>
+            <h3 className="text-[21px] sm:text-[24px] font-black tracking-[-0.02em] leading-[1.3] mb-3 whitespace-pre-line" style={{ color: INK }}>{f.title}</h3>
+            <p className="text-[14px] sm:text-[15px] leading-relaxed" style={{ color: '#5B6560' }}>{f.desc}</p>
+            <div className="mt-8 w-full overflow-x-auto pb-1">{f.mock}</div>
+          </div>
+        ) : (
           <div key={f.title} className="grid md:grid-cols-2 gap-10 md:gap-8 items-center">
             {/* 텍스트 */}
             <div className={f.reverse ? 'md:order-2' : ''}>
