@@ -99,8 +99,8 @@ const PAINS: ReactNode[] = [
 // 4단계 흐름
 const FLOW = [
   { icon: '/plan_icon.svg', name: 'Plan', desc: '비즈니스를\n기획하고' },
-  { icon: '/goals_icon.svg', name: 'Goals', desc: '업무 일정을\n계획하고' },
-  { icon: '/resources_icon.svg', name: 'Resources', desc: '자금을\n관리하고' },
+  { icon: '/goals_icon.svg', name: 'Process', desc: '업무 일정을\n계획하고' },
+  { icon: '/resources_icon.svg', name: 'Financial', desc: '자금을\n관리하고' },
   { icon: '/home_icon.svg', name: 'Home', desc: '하나하나\n실행해요' },
 ];
 
