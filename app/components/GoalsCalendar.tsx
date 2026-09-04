@@ -394,7 +394,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
         {calDrag && (<div className="absolute top-full left-0 right-0 mt-1 h-6 z-20 flex items-center justify-center text-[11px] font-semibold text-violet-700 bg-violet-100/95 rounded-lg border border-violet-200 pointer-events-none">▼ 아래로 끌면 다음 달 ({(calMo + 2) > 12 ? (calMo + 2 - 12) : calMo + 2}월)</div>)}
         <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1" ref={weeksRef}>
           {/* 요일 헤더 — 그리드와 같은 스크롤 영역 안(같은 폭)에 두어 스크롤바가 생겨도 열이 어긋나지 않게 */}
-          <div className="grid grid-cols-7 sticky top-0 z-10 bg-white pb-1">
+          <div className="grid grid-cols-7 sticky top-0 z-30 bg-white pb-1.5 -mt-1" style={{ boxShadow: '0 4px 6px -4px rgba(0,0,0,0.06)' }}>
             {DOW.map(d => (<div key={d} className="text-center text-[12px] py-1 font-medium" style={{ color: '#9AA39D' }}>{d}</div>))}
           </div>
           {calWeeks.map((week, wi) => {
