@@ -8,6 +8,7 @@ import { UIProvider } from './lib/UIContext';
 import { UpgradeProvider } from './lib/UpgradeContext';
 import { ToastProvider } from './lib/ToastContext';
 import AuthProvider from './components/AuthProvider';
+import PostHogProvider from './components/PostHogProvider';
 import SyncProvider from './components/SyncProvider';
 import { siteUrl } from './lib/siteUrl';
 
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-[#F8F8F8] text-neutral-900 antialiased font-sans">
         <ToastProvider>
         <AuthProvider>
+        <PostHogProvider>
         <SyncProvider>
         <TimerProvider>
           <UIProvider>
@@ -59,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </UIProvider>
         </TimerProvider>
         </SyncProvider>
+        </PostHogProvider>
         </AuthProvider>
         </ToastProvider>
       </body>
