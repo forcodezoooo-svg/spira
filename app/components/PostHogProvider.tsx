@@ -37,22 +37,8 @@ function PostHogIdentify() {
   return null;
 }
 
-let inited = false;
-
+// 초기화는 instrumentation-client.ts에서 단일로 수행. 여기선 페이지뷰 캡처 + 사용자 식별만 담당.
 export default function PostHogProvider({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-    if (!key || inited) return; // 키 없으면(로컬 등) 아무것도 안 함
-    posthog.init(key, {
-      api_host: '/ingest',                  // 리버스 프록시(광고차단기 회피) — next.config rewrites로 us.i.posthog.com 연결
-      ui_host: 'https://us.posthog.com',    // 대시보드 링크용(US)
-      person_profiles: 'identified_only',   // 익명 person 남발 방지(비용·노이즈↓). 이벤트는 그대로 수집됨
-      capture_pageview: false,              // App Router에선 위에서 수동 캡처
-      capture_pageleave: true,
-    });
-    inited = true;
-  }, []);
-
   return (
     <>
       <Suspense fallback={null}><PostHogPageView /></Suspense>
