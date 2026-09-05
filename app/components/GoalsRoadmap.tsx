@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import posthog from 'posthog-js';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
@@ -850,6 +851,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // task/세부작업 추가는 팝업 폼으로 (이름 + 소요 시간). task 날짜는 자동 지정
   const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[]) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+    posthog.capture('task_added', { source: 'manual' });
     const recurring = !!days?.length;
     const d = colStartAnchor(col); // 카테고리 시작일(미래면 그 날, 아니면 오늘)부터 배치
     const sub = recurring

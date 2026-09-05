@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import posthog from 'posthog-js';
 import { useToast } from './ToastContext';
 import { useAuth } from '../components/AuthProvider';
 import { createClient } from './supabase/client';
@@ -23,7 +24,7 @@ export function UpgradeProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [joined, setJoined] = useState(false);
 
-  const showUpgrade = useCallback((r: UpgradeReason = 'generic') => { setReason(r); setJoined(false); }, []);
+  const showUpgrade = useCallback((r: UpgradeReason = 'generic') => { posthog.capture('upgrade_prompt_shown', { reason: r }); setReason(r); setJoined(false); }, []);
   const close = () => setReason(null);
 
   const join = async () => {
@@ -35,6 +36,7 @@ export function UpgradeProvider({ children }: { children: ReactNode }) {
       if (!u) { toast('로그인이 필요해요.', 'error'); setBusy(false); return; }
       const { error } = await supabase.from('pro_waitlist').upsert({ user_id: u.id, email: u.email, reason });
       if (error) throw error;
+      posthog.capture('pro_waitlist_joined', { reason });
       setJoined(true);
       toast('신청 완료! 유료 플랜이 나오면 메일로 알려드릴게요.', 'success');
     } catch {

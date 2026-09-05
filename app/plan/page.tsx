@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo, forwardRef, Fragment } from 'reac
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { useRouter } from 'next/navigation';
+import posthog from 'posthog-js';
 import { ListSkeleton } from '../components/Skeleton';
 import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Deliverable, AreaDeliverable, BusinessOverview, PlanDoc, Goal, Strategy, Project, ProjectStatus, SuccessCriterion } from '../lib/types';
 
@@ -2966,7 +2967,7 @@ export default function PlanPage() {
     if (userPlan.tier !== 'pro' && !isOnboardingActive()) { showUpgrade('autofill'); return false; }
     return true;
   };
-  const addGoal = (name: string) => update({ goals: [...(plan.goals ?? []), { id: uid(), name, order: (plan.goals ?? []).length, status: 'active', strategies: [] }] });
+  const addGoal = (name: string) => { posthog.capture('goal_created', { source: 'manual' }); update({ goals: [...(plan.goals ?? []), { id: uid(), name, order: (plan.goals ?? []).length, status: 'active', strategies: [] }] }); };
   const updateGoal = (id: string, patch: Partial<Goal>) => update({ goals: (plan.goals ?? []).map(g => g.id === id ? { ...g, ...patch } : g) });
   const removeGoal = (id: string) => update({
     goals: (plan.goals ?? []).filter(g => g.id !== id),
@@ -3161,6 +3162,7 @@ export default function PlanPage() {
   };
   // 팝업에서 확정한 목표들을 실제 반영 (첫 목표만 진행중, 나머지 보류)
   const applyPlannedGoals = (planned: PlanGoal[]) => {
+    posthog.capture('goal_created', { source: 'ai', count: planned.length });
     setPlan(prev => {
       if (!prev) return prev;
       const base = prev.goals ?? [];

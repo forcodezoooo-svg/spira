@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import posthog from 'posthog-js';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useStore } from '../lib/useStore';
@@ -79,6 +80,7 @@ export default function Sidebar() {
       return;
     }
     addWorkspace(name);
+    posthog.capture('business_created', { count: allWorkspaces.length + 1 });
     setNewName('');
     setAdding(false);
     setWsOpen(false);

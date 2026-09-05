@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
+import posthog from 'posthog-js';
 import { useRouter } from 'next/navigation';
 import { useUI } from './UIContext';
 import { useToast } from './ToastContext';
@@ -416,6 +417,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const apiNext: Message[] = [...messagesRef.current, apiMsg];
     // hideUser: 사용자 말풍선 없이 조용히 요청 (온보딩 자동 생성용). intro: 답변 문구를 고정.
     if (!opts?.hideUser) {
+      posthog.capture('ai_message_sent'); // 사용자가 직접 보낸 채팅만 집계(자동 생성 제외)
       setMessages([...messagesRef.current, { role: 'user', content: displayText ?? text }]);
     }
     setLoading(true);
@@ -552,6 +554,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const runAction = useCallback((idx: number, action: ChatAction) => {
     const canAutofill = isProRef.current || isOnboardingActive();
     if (!canAutofill) { upgradeRef.current('autofill'); return; }
+    posthog.capture('ai_action_applied', { marker: action.marker, label: action.label }); // AI 제안을 앱에 반영
     if (applyToHandler(action.marker, action.payload)) {
       markActionDone(idx);
     } else {
