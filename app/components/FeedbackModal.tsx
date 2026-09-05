@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useToast } from '../lib/ToastContext';
 import { submitFeedback, FeedbackType } from '../lib/feedback';
+import posthog from 'posthog-js';
 
 const TYPES: { key: FeedbackType; label: string; emoji: string }[] = [
   { key: 'bug', label: '버그 신고', emoji: '🐞' },
@@ -21,6 +22,7 @@ export default function FeedbackModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       await submitFeedback(type, message.trim(), typeof window !== 'undefined' ? window.location.pathname : '');
+      posthog.capture('feedback_submitted', { feedback_type: type });
       toast('소중한 의견 감사해요! 잘 전달했어요.', 'success');
       onClose();
     } catch {

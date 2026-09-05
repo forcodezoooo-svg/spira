@@ -7,6 +7,7 @@ import { computeDayCapacity } from '../lib/capacity';
 import type { FinancialPlan, FinRevenueSource, OperatingBudgetItem, BudgetAllocation } from '../lib/types';
 import { useChatContext, FinReplanProposal } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
+import posthog from 'posthog-js';
 
 const won = (n: number) => `₩${Math.round(n).toLocaleString('ko-KR')}`;
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -29,6 +30,7 @@ export default function FinancialPlanPanel() {
     const start = todayStr();
     const id = store.addFinancialPlan({ name: `${new Date().getFullYear()} 재무계획`, startDate: start, endDate: addMonthsStr(start, 3), startingFunds: 0, revenueSources: [], includeFixedSubscriptions: true, operatingItems: [], reserveTarget: 0, status: 'active' });
     setSelId(id);
+    posthog.capture('financial_plan_created');
   };
   const patch = (p: Partial<FinancialPlan>) => plan && store.updateFinancialPlan(plan.id, p);
 
@@ -123,6 +125,7 @@ export default function FinancialPlanPanel() {
     lines.push('');
     lines.push('운영비와 Reserve를 보호하면서 현재 투자계획을 유지할 수 있는지 판단하고, 부족하거나 조정이 필요하면 프로젝트 우선순위·상태를 고려한 재조정안(유지/예산조정/시점이동 등)을 제시해줘. 조정안이 정해지면 각 배분의 projectId/goalId와 최종 금액으로 %%%FIN_REPLAN%%% 마커를 붙여줘(적용 버튼용). 임의로 확정하지 말고 제안 형태로.');
     openChat();
+    posthog.capture('financial_replan_requested');
     chat.sendMessage(lines.join('\n'), 'AI에게 현재 재무 상황 기준 재조정 상담 받기', { financeMode: true });
   };
   // AI 조정안 적용 — 배분 금액/Reserve를 현재 선택된 계획에 반영

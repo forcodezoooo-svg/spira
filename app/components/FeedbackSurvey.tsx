@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { useToast } from '../lib/ToastContext';
 import { submitSurvey } from '../lib/feedback';
+import posthog from 'posthog-js';
 
 // 능동적 만족도 설문 — 첫 사용 하루 뒤부터 슬쩍 노출. '나중에'로 미룰 수 있고, 한 번 답하면 다시 안 뜸.
 const DELAY_MS = 24 * 60 * 60 * 1000; // 첫 사용 후 노출까지 대기(하루)
@@ -59,6 +60,7 @@ export default function FeedbackSurvey() {
     try {
       await submitSurvey(rating, good.trim(), bad.trim(), typeof window !== 'undefined' ? window.location.pathname : '');
       writeState({ submitted: true });
+      posthog.capture('feedback_survey_submitted', { rating });
       toast('소중한 의견 감사해요! 큰 힘이 됐어요.', 'success');
       setOpen(false);
     } catch {

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useChatContext, ChatSession } from '../lib/ChatContext';
 import { useUI } from '../lib/UIContext';
 import { AI_COPY, STARTERS } from '../lib/ai/messages';
+import posthog from 'posthog-js';
 
 // AI 응답에서 마크다운 기호를 제거해 깔끔한 평문으로 표시 (별표·제목·코드·목록 기호 등)
 function stripMarkdown(s: string): string {
@@ -75,6 +76,7 @@ export default function AIChatButton() {
     const text = input.trim();
     if (!text || loading || !chat) return;
     setInput('');
+    posthog.capture('ai_message_sent', { surface: pathname });
     // Plan에서 "채워줘/작성해줘" 류 요청은 확정적으로 필드에 반영되도록 마커 지시를 덧붙여 전송(표시는 원문)
     if (pathname === '/plan' && /(채워|작성해|만들어|채워 줘|채워줘)/.test(text)) {
       const api = `${text}\n\n(위 요청대로 기획서의 해당 또는 모든 항목을 지금 사업 정보에 맞게 채우고, 추가 질문 없이 반드시 %%%PLAN_UPDATE%%% 형식의 JSON으로 필드를 출력해서 시스템에 바로 반영되게 해줘.)`;

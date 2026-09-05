@@ -6,6 +6,7 @@ import { useToast } from '../lib/ToastContext';
 import { usePlan } from '../lib/usePlan';
 import { createClient } from '../lib/supabase/client';
 import { useAuth } from '../components/AuthProvider';
+import posthog from 'posthog-js';
 
 // 요금제 페이지 (Free / Pro · 월·연). 결제(토스페이먼츠) 연동은 다음 단계에서 '구독하기' 버튼에 붙는다.
 type Cycle = 'monthly' | 'yearly';
@@ -56,6 +57,7 @@ export default function PricingPage() {
       const res = await fetch('/api/billing/cancel', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) { toast(data.error ?? '해지에 실패했어요.', 'error'); return; }
+      posthog.capture('subscription_canceled');
       toast('구독을 해지했어요. 남은 기간까지 Pro가 유지돼요.', 'success');
       void refresh();
     } catch {
@@ -68,6 +70,7 @@ export default function PricingPage() {
       const res = await fetch('/api/billing/change-cycle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cycle }) });
       const data = await res.json();
       if (!res.ok) { toast(data.error ?? '변경에 실패했어요.', 'error'); return; }
+      posthog.capture('subscription_cycle_change_scheduled', { billing_cycle: cycle });
       toast(`다음 결제일부터 ${cycle === 'yearly' ? '연간' : '월간'}으로 전환돼요.`, 'success');
       void refresh();
     } catch { toast('네트워크 오류가 발생했어요.', 'error'); }
@@ -76,7 +79,7 @@ export default function PricingPage() {
   const cancelPendingChange = async () => {
     try {
       const res = await fetch('/api/billing/change-cycle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cycle: plan.cycle }) });
-      if (res.ok) { toast('전환 예약을 취소했어요.', 'success'); void refresh(); }
+      if (res.ok) { posthog.capture('subscription_cycle_change_canceled'); toast('전환 예약을 취소했어요.', 'success'); void refresh(); }
     } catch { /* noop */ }
   };
 
@@ -96,6 +99,7 @@ export default function PricingPage() {
 
       const tossPayments = await loadTossPayments(clientKey);
       const payment = tossPayments.payment({ customerKey: user.id });
+      posthog.capture('subscription_checkout_started', { billing_cycle: cycle });
       // 카드 등록 창 → 성공 시 successUrl 로 이동(그 페이지에서 서버 승인 처리)
       await payment.requestBillingAuth({
         method: 'CARD',

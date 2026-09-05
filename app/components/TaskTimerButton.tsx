@@ -1,5 +1,6 @@
 'use client';
 import { useTimer } from '../lib/TimerContext';
+import posthog from 'posthog-js';
 
 function localDateStr(d = new Date()): string {
   const y = d.getFullYear();
@@ -43,7 +44,10 @@ export default function TaskTimerButton({ taskId, dateStr, done }: { taskId: str
       )}
       <button
         data-teach="today-timer"
-        onClick={() => toggleTaskTimer(taskId)}
+        onClick={() => {
+          posthog.capture(active ? 'task_timer_stopped' : 'task_timer_started');
+          toggleTaskTimer(taskId);
+        }}
         className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
           active ? 'bg-violet-600 text-neutral-900' : 'text-neutral-600 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 hover:text-neutral-900'
         }`}

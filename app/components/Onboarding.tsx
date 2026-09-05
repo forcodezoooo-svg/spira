@@ -5,6 +5,7 @@ import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { emptyPlan, uid } from '../lib/store';
 import type { PlanItem } from '../lib/types';
+import posthog from 'posthog-js';
 
 const PALETTE = ['#5EA63A', '#4E7CF5', '#E0913C', '#9B6BD6', '#3CB8A6', '#E0648C'];
 type NamedGoal = { name: string; goal: string };
@@ -134,6 +135,7 @@ export default function Onboarding() {
   const finishOnboarding = () => {
     const wsId = store.addWorkspace(name.trim());
     store.updatePlanInWs(wsId, { ...emptyPlan, concept: desc.trim(), overview: { category, concept: desc.trim(), tagline: '', problem: '', solution: '', mission: '', vision: '' } });
+    posthog.capture('onboarding_completed', { business_category: category });
     finish(true);
   };
 
