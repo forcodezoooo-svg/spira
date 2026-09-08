@@ -704,7 +704,9 @@ export default function ProgramsPage() {
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
       for (const prog of plan.programs ?? []) {
         if (!prog || !(prog.deadlines?.length)) continue;
-        const area = prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined;
+        const nrm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
+        const area = (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined)
+          ?? (prog.workAreaName ? areasForWs(targetWs).find(a => nrm(a.name) === nrm(prog.workAreaName)) : undefined); // 이름 폴백
         touchedAreas.add(area?.name ?? NONE);
         const key = `${targetWs}::${area?.id ?? '__none__'}`;
         const pname = (prog.project ?? '').trim();
@@ -737,23 +739,50 @@ export default function ProgramsPage() {
         });
       }
     }
-    // 기존 프로젝트(데드라인) 미루기/기간 변경 — deadlineId로 찾아 날짜만 조정(내용 유지)
+    // 기존 프로젝트(데드라인)를 deadlineId(우선) 또는 프로젝트 이름으로 찾기
+    const normName = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
+    const findDeadline = (deadlineId?: string, projectName?: string) => {
+      for (const e of store.allWorkspacesEntries) {
+        for (const p of e.programs) {
+          for (const d of p.deadlines ?? []) {
+            if (deadlineId && d.id === deadlineId) return { e, p, d };
+            if (!deadlineId && projectName && normName(d.name) === normName(projectName)) return { e, p, d };
+          }
+        }
+      }
+      return null;
+    };
+    // 기존 프로젝트 미루기/기간 변경 — 날짜만 조정(내용 유지)
     let movedCount = 0;
     for (const plan of plans) {
       for (const mv of plan.moves ?? []) {
-        if (!mv?.deadlineId) continue;
-        const e = store.allWorkspacesEntries.find(en => en.programs.some(p => (p.deadlines ?? []).some(d => d.id === mv.deadlineId)));
-        if (!e) continue;
-        const prog = e.programs.find(p => (p.deadlines ?? []).some(d => d.id === mv.deadlineId));
-        if (!prog) continue;
+        const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
         const newDate = clampFuture(mv.date);
         const newStart = mv.startDate ? (clampFuture(mv.startDate) ?? mv.startDate) : undefined;
         if (!newDate && !newStart) continue;
-        store.updateProgramInWs(e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== mv.deadlineId ? d : { ...d, ...(newDate ? { date: newDate } : {}), ...(newStart ? { startDate: newStart } : {}) }) });
+        const prog = store.allWorkspacesEntries.find(en => en.workspace.id === hit.e.workspace.id)?.programs.find(p => p.id === hit.p.id) ?? hit.p;
+        store.updateProgramInWs(hit.e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== hit.d.id ? d : { ...d, ...(newDate ? { date: newDate } : {}), ...(newStart ? { startDate: newStart } : {}) }) });
         movedCount += 1;
       }
     }
-    if (movedCount) toast(`프로젝트 ${movedCount}개의 일정을 조정했어요.`, 'success');
+    // 기존 프로젝트/카테고리 종료(완료 처리) — 새 계획이 이전 유사 업무를 대체할 때
+    let doneCount = 0;
+    for (const plan of plans) {
+      for (const cp of plan.completes ?? []) {
+        const hit = findDeadline(cp.deadlineId, cp.projectName);
+        if (cp.todoId) {
+          // 특정 카테고리(todo)만 완료
+          const e = store.allWorkspacesEntries.find(en => en.programs.some(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => t.id === cp.todoId))));
+          const p = e?.programs.find(pr => (pr.deadlines ?? []).some(d => (d.todos ?? []).some(t => t.id === cp.todoId)));
+          if (e && p) { store.updateProgramInWs(e.workspace.id, { ...p, deadlines: (p.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => t.id === cp.todoId ? { ...t, done: true } : t) })) }); doneCount += 1; }
+        } else if (hit) {
+          const prog = store.allWorkspacesEntries.find(en => en.workspace.id === hit.e.workspace.id)?.programs.find(p => p.id === hit.p.id) ?? hit.p;
+          store.updateProgramInWs(hit.e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === hit.d.id ? { ...d, done: true, doneAt: new Date().toISOString() } : d) });
+          doneCount += 1;
+        }
+      }
+    }
+    if (movedCount || doneCount) toast(`${movedCount ? `프로젝트 ${movedCount}개 일정 조정` : ''}${movedCount && doneCount ? ' · ' : ''}${doneCount ? `기존 ${doneCount}개 종료` : ''}.`, 'success');
     // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록

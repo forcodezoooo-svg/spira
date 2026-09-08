@@ -107,10 +107,13 @@ export type QuarterPlan = {
     project?: string; // 소속 프로젝트(큰 목표) 이름 — 같은 이름끼리 하나의 프로젝트로 묶임
     projectType?: 'routine' | 'build';
     workAreaId?: string; // 소속 업무 영역 id (있으면 그 영역 컨테이너로 들어감)
+    workAreaName?: string; // 업무 영역 이름(ids가 틀려도 이름으로 매칭용)
     deadlines?: Array<{ name: string; date: string; startDate?: string; todos?: QuarterPlanTodo[] }>;
   }>;
-  // 기존 프로젝트(데드라인) 일정 조정(미루기/변경) — deadlineId는 컨텍스트의 실제 값
-  moves?: Array<{ wsId?: string; deadlineId: string; date?: string; startDate?: string }>;
+  // 기존 프로젝트(데드라인) 일정 조정(미루기/변경) — deadlineId(우선) 또는 projectName으로 매칭
+  moves?: Array<{ wsId?: string; deadlineId?: string; projectName?: string; date?: string; startDate?: string }>;
+  // 기존 프로젝트/카테고리 종료(완료 처리) — 새 계획이 이전 유사 업무를 대체할 때. deadlineId 또는 todoId
+  completes?: Array<{ wsId?: string; deadlineId?: string; todoId?: string; projectName?: string }>;
 };
 
 // AI가 미분류 목표를 업무 영역에 배정
