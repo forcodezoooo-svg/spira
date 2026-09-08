@@ -654,10 +654,12 @@ export default function ProgramsPage() {
     const buildDeadlines = (prog: NonNullable<QuarterPlan['programs']>[number], py: number, pq: number, projectId?: string) =>
       (prog.deadlines ?? []).map(d => {
         const dlDate = clampFuture(d.date) ?? getQuarterEndDate(py, pq); // 과거면 분기말(미래)로
+        const dlStart = clampFuture(d.startDate); // AI가 준 시작일(미래만)
         return {
           id: uid(),
           name: d.name,
           date: dlDate,
+          ...(dlStart ? { startDate: dlStart } : {}),
           ...(projectId ? { projectId } : {}),
           // 할일 날짜도 오늘 이후만 저장 — 과거/누락이면 자체 마감→데드라인 날짜로 보정
           todos: (d.todos ?? []).map(t => {
@@ -735,6 +737,23 @@ export default function ProgramsPage() {
         });
       }
     }
+    // 기존 프로젝트(데드라인) 미루기/기간 변경 — deadlineId로 찾아 날짜만 조정(내용 유지)
+    let movedCount = 0;
+    for (const plan of plans) {
+      for (const mv of plan.moves ?? []) {
+        if (!mv?.deadlineId) continue;
+        const e = store.allWorkspacesEntries.find(en => en.programs.some(p => (p.deadlines ?? []).some(d => d.id === mv.deadlineId)));
+        if (!e) continue;
+        const prog = e.programs.find(p => (p.deadlines ?? []).some(d => d.id === mv.deadlineId));
+        if (!prog) continue;
+        const newDate = clampFuture(mv.date);
+        const newStart = mv.startDate ? (clampFuture(mv.startDate) ?? mv.startDate) : undefined;
+        if (!newDate && !newStart) continue;
+        store.updateProgramInWs(e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== mv.deadlineId ? d : { ...d, ...(newDate ? { date: newDate } : {}), ...(newStart ? { startDate: newStart } : {}) }) });
+        movedCount += 1;
+      }
+    }
+    if (movedCount) toast(`프로젝트 ${movedCount}개의 일정을 조정했어요.`, 'success');
     // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
