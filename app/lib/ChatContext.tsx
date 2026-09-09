@@ -170,7 +170,14 @@ const stripJsonNote = (t: string) => t.split('\n').filter(l => !/JSON/i.test(l))
 // AI 응답에서 자동 반영 마커를 찾아 파싱하고, 버튼용 액션 메타로 변환한다.
 // (예전엔 즉시 자동 반영했지만, 이제는 버튼 클릭으로 반영해 '대화'와 '앱 반영(유료 기능)'을 분리)
 function extractAction(full: string): ChatAction & { display: string } | null {
-  const tryParse = (j: string) => { try { return JSON.parse(j); } catch { return undefined; } };
+  const tryParse = (j: string) => {
+    try { return JSON.parse(j); } catch { /* 아래 관대한 재시도 */ }
+    try {
+      // 코드펜스 제거 + 후행 쉼표(],} 앞) 제거 후 재시도 — LLM이 흔히 내는 형식 오류 보정
+      const cleaned = j.replace(/```(?:json)?/gi, '').replace(/,\s*([\]}])/g, '$1').trim();
+      return JSON.parse(cleaned);
+    } catch { return undefined; }
+  };
   const sliceObj = (raw: string) => { const s = raw.indexOf('{'), e = raw.lastIndexOf('}'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
   const sliceArr = (raw: string) => { const s = raw.indexOf('['), e = raw.lastIndexOf(']'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
   const before = (marker: string) => full.split(marker)[0].trimEnd();
@@ -489,6 +496,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // 자동 반영 마커가 있으면 즉시 반영하지 않고 '앱에 반영' 버튼(액션)으로 메시지에 붙인다.
       // 반영은 버튼 클릭 시점에 Pro/온보딩 게이트를 통과해야 실행됨 → '대화'와 '유료 기능'을 분리.
       const action = extractAction(full);
+      // 진단: AI 원본 응답 전체 + 마커/파싱 결과 (버튼이 왜 안 뜨는지 확인용)
+      try { console.log('[Spira AI raw]', { hasMarker: /%%%[A-Z_]+%%%/.test(full), actionFound: !!action, marker: action?.marker, full }); } catch { /* noop */ }
       if (action) {
         const { display, ...act } = action;
         const targetIdx = messagesRef.current.length - 1; // 마지막 assistant 메시지 인덱스

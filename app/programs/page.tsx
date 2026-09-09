@@ -5,7 +5,7 @@ import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
-import { Program, RoutineCycle } from '../lib/types';
+import { Program, RoutineCycle, ProgramDeadline } from '../lib/types';
 
 // 루틴 반복 주기 선택지 (Plan과 동일)
 const ROUTINE_CYCLES: { key: RoutineCycle; label: string }[] = [
@@ -694,6 +694,36 @@ export default function ProgramsPage() {
         if (toAdd.length && entry) store.updatePlanInWs(ws, { ...entry.plan, projects: [...existing, ...toAdd] });
       });
     }
+    // ── 업무영역 준비: workAreaId가 안 맞으면 workAreaName으로 찾고, 그래도 없으면 그 영역을 새로 만들어 확실히 분리 ──
+    const nrm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
+    const areaIdResolver = new Map<string, string>(); // `${ws}::${nrm(areaName)}` -> areaId
+    {
+      const AREA_PAL = ['#7C9EF6', '#6FCF97', '#F2994A', '#BB6BD9', '#EB5757', '#56CCF2', '#F2C94C', '#27AE60'];
+      const needByWs = new Map<string, Set<string>>();
+      for (const plan of plans) {
+        const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
+        for (const prog of plan.programs ?? []) {
+          const byId = prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined;
+          const nm = (prog.workAreaName ?? byId?.name ?? '').trim();
+          if (!nm) continue;
+          if (byId) { areaIdResolver.set(`${targetWs}::${nrm(nm)}`, byId.id); continue; }
+          if (!needByWs.has(targetWs)) needByWs.set(targetWs, new Set());
+          needByWs.get(targetWs)!.add(nm);
+        }
+      }
+      needByWs.forEach((names, ws) => {
+        const entry = store.allWorkspacesEntries.find(e => e.workspace.id === ws);
+        if (!entry) return;
+        const areas = [...(entry.plan.workAreas ?? [])];
+        let changed = false;
+        names.forEach(nm => {
+          const found = areas.find(a => nrm(a.name) === nrm(nm));
+          if (found) areaIdResolver.set(`${ws}::${nrm(nm)}`, found.id);
+          else { const id = uid(); areas.push({ id, name: nm, color: AREA_PAL[areas.length % AREA_PAL.length], goal: '' }); areaIdResolver.set(`${ws}::${nrm(nm)}`, id); changed = true; }
+        });
+        if (changed) store.updatePlanInWs(ws, { ...entry.plan, workAreas: areas });
+      });
+    }
     const buckets = new Map<string, Bucket>();
     for (const plan of plans) {
       const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
@@ -704,9 +734,11 @@ export default function ProgramsPage() {
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
       for (const prog of plan.programs ?? []) {
         if (!prog || !(prog.deadlines?.length)) continue;
-        const nrm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
-        const area = (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined)
-          ?? (prog.workAreaName ? areasForWs(targetWs).find(a => nrm(a.name) === nrm(prog.workAreaName)) : undefined); // 이름 폴백
+        // 영역 id 확정: id 직접매칭 → 이름 매칭/생성한 것(areaIdResolver) 순
+        const areaName = (prog.workAreaName ?? (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId)?.name : undefined) ?? '').trim();
+        const resolvedId = (prog.workAreaId && areasForWs(targetWs).some(a => a.id === prog.workAreaId)) ? prog.workAreaId
+          : (areaName ? areaIdResolver.get(`${targetWs}::${nrm(areaName)}`) : undefined);
+        const area = resolvedId ? areasForWs(targetWs).find(a => a.id === resolvedId) : undefined;
         touchedAreas.add(area?.name ?? NONE);
         const key = `${targetWs}::${area?.id ?? '__none__'}`;
         const pname = (prog.project ?? '').trim();
@@ -740,29 +772,66 @@ export default function ProgramsPage() {
       }
     }
     // 기존 프로젝트(데드라인)를 deadlineId(우선) 또는 프로젝트 이름으로 찾기
-    const normName = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
     const findDeadline = (deadlineId?: string, projectName?: string) => {
       for (const e of store.allWorkspacesEntries) {
         for (const p of e.programs) {
           for (const d of p.deadlines ?? []) {
             if (deadlineId && d.id === deadlineId) return { e, p, d };
-            if (!deadlineId && projectName && normName(d.name) === normName(projectName)) return { e, p, d };
+            if (!deadlineId && projectName && nrm(d.name) === nrm(projectName)) return { e, p, d };
           }
         }
       }
       return null;
     };
-    // 기존 프로젝트 미루기/기간 변경 — 날짜만 조정(내용 유지)
+    // 데드라인 하나를 delta(일)만큼 통째로 이동 — 하위 산출물·task·세부작업 날짜까지 함께 밀기(프로젝트만 움직이고 내용은 안 밀리던 문제 해결)
+    const shiftDl = (d: ProgramDeadline, delta: number): ProgramDeadline => ({
+      ...d,
+      date: d.date ? addDaysStr(d.date, delta) : d.date,
+      startDate: d.startDate ? addDaysStr(d.startDate, delta) : d.startDate,
+      todos: (d.todos ?? []).map(t => ({
+        ...t,
+        date: t.date ? addDaysStr(t.date, delta) : t.date,
+        deadline: t.deadline ? addDaysStr(t.deadline, delta) : t.deadline,
+        subtasks: (t.subtasks ?? []).map(s => ({
+          ...s,
+          date: s.date ? addDaysStr(s.date, delta) : s.date,
+          deadline: s.deadline ? addDaysStr(s.deadline, delta) : s.deadline,
+          units: (s.units ?? []).map(u => ({ ...u, date: u.date ? addDaysStr(u.date, delta) : u.date, deadline: u.deadline ? addDaysStr(u.deadline, delta) : u.deadline })),
+        })),
+      })),
+    });
+    // 데드라인 하나를 새 날짜로 이동(delta 계산해 통째로 밀기)
+    const moveOneDl = (wsIdT: string, progId: string, dlId: string, newDate?: string, newStart?: string) => {
+      const prog = store.allWorkspacesEntries.find(en => en.workspace.id === wsIdT)?.programs.find(p => p.id === progId);
+      if (!prog) return false;
+      const cur = (prog.deadlines ?? []).find(d => d.id === dlId); if (!cur) return false;
+      const base = cur.date || cur.startDate; // 기준일
+      const target = newDate || newStart;
+      const delta = base && target ? daysBetween(base, target) : 0;
+      store.updateProgramInWs(wsIdT, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? shiftDl(d, delta) : d) });
+      return true;
+    };
+    // 기존 프로젝트 미루기/기간 변경 — 프로젝트 통째로(내용 포함) 이동
     let movedCount = 0;
     for (const plan of plans) {
       for (const mv of plan.moves ?? []) {
-        const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
         const newDate = clampFuture(mv.date);
         const newStart = mv.startDate ? (clampFuture(mv.startDate) ?? mv.startDate) : undefined;
         if (!newDate && !newStart) continue;
-        const prog = store.allWorkspacesEntries.find(en => en.workspace.id === hit.e.workspace.id)?.programs.find(p => p.id === hit.p.id) ?? hit.p;
-        store.updateProgramInWs(hit.e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== hit.d.id ? d : { ...d, ...(newDate ? { date: newDate } : {}), ...(newStart ? { startDate: newStart } : {}) }) });
-        movedCount += 1;
+        // 대상이 특정되지 않고 wsId만 있으면 → 그 비즈니스의 '모든 프로젝트'를 같은 delta로 이동
+        if (!mv.deadlineId && !mv.projectName && mv.wsId) {
+          const e = store.allWorkspacesEntries.find(en => en.workspace.id === mv.wsId);
+          if (!e) continue;
+          const allDls = e.programs.flatMap(p => (p.deadlines ?? []).map(d => ({ progId: p.id, d })));
+          const dates = allDls.map(x => x.d.date || x.d.startDate).filter(Boolean) as string[];
+          const earliest = dates.length ? dates.sort()[0] : undefined;
+          const delta = earliest && (newDate || newStart) ? daysBetween(earliest, (newDate || newStart)!) : 0;
+          for (const p of e.programs) store.updateProgramInWs(e.workspace.id, { ...p, deadlines: (p.deadlines ?? []).map(d => shiftDl(d, delta)) });
+          movedCount += allDls.length;
+          continue;
+        }
+        const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
+        if (moveOneDl(hit.e.workspace.id, hit.p.id, hit.d.id, newDate, newStart)) movedCount += 1;
       }
     }
     // 기존 프로젝트/카테고리 종료(완료 처리) — 새 계획이 이전 유사 업무를 대체할 때

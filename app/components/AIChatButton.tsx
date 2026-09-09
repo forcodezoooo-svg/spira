@@ -59,6 +59,13 @@ export default function AIChatButton() {
     if (view === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, view]);
 
+  // 채팅을 '열 때' 즉시 맨 아래(가장 최근 메시지)로 — 위에서부터 뜨지 않게
+  useEffect(() => {
+    if (chatOpen && view === 'chat') {
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'auto' }));
+    }
+  }, [chatOpen, view]);
+
   // 티칭 프리필: 채팅 입력창에 안내 문구를 미리 채워두고 채팅을 연다
   useEffect(() => {
     const onPrefill = (e: Event) => {

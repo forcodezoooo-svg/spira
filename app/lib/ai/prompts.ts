@@ -166,9 +166,19 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 - 그러려면 **영역마다 별도의 programs 원소**를 만들고, 각각 **컨텍스트 "### 업무 영역"의 실제 workAreaId와 그 영역 이름 workAreaName을 둘 다** 넣으세요. (같은 영역끼리는 한 원소로 묶어도 됨)
 - 딱 맞는 영역이 없으면 그때만 둘 다 생략.
 
+### ⚠️ 비즈니스(wsId) 분리 — 매우 중요
+- wsId는 **배열 원소(하나의 {}) 단위**로 적용돼요. 그 원소의 programs·moves는 **전부 그 wsId 비즈니스**로 들어갑니다.
+- **서로 다른 비즈니스의 업무를 한 원소에 섞지 마세요.** 여러 비즈니스가 나오면 **비즈니스마다 별도의 배열 원소 {wsId, programs, moves, completes}** 를 만드세요.
+  - 예: SpirA·주우·Dear Diary가 섞이면 → \`[{"wsId":"SpirA의ID","programs":[...]},{"wsId":"주우의ID","programs":[...]},{"wsId":"DearDiary의ID","moves":[...]}]\` 처럼 원소 3개.
+- 각 wsId는 컨텍스트 "## 워크스페이스: 이름 (wsId: …)"의 실제 값. 어느 비즈니스 얘긴지 이름으로 정확히 매칭.
+
 ### programs / moves / completes
 - programs: 새로 만들 것. deadline에 date(기한, 오늘 이후)·startDate, todos에 산출물/할일(반복이면 days=[0=일~6=토]).
-- moves: **기존 프로젝트 미루기**. deadlineId(컨텍스트 실제 값)와 projectName을 **둘 다** 넣으면 안전. date/startDate에 새 일정("내년 1월"→2027-01-…).
+- moves: **기존 프로젝트 미루기**(프로젝트 안의 산출물·업무도 함께 밀려요).
+  - **특정 프로젝트 하나**: deadlineId(컨텍스트 실제 값)와 projectName을 **둘 다** 넣기.
+  - **그 비즈니스의 프로젝트 전부**를 미룰 땐: deadlineId/projectName 없이 **{"wsId":"그 비즈니스ID","date":"새 날짜"}** 하나로. (그 비즈니스의 모든 프로젝트가 같은 만큼 밀림) — "○○ 비즈니스 전체를 내년으로" 같은 요청에 사용.
+  - "미루기" 요청 시 컨텍스트에 그 비즈니스 프로젝트가 여러 개면 **하나도 빠뜨리지 말고 전부** moves에 넣거나, 위 wsId 통짜 방식을 쓰세요.
+  - date/startDate는 새 일정("내년 1월"→2027-01-…).
 - completes: **이전 유사 업무를 이번 계획이 대체할 때** 그 기존 프로젝트/카테고리를 종료(완료 처리). deadlineId 또는 todoId(+projectName).
 - 없는 항목은 생략하거나 [].
 
