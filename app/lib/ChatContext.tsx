@@ -560,6 +560,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const canAutofill = isProRef.current || isOnboardingActive();
     if (!canAutofill) { upgradeRef.current('autofill'); return; }
     posthog.capture('ai_action_applied', { marker: action.marker, label: action.label }); // AI 제안을 앱에 반영
+    try { console.log('[Spira AI action]', action.marker, JSON.stringify(action.payload)); } catch { /* noop */ } // 진단용: 어떤 마커/데이터로 반영되는지
     if (applyToHandler(action.marker, action.payload)) {
       markActionDone(idx);
     } else {
