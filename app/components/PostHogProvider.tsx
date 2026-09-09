@@ -18,12 +18,21 @@ function PostHogPageView() {
   return null;
 }
 
-// 로그인 사용자를 PostHog person과 연결(로그아웃 시 분리)
+// 내부(운영자·테스트) 계정 — PostHog 수집 제외. 이메일 소문자로 추가.
+const INTERNAL_EMAILS = ['joonyoung422@gmail.com'];
+
+// 로그인 사용자를 PostHog person과 연결(로그아웃 시 분리). 내부 계정은 수집 자체를 끔.
 function PostHogIdentify() {
   const { user } = useAuth();
   const prevId = useRef<string | null>(null);
   useEffect(() => {
     if (user) {
+      // 내 계정(내부)은 이벤트를 아예 안 보냄 → PostHog에 안 찍힘
+      if (user.email && INTERNAL_EMAILS.includes(user.email.toLowerCase())) {
+        posthog.opt_out_capturing();
+        return;
+      }
+      posthog.opt_in_capturing(); // 일반 사용자는 정상 수집(내부 브라우저에서 로그인해도 복구)
       if (prevId.current && prevId.current !== user.id) {
         posthog.reset(); // 직접 계정을 전환한 경우 이전 사용자와 연결되지 않게 초기화
       }
