@@ -727,8 +727,11 @@ export default function ProgramsPage() {
     const buckets = new Map<string, Bucket>();
     for (const plan of plans) {
       const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
-      let py = plan.year ?? year;
-      let pq = plan.quarter ?? quarter;
+      // AI가 year/quarter를 안 주므로, 데드라인 날짜에서 유도(안 그러면 현재 분기 컨테이너에 담겨 로드맵에서 안 보임)
+      const planDates = (plan.programs ?? []).flatMap(pr => (pr.deadlines ?? []).map(d => d.date)).filter((d): d is string => !!d).sort();
+      const firstDate = planDates[0];
+      let py = plan.year ?? (firstDate ? Number(firstDate.slice(0, 4)) : year);
+      let pq = plan.quarter ?? (firstDate ? Math.floor((Number(firstDate.slice(5, 7)) - 1) / 3) + 1 : quarter);
       // 과거 분기로 생성됐으면 현재 분기로 보정 (2023 등 방지)
       if (py < nowY || (py === nowY && pq < nowQ)) { py = nowY; pq = nowQ; }
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
