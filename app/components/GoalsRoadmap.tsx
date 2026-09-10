@@ -23,7 +23,7 @@ type SelItem = { key: string; kind: Lvl; name: string; wsId: string; programId: 
 type BulkPatch = { name?: string; deadline?: string; durationMin?: number };
 
 export interface GoalsRoadmapHandle { focus: (level: Lvl, key: string, start?: string, end?: string, name?: string) => void; startListDrag: (payload: Payload, e: React.DragEvent) => void; }
-interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string; status?: string } | null; cardClassName?: string; }
+interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string; status?: string } | null; cardClassName?: string; wsFilter?: { list: { id: string; name: string }[]; current: string | null; set: (id: string | null) => void }; }
 
 const LABEL_W = 240;
 const ROW_H = 34;
@@ -46,7 +46,7 @@ const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> 
 const SPAN_CAP = 9000;
 
 const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap(
-  { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0' }, ref,
+  { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0', wsFilter }, ref,
 ) {
   const store = useStore();
   const { toast } = useToast();
@@ -412,8 +412,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   void progPeriod; // 사업목표 행 숨김으로 미사용
   // 로드맵 정렬: 디데이순(가까운 마감 먼저) / 비즈니스별
   const progNearestDue = (p: CalProgram) => { const ds = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl) && dl.date).map(dl => dl.date); return ds.length ? [...ds].sort()[0] : '9999-99-99'; };
-  // 비즈니스별 정렬 앵커: 각 비즈니스에서 '진행중이거나 가장 먼저 시작하는 다가오는 프로젝트'의 날짜.
-  // 진행중(오늘이 기간 안)은 오늘로 취급해 최상단, 그 외는 시작일이 이른 순. 끝난 프로젝트는 제외.
+  // 비즈니스별 정렬 앵커: 각 비즈니스에서 '아직 안 끝난(진행중+다가오는) 프로젝트'의 가장 이른 시작일.
+  // 먼저 시작해 진행중인 프로젝트가 있는 비즈니스가 위로. 이미 끝난 프로젝트는 제외.
   const bizAnchor = new Map<string, string>();
   for (const p of programs) {
     for (const dl of (p.deadlines ?? [])) {
@@ -421,7 +421,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       const per = dlPeriod(p, dl);
       const start = per.start, end = per.end ?? dl.date;
       if (end && end < todayStr) continue; // 이미 끝난 프로젝트는 정렬 기준에서 제외
-      const od = start ? (start >= todayStr ? start : todayStr) : (end ?? null); // 진행중이면 오늘로 취급(상단)
+      const od = start ?? end ?? null; // 실제 시작일(이르면 위) — 진행중은 시작일이 과거라 자연히 상단
       if (!od) continue;
       const cur = bizAnchor.get(p.wsId);
       if (!cur || od < cur) bizAnchor.set(p.wsId, od);
@@ -1170,6 +1170,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </button>
             </div>
           </div>
+          {wsFilter && wsFilter.list.length > 1 && (
+            <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-0.5">
+              <span className="text-[11px] font-semibold flex-shrink-0 mr-0.5" style={{ color: '#9AA39D' }}>비즈니스</span>
+              <button onClick={() => wsFilter.set(null)} className="text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0 transition-colors" style={wsFilter.current === null ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F1F1EB', color: '#8D9A8D' }}>전체</button>
+              {wsFilter.list.map(b => (
+                <button key={b.id} onClick={() => wsFilter.set(b.id)} className="flex items-center gap-1.5 text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0 transition-colors" style={wsFilter.current === b.id ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F1F1EB', color: '#8D9A8D' }} title={b.name}>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(b.id) }} />{b.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-3">
             {/* 줌 인/아웃 — 날짜 간격 조절 (연/월/주 구분 없이 연속) */}
             <div className="flex items-center gap-1 rounded-full p-1" style={{ backgroundColor: '#F1F1EB' }}>

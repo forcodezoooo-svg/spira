@@ -1847,7 +1847,7 @@ export default function ProgramsPage() {
             </div>
           </div>
         ) : (
-          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" />
+          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" wsFilter={{ list: businesses.map(b => ({ id: b.id, name: b.name })), current: filterWsId, set: setFilterWsId }} />
         )}
       </div>
 
