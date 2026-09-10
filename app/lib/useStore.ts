@@ -15,6 +15,28 @@ const getClientData = () => globalData;
 const getServerData = () => empty;
 // 외부(SyncProvider)에서 서버/초기 데이터로 교체할 때 사용 — 모든 화면을 즉시 갱신
 export function setGlobalStoreData(d: AppData) { globalData = d; hydrated = true; emitStore(); }
+
+// ── 되돌리기(직전 반영 스냅샷) ────────────────────────────────────────────────
+// AI 반영처럼 큰 변경 직전에 현재 전체 데이터를 하나 저장 → 잘못되면 한 번 복원.
+const UNDO_KEY = 'spira_undo_snapshot';
+let undoAvailable = false;
+export function saveUndoSnapshot() {
+  try { localStorage.setItem(UNDO_KEY, JSON.stringify(globalData)); undoAvailable = true; emitStore(); } catch { /* localStorage 불가 시 무시 */ }
+}
+export function restoreUndoSnapshot(): boolean {
+  try {
+    const raw = localStorage.getItem(UNDO_KEY);
+    if (!raw) return false;
+    globalData = { ...(JSON.parse(raw) as AppData), updatedAt: Date.now() };
+    save(globalData);
+    localStorage.removeItem(UNDO_KEY);
+    undoAvailable = false;
+    emitStore();
+    return true;
+  } catch { return false; }
+}
+export function hasUndoSnapshot() { try { return undoAvailable || !!localStorage.getItem(UNDO_KEY); } catch { return undoAvailable; } }
+export function clearUndoSnapshot() { try { localStorage.removeItem(UNDO_KEY); } catch { /* */ } undoAvailable = false; emitStore(); }
 import { workspaceColor } from './goalTasks';
 import { useToast } from './ToastContext';
 import { ERR } from './copy';

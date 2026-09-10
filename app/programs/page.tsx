@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '../lib/useStore';
+import { useStore, saveUndoSnapshot, restoreUndoSnapshot, hasUndoSnapshot } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -640,6 +640,7 @@ export default function ProgramsPage() {
 
   // ── AI 분기 계획 적용 (여러 분기 동시 지원) ──────────────────────────────────
   applyQuarterPlanRef.current = (plans: QuarterPlan[]) => {
+    saveUndoSnapshot(); // 반영 직전 상태 저장 → 잘못되면 '되돌리기'로 복원
     try { console.log('[Spira apply] start', { myBusinesses: businesses.map(b => ({ id: b.id, name: b.name })), currentWs: wsId, plans }); } catch { /* noop */ }
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
@@ -1759,6 +1760,14 @@ export default function ProgramsPage() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] min-h-0">
+      {hasUndoSnapshot() && (
+        <button
+          onClick={() => { if (restoreUndoSnapshot()) { setFilterWsId(null); toast('직전 반영을 되돌렸어요. ↩︎', 'success'); } else { toast('되돌릴 내용이 없어요.', 'info'); } }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-4 py-2.5 rounded-full text-[13px] font-bold text-white transition-transform hover:scale-105"
+          style={{ backgroundColor: '#16211E', boxShadow: 'var(--spira-shadow-lg)' }}
+          title="AI 반영 직전 상태로 한 번 되돌립니다"
+        >↩︎ 직전 반영 되돌리기</button>
+      )}
       <div className="flex-1 min-h-0">
         {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
           /* 비어 있을 때: Plan 사업목표 가져오기 추천 */
