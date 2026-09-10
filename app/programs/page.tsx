@@ -860,6 +860,7 @@ export default function ProgramsPage() {
         const wsIdT = hit.e.workspace.id;
         const base = hit.d.date || hit.d.startDate; // 기준일 = 매칭된 데드라인 날짜
         const delta = base && target ? daysBetween(base, target) : 0;
+        try { console.log('[Spira move]', { deadlineName: hit.d.name, deadlineDate: hit.d.date, deadlineStart: hit.d.startDate, projectId: hit.d.projectId ?? '(없음)', target, delta, todosBefore: (hit.d.todos ?? []).map(t => ({ name: t.name, date: t.date, deadline: t.deadline, days: t.days })) }); } catch { /* noop */ }
         if (hit.d.projectId) {
           // 프로젝트 통째로: 같은 projectId의 모든 영역 데드라인을 동일 delta로 이동
           const key = `${wsIdT}::${hit.d.projectId}`;
