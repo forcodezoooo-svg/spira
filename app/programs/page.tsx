@@ -643,6 +643,7 @@ export default function ProgramsPage() {
     try { console.log('[Spira apply] start', { myBusinesses: businesses.map(b => ({ id: b.id, name: b.name })), currentWs: wsId, plans }); } catch { /* noop */ }
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
+    let focusWs: string | null = null; // 반영 후 이 비즈니스로 화면 전환(안 하면 다른 비즈니스에 생겨 안 보임)
     let order = nextOrder();
     const touchedAreas = new Set<string>(); // 생성된 영역만 펼치기 위한 키(영역명 또는 미분류)
     const touchedProjectKeys = new Set<string>(); // 생성된 프로젝트 박스(wsId::projectId)도 펼쳐서 바로 보이게
@@ -757,6 +758,7 @@ export default function ProgramsPage() {
     }
     // 각 (사업 × 영역) 컨테이너에 반영 — 기존 컨테이너가 있으면 데드라인만 추가, 없으면 하나만 생성
     for (const b of buckets.values()) {
+      if (!focusWs) { focusWs = b.targetWs; firstYear = b.py; firstQuarter = b.pq; } // 첫 생성물 위치로 화면 이동
       const entry = store.allWorkspacesEntries.find(e => e.workspace.id === b.targetWs);
       const existing = entry?.programs.find(p => (p.workAreaId ?? '__none__') === (b.areaId ?? '__none__'));
       if (existing) {
@@ -839,7 +841,11 @@ export default function ProgramsPage() {
           continue;
         }
         const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
-        if (moveOneDl(hit.e.workspace.id, hit.p.id, hit.d.id, newDate, newStart)) movedCount += 1;
+        if (moveOneDl(hit.e.workspace.id, hit.p.id, hit.d.id, newDate, newStart)) {
+          movedCount += 1;
+          // 생성물이 없으면(이동만 있는 경우) 이동된 프로젝트 위치로 화면 이동
+          if (!focusWs) { const t = newDate || newStart; focusWs = hit.e.workspace.id; if (t) { firstYear = Number(t.slice(0, 4)); firstQuarter = Math.floor((Number(t.slice(5, 7)) - 1) / 3) + 1; } }
+        }
       }
     }
     // 기존 프로젝트/카테고리 종료(완료 처리) — 새 계획이 이전 유사 업무를 대체할 때
@@ -867,8 +873,15 @@ export default function ProgramsPage() {
         movedCount, doneCount,
       });
     } catch { /* noop */ }
-    if (movedCount || doneCount) toast(`${movedCount ? `프로젝트 ${movedCount}개 일정 조정` : ''}${movedCount && doneCount ? ' · ' : ''}${doneCount ? `기존 ${doneCount}개 종료` : ''}.`, 'success');
-    // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
+    // 반영 결과를 항상 토스트로 안내(생성 포함) — "반영 안 됨"으로 오해하지 않게
+    const createdCount = [...buckets.values()].reduce((s, b) => s + b.deadlines.length, 0);
+    const parts: string[] = [];
+    if (createdCount) parts.push(`새 업무 ${createdCount}개`);
+    if (movedCount) parts.push(`프로젝트 ${movedCount}개 이동`);
+    if (doneCount) parts.push(`기존 ${doneCount}개 종료`);
+    if (parts.length) toast(parts.join(' · ') + ' 반영했어요. 🌿', 'success');
+    // 반영된 비즈니스로 화면 전환(필터가 다른 비즈니스면 안 보이므로) + 해당 분기로 이동
+    if (focusWs) { setFilterWsId(focusWs); store.switchWorkspace(focusWs); }
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
     if (touchedAreas.size || touchedProjectKeys.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas, ...touchedProjectKeys]));
