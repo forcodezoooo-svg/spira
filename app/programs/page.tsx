@@ -880,8 +880,8 @@ export default function ProgramsPage() {
     if (movedCount) parts.push(`프로젝트 ${movedCount}개 이동`);
     if (doneCount) parts.push(`기존 ${doneCount}개 종료`);
     if (parts.length) toast(parts.join(' · ') + ' 반영했어요. 🌿', 'success');
-    // 반영된 비즈니스로 화면 전환(필터가 다른 비즈니스면 안 보이므로) + 해당 분기로 이동
-    if (focusWs) { setFilterWsId(focusWs); store.switchWorkspace(focusWs); }
+    // 반영 결과가 다른 비즈니스에 생겼어도 보이도록 '전체 비즈니스 표시'로 전환(특정 비즈니스로 좁히면 나머지가 숨겨져 '사라진 것처럼' 보임) + 해당 분기로 이동
+    if (focusWs) setFilterWsId(null);
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
     if (touchedAreas.size || touchedProjectKeys.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas, ...touchedProjectKeys]));
