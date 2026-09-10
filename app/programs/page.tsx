@@ -738,7 +738,8 @@ export default function ProgramsPage() {
         const areaName = (prog.workAreaName ?? (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId)?.name : undefined) ?? '').trim();
         const resolvedId = (prog.workAreaId && areasForWs(targetWs).some(a => a.id === prog.workAreaId)) ? prog.workAreaId
           : (areaName ? areaIdResolver.get(`${targetWs}::${nrm(areaName)}`) : undefined);
-        const area = resolvedId ? areasForWs(targetWs).find(a => a.id === resolvedId) : undefined;
+        // resolver에서 만든/찾은 id를 그대로 사용 — areasForWs 재읽기는 렌더 스냅샷이라 방금 만든 영역을 못 찾음
+        const area = resolvedId ? { id: resolvedId, name: areaName } : undefined;
         touchedAreas.add(area?.name ?? NONE);
         const key = `${targetWs}::${area?.id ?? '__none__'}`;
         const pname = (prog.project ?? '').trim();
@@ -771,17 +772,20 @@ export default function ProgramsPage() {
         });
       }
     }
-    // 기존 프로젝트(데드라인)를 deadlineId(우선) 또는 프로젝트 이름으로 찾기
+    // 기존 프로젝트(데드라인)를 deadlineId → 데드라인 이름(정확/부분) → 소속 프로젝트 이름 순으로 찾기
     const findDeadline = (deadlineId?: string, projectName?: string) => {
-      for (const e of store.allWorkspacesEntries) {
-        for (const p of e.programs) {
-          for (const d of p.deadlines ?? []) {
-            if (deadlineId && d.id === deadlineId) return { e, p, d };
-            if (!deadlineId && projectName && nrm(d.name) === nrm(projectName)) return { e, p, d };
-          }
-        }
-      }
-      return null;
+      const all: { e: typeof store.allWorkspacesEntries[number]; p: (typeof store.allWorkspacesEntries[number])['programs'][number]; d: ProgramDeadline }[] = [];
+      for (const e of store.allWorkspacesEntries) for (const p of e.programs) for (const d of p.deadlines ?? []) all.push({ e, p, d });
+      // 1) deadlineId 정확
+      if (deadlineId) { const hit = all.find(x => x.d.id === deadlineId); if (hit) return hit; }
+      const pn = nrm(projectName);
+      if (!pn) return null;
+      // 2) 데드라인 이름 정확 → 3) 부분 포함
+      return all.find(x => nrm(x.d.name) === pn)
+        ?? all.find(x => nrm(x.d.name).includes(pn) || pn.includes(nrm(x.d.name)))
+        // 4) 소속 프로젝트(plan.projects) 이름으로
+        ?? all.find(x => { const proj = x.d.projectId ? (x.e.plan.projects ?? []).find(pr => pr.id === x.d.projectId) : undefined; return proj ? (nrm(proj.name) === pn || nrm(proj.name).includes(pn) || pn.includes(nrm(proj.name))) : false; })
+        ?? null;
     };
     // 데드라인 하나를 delta(일)만큼 통째로 이동 — 하위 산출물·task·세부작업 날짜까지 함께 밀기(프로젝트만 움직이고 내용은 안 밀리던 문제 해결)
     const shiftDl = (d: ProgramDeadline, delta: number): ProgramDeadline => ({
