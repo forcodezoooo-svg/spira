@@ -410,11 +410,32 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const progPeriod = (p: CalProgram) => { const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl)); const ds = dls.flatMap(dl => [dl.startDate, dl.date, ...dl.todos.flatMap(t => [t.date, t.deadline, ...(t.subtasks ?? []).flatMap(s => [s.date, s.deadline, ...(s.units ?? []).flatMap(u => [u.date, u.deadline])])])]).filter((x): x is string => !!x); if (!ds.length) return {}; const s = [...ds].sort(); return { start: s[0], end: s[s.length - 1] }; };
   const dlPeriod = (p: CalProgram, dl: Deadline) => { const todos = dl.todos ?? []; if (!dl.date) { const ts = todos.flatMap(t => [t.date, t.deadline]).filter((x): x is string => !!x); return ts.length ? { start: ts.sort()[0], end: ts.sort().slice(-1)[0] } : {}; } const ts = todos.map(t => t.date).filter((x): x is string => !!x); let start = dl.startDate || (ts.length ? ts.sort()[0] : (p.startDate || dl.date)); if (start > dl.date) start = dl.date; return { start, end: dl.date }; };
   void progPeriod; // 사업목표 행 숨김으로 미사용
-  // 로드맵 정렬: 디데이순(가까운 마감 먼저) / 비즈니스별(같은 사업끼리)
+  // 로드맵 정렬: 디데이순(가까운 마감 먼저) / 비즈니스별
   const progNearestDue = (p: CalProgram) => { const ds = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl) && dl.date).map(dl => dl.date); return ds.length ? [...ds].sort()[0] : '9999-99-99'; };
+  // 비즈니스별 정렬 앵커: 각 비즈니스에서 '진행중이거나 가장 먼저 시작하는 다가오는 프로젝트'의 날짜.
+  // 진행중(오늘이 기간 안)은 오늘로 취급해 최상단, 그 외는 시작일이 이른 순. 끝난 프로젝트는 제외.
+  const bizAnchor = new Map<string, string>();
+  for (const p of programs) {
+    for (const dl of (p.deadlines ?? [])) {
+      if (!dlVisible(p.wsId, dl)) continue;
+      const per = dlPeriod(p, dl);
+      const start = per.start, end = per.end ?? dl.date;
+      if (end && end < todayStr) continue; // 이미 끝난 프로젝트는 정렬 기준에서 제외
+      const od = start ? (start >= todayStr ? start : todayStr) : (end ?? null); // 진행중이면 오늘로 취급(상단)
+      if (!od) continue;
+      const cur = bizAnchor.get(p.wsId);
+      if (!cur || od < cur) bizAnchor.set(p.wsId, od);
+    }
+  }
+  const anchorOf = (wsId: string) => bizAnchor.get(wsId) ?? '9999-99-99'; // 관련 프로젝트 없는 비즈니스는 맨 아래
   const roadmapPrograms = sortMode === 'dday'
     ? [...programs].sort((a, b) => progNearestDue(a).localeCompare(progNearestDue(b)))
-    : [...programs].sort((a, b) => (a.wsName ?? a.wsId).localeCompare(b.wsName ?? b.wsId));
+    : [...programs].sort((a, b) => {
+        const aa = anchorOf(a.wsId), ba = anchorOf(b.wsId);
+        if (aa !== ba) return aa.localeCompare(ba);                 // 비즈니스: 임박한 프로젝트 이른 순
+        if (a.wsId !== b.wsId) return (a.wsName ?? a.wsId).localeCompare(b.wsName ?? b.wsId); // 앵커 같으면 같은 사업끼리 묶기
+        return progNearestDue(a).localeCompare(progNearestDue(b));  // 한 사업 안에서는 임박한 마감 먼저
+      });
   const rows: Row[] = [];
   if (sortMode === 'dday') {
     // 시작일순: 프로젝트 구분 없이 '업무영역별 산출물'을 시작일 빠른 순으로 평면 나열.
