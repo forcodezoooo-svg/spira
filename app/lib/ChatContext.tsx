@@ -167,6 +167,9 @@ const ChatContext = createContext<ChatContextType | null>(null);
 // 'JSON으로 반영하겠다' 같은 안내 문구 제거(유저는 JSON을 볼 필요 없음). 마커/JSON도 함께 정리.
 const stripJsonNote = (t: string) => t.split('\n').filter(l => !/JSON/i.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
+// 짧은 재확인/재요청("다시해줘", "응", "반영해줘" 등) 판별 — AI가 마커를 빠뜨려도 직전 계획 버튼을 다시 띄우기 위함
+const isReconfirm = (t: string) => /^(응+|넵?|네+|어+|그래+|좋아요?|조아|ㅇㅇ|ㅇㅋ|오케이|오키|ok|okay|맞아요?|그렇게\s*해줘?|그대로(\s*해줘?)?|그거(로)?\s*해줘?|반영(\s*해)?\s*줘?|적용(\s*해)?\s*줘?|해줘|다시(\s*(해줘?|해줄래|한번))?|한\s*번?\s*더|again|redo)\s*[.!~^ㅎㅋ]*$/i.test(t.trim());
+
 // AI 응답에서 자동 반영 마커를 찾아 파싱하고, 버튼용 액션 메타로 변환한다.
 // (예전엔 즉시 자동 반영했지만, 이제는 버튼 클릭으로 반영해 '대화'와 '앱 반영(유료 기능)'을 분리)
 function extractAction(full: string): ChatAction & { display: string } | null {
@@ -319,6 +322,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const flushPendingRef = useRef<((marker: string) => void) | null>(null);
   // autoApply용: 액션을 즉시 반영하는 함수(아래에서 주입)
   const runActionRef = useRef<((idx: number, action: ChatAction) => void) | null>(null);
+  // 마지막으로 버튼이 떴던 액션 — "다시해줘/응" 같은 재확인 때 AI가 마커를 빠뜨려도 버튼을 다시 붙이기 위함
+  const lastActionRef = useRef<ChatAction | null>(null);
 
   const registerGoalsHandler = useCallback((handler: (ops: GoalsOperation[]) => void) => {
     goalsHandlerRef.current = handler;
@@ -419,6 +424,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     currentIdRef.current = null;
     try { localStorage.removeItem(CURRENT_KEY); localStorage.removeItem(CURRENT_ID_KEY); } catch { /* empty */ }
     reviseHandlerRef.current = null; reviseTargetRef.current = null; setReviseTargetLabel(null); // 항목 다듬기 대상 해제
+    lastActionRef.current = null; // 새 채팅에선 재확인 대상 초기화
   }, [archiveCurrent]);
 
   const loadSession = useCallback((session: ChatSession) => {
@@ -512,6 +518,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       try { console.log('[Spira AI raw]', { hasMarker: /%%%[A-Z_]+%%%/.test(full), actionFound: !!action, marker: action?.marker, full }); } catch { /* noop */ }
       if (action) {
         const { display, ...act } = action;
+        lastActionRef.current = act; // 재확인 대비 기억
         const targetIdx = messagesRef.current.length - 1; // 마지막 assistant 메시지 인덱스
         setMessages(prev => {
           const updated = [...prev];
@@ -520,6 +527,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
         // 시작 칩 등에서 autoApply면 버튼 없이 즉시 반영 (게이트는 그대로 — 무료는 유료 안내)
         if (opts?.autoApply) runActionRef.current?.(targetIdx, act);
+      } else if (isReconfirm(text) && lastActionRef.current) {
+        // AI가 마커를 빠뜨렸지만 "다시해줘/응/반영해줘" 류 재확인 → 직전 계획 버튼을 다시 붙임(모델 비의존 안전장치)
+        const act = lastActionRef.current;
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          updated[updated.length - 1] = { role: 'assistant', content: last?.content?.trim() ? last.content : '직전에 제안한 계획을 반영할 준비가 됐어요. 아래 버튼을 눌러 적용하세요. 🌿', action: act };
+          return updated;
+        });
       } else if (opts?.intro) {
         setMessages(prev => {
           const updated = [...prev];
