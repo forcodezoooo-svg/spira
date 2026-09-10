@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, saveUndoSnapshot, restoreUndoSnapshot, hasUndoSnapshot } from '../lib/useStore';
+import { useStore, saveUndoSnapshot, restoreUndoSnapshot, hasUndoSnapshot, clearUndoSnapshot } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -780,17 +780,17 @@ export default function ProgramsPage() {
       }
     }
     // 기존 프로젝트(데드라인)를 deadlineId → 데드라인 이름(정확/부분) → 소속 프로젝트 이름 순으로 찾기
-    const findDeadline = (deadlineId?: string, projectName?: string) => {
-      const all: { e: typeof store.allWorkspacesEntries[number]; p: (typeof store.allWorkspacesEntries[number])['programs'][number]; d: ProgramDeadline }[] = [];
-      for (const e of store.allWorkspacesEntries) for (const p of e.programs) for (const d of p.deadlines ?? []) all.push({ e, p, d });
-      // 1) deadlineId 정확
-      if (deadlineId) { const hit = all.find(x => x.d.id === deadlineId); if (hit) return hit; }
+    const findDeadline = (deadlineId?: string, projectName?: string, scopeWsId?: string) => {
+      // 1) deadlineId는 전체에서 정확 매칭(가장 확실) — 이름 매칭보다 우선
+      if (deadlineId) { for (const e of store.allWorkspacesEntries) for (const p of e.programs) { const d = (p.deadlines ?? []).find(x => x.id === deadlineId); if (d) return { e, p, d }; } }
       const pn = nrm(projectName);
       if (!pn) return null;
-      // 2) 데드라인 이름 정확 → 3) 부분 포함
+      // 이름 매칭은 지정된 비즈니스(scopeWsId)로 범위를 좁혀 다른 비즈니스의 비슷한 이름과 섞이지 않게
+      const all: { e: typeof store.allWorkspacesEntries[number]; p: (typeof store.allWorkspacesEntries[number])['programs'][number]; d: ProgramDeadline }[] = [];
+      for (const e of store.allWorkspacesEntries) { if (scopeWsId && e.workspace.id !== scopeWsId) continue; for (const p of e.programs) for (const d of p.deadlines ?? []) all.push({ e, p, d }); }
+      // 2) 데드라인 이름 정확 → 3) 부분 포함 → 4) 소속 프로젝트 이름
       return all.find(x => nrm(x.d.name) === pn)
         ?? all.find(x => nrm(x.d.name).includes(pn) || pn.includes(nrm(x.d.name)))
-        // 4) 소속 프로젝트(plan.projects) 이름으로
         ?? all.find(x => { const proj = x.d.projectId ? (x.e.plan.projects ?? []).find(pr => pr.id === x.d.projectId) : undefined; return proj ? (nrm(proj.name) === pn || nrm(proj.name).includes(pn) || pn.includes(nrm(proj.name))) : false; })
         ?? null;
     };
@@ -878,7 +878,7 @@ export default function ProgramsPage() {
           setFocusFrom(e.workspace.id, target);
           continue;
         }
-        const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
+        const hit = findDeadline(mv.deadlineId, mv.projectName, mv.wsId); if (!hit) continue;
         const wsIdT = hit.e.workspace.id;
         try { console.log('[Spira move]', { deadlineName: hit.d.name, deadlineDate: hit.d.date, deadlineStart: hit.d.startDate, projectId: hit.d.projectId ?? '(없음)', newStart, newDate, todosBefore: (hit.d.todos ?? []).map(t => ({ name: t.name, date: t.date, deadline: t.deadline, days: t.days })) }); } catch { /* noop */ }
         if (hit.d.projectId) {
@@ -898,7 +898,7 @@ export default function ProgramsPage() {
     let doneCount = 0;
     for (const plan of plans) {
       for (const cp of plan.completes ?? []) {
-        const hit = findDeadline(cp.deadlineId, cp.projectName);
+        const hit = findDeadline(cp.deadlineId, cp.projectName, cp.wsId);
         if (cp.todoId) {
           // 특정 카테고리(todo)만 완료
           const e = store.allWorkspacesEntries.find(en => en.programs.some(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => t.id === cp.todoId))));
@@ -915,7 +915,7 @@ export default function ProgramsPage() {
       const moveReqs = plans.flatMap(p => p.moves ?? []);
       console.log('[Spira apply] done', {
         createdBuckets: [...buckets.values()].map(b => ({ ws: b.targetWs, area: b.areaName, areaId: b.areaId, deadlines: b.deadlines.length })),
-        moveResults: moveReqs.map(mv => ({ deadlineId: mv.deadlineId, projectName: mv.projectName, wsId: mv.wsId, matched: !!(mv.deadlineId || mv.projectName ? findDeadline(mv.deadlineId, mv.projectName) : (mv.wsId ? 'wholeBusiness' : false)) })),
+        moveResults: moveReqs.map(mv => ({ deadlineId: mv.deadlineId, projectName: mv.projectName, wsId: mv.wsId, matched: !!(mv.deadlineId || mv.projectName ? findDeadline(mv.deadlineId, mv.projectName, mv.wsId) : (mv.wsId ? 'wholeBusiness' : false)) })),
         movedCount, doneCount,
       });
     } catch { /* noop */ }
@@ -1761,12 +1761,20 @@ export default function ProgramsPage() {
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] min-h-0">
       {hasUndoSnapshot() && (
-        <button
-          onClick={() => { if (restoreUndoSnapshot()) { setFilterWsId(null); toast('직전 반영을 되돌렸어요. ↩︎', 'success'); } else { toast('되돌릴 내용이 없어요.', 'info'); } }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 px-4 py-2.5 rounded-full text-[13px] font-bold text-white transition-transform hover:scale-105"
-          style={{ backgroundColor: '#16211E', boxShadow: 'var(--spira-shadow-lg)' }}
-          title="AI 반영 직전 상태로 한 번 되돌립니다"
-        >↩︎ 직전 반영 되돌리기</button>
+        <div className="fixed top-[72px] right-6 z-50 flex items-center gap-1.5 rounded-full p-1 pl-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+          <button
+            onClick={() => { if (restoreUndoSnapshot()) { setFilterWsId(null); toast('직전 반영을 되돌렸어요. ↩︎', 'success'); } else { toast('되돌릴 내용이 없어요.', 'info'); } }}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold text-white transition-transform hover:scale-105"
+            style={{ backgroundColor: '#16211E' }}
+            title="AI 반영 직전 상태로 한 번 되돌립니다"
+          >↩︎ 직전 반영 되돌리기</button>
+          <button
+            onClick={() => { clearUndoSnapshot(); toast('되돌리기를 닫았어요.', 'info'); }}
+            className="px-3 py-2 rounded-full text-[13px] font-semibold transition-colors hover:bg-black/5"
+            style={{ color: '#5B6560' }}
+            title="되돌리기 버튼 닫기(현재 반영 유지)"
+          >취소</button>
+        </div>
       )}
       <div className="flex-1 min-h-0">
         {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
