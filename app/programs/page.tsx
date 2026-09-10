@@ -811,29 +811,41 @@ export default function ProgramsPage() {
         })),
       })),
     });
-    // 프로젝트(데드라인)를 새 시작일 기준으로 이동 — 산출물의 '가장 이른 날짜'를 newStart에 맞춰 전체를 동일하게 shift.
-    // 간격·소요기간을 그대로 보존(압축 없음)하고, 데드라인이 산출물과 desync 돼 있어도 산출물 기준으로 정렬해 함께 이동.
+    // 프로젝트(데드라인)를 새 기간 [newStart~newEnd]로 옮기고, 하위 산출물·task·세부작업을 '비례 매핑'으로 함께 이동/스케일.
+    // (로드맵 막대 드래그 applyBarRange와 동일한 모델 — 상위 기간 안에서 하위의 상대 위치·비율을 보존.)
+    // 프레임(origStart~origEnd)은 데드라인 기간과 하위 날짜를 모두 포함하도록 확장 → 하위가 데드라인과 desync 돼 있어도 새 기간 안으로 정렬(복구).
     const retargetDl = (d: ProgramDeadline, newStartIn?: string, newEndIn?: string): ProgramDeadline => {
-      const newStart = newStartIn || newEndIn;
-      if (!newStart) return d;
-      // 앵커 = 산출물(todo/subtask/unit) 날짜들의 최솟값 (데드라인 자체 날짜는 desync 소스라 제외)
-      const tds: string[] = [];
-      for (const t of d.todos ?? []) { if (t.date) tds.push(t.date); if (t.deadline) tds.push(t.deadline); for (const s of t.subtasks ?? []) { if (s.date) tds.push(s.date); if (s.deadline) tds.push(s.deadline); for (const u of s.units ?? []) { if (u.date) tds.push(u.date); if (u.deadline) tds.push(u.deadline); } } }
-      const anchor = tds.length ? tds.reduce((a, b) => (a < b ? a : b)) : (d.startDate || d.date);
-      if (!anchor) return { ...d, startDate: newStart, date: newEndIn || newStart };
-      const delta = daysBetween(anchor, newStart); // 산출물 최솟값 → newStart 로 옮기는 이동량(간격 보존)
-      const mv = (x?: string) => (x ? addDaysStr(x, delta) : x);
-      const newTodos = (d.todos ?? []).map(t => ({
-        ...t, date: mv(t.date), deadline: mv(t.deadline),
-        subtasks: (t.subtasks ?? []).map(s => ({
-          ...s, date: mv(s.date), deadline: mv(s.deadline),
-          units: (s.units ?? []).map(u => ({ ...u, date: mv(u.date), deadline: mv(u.deadline) })),
+      const all: string[] = [];
+      if (d.startDate) all.push(d.startDate); if (d.date) all.push(d.date);
+      for (const t of d.todos ?? []) { if (t.date) all.push(t.date); if (t.deadline) all.push(t.deadline); for (const s of t.subtasks ?? []) { if (s.date) all.push(s.date); if (s.deadline) all.push(s.deadline); for (const u of s.units ?? []) { if (u.date) all.push(u.date); if (u.deadline) all.push(u.deadline); } } }
+      const origStart = all.length ? all.reduce((a, b) => (a < b ? a : b)) : (d.startDate || d.date);
+      const origEnd = all.length ? all.reduce((a, b) => (a > b ? a : b)) : (d.date || d.startDate);
+      if (!origStart || !origEnd) return d;
+      const oSpan = daysBetween(origStart, origEnd); // 원래 기간 길이
+      // 한쪽 경계만 주어지면 '원래 기간 길이'를 보존해 나머지를 역산 → 단순 미루기 시 압축 방지. 둘 다 주면 그대로(의도적 리사이즈).
+      let newStart: string | undefined, newEnd: string | undefined;
+      if (newStartIn && newEndIn) { newStart = newStartIn; newEnd = newEndIn; }
+      else if (newStartIn) { newStart = newStartIn; newEnd = addDaysStr(newStartIn, oSpan); }
+      else if (newEndIn) { newEnd = newEndIn; newStart = addDaysStr(newEndIn, -oSpan); }
+      if (!newStart || !newEnd) return d;
+      const nSpan = daysBetween(newStart, newEnd);
+      const mapDate = (x?: string) => {
+        if (!x) return x;
+        if (oSpan <= 0) return addDaysStr(x, daysBetween(origStart, newStart)); // 폭 0이면 단순 이동
+        return addDaysStr(newStart, Math.round((daysBetween(origStart, x) * nSpan) / oSpan));
+      };
+      return {
+        ...d,
+        startDate: newStart,
+        date: newEnd,
+        todos: (d.todos ?? []).map(t => ({
+          ...t, date: mapDate(t.date), deadline: mapDate(t.deadline),
+          subtasks: (t.subtasks ?? []).map(s => ({
+            ...s, date: mapDate(s.date), deadline: mapDate(s.deadline),
+            units: (s.units ?? []).map(u => ({ ...u, date: mapDate(u.date), deadline: mapDate(u.deadline) })),
+          })),
         })),
-      }));
-      // 데드라인 기간 = [newStart, 이동된 산출물의 최대 날짜와 지정한 newEnd 중 늦은 쪽]
-      const shiftedMax = tds.length ? tds.map(x => mv(x)!).reduce((a, b) => (a > b ? a : b)) : undefined;
-      const dlEnd = [newEndIn, shiftedMax].filter((x): x is string => !!x).reduce((a, b) => (a > b ? a : b), newStart);
-      return { ...d, startDate: newStart, date: dlEnd, todos: newTodos };
+      };
     };
     // 데드라인(프로젝트) 하나를 새 창으로 retarget — 산출물까지 함께 정렬
     const moveOneDl = (wsIdT: string, progId: string, dlId: string, newDate?: string, newStart?: string) => {
