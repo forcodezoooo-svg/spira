@@ -178,8 +178,22 @@ function extractAction(full: string): ChatAction & { display: string } | null {
       return JSON.parse(cleaned);
     } catch { return undefined; }
   };
-  const sliceObj = (raw: string) => { const s = raw.indexOf('{'), e = raw.lastIndexOf('}'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
-  const sliceArr = (raw: string) => { const s = raw.indexOf('['), e = raw.lastIndexOf(']'); return s !== -1 && e > s ? raw.slice(s, e + 1) : raw; };
+  // 첫 여는 괄호부터 '균형 맞는' 닫는 괄호까지만 추출(문자열 안 괄호 무시) — JSON 뒤에 설명이 붙어도 안전
+  const balanced = (raw: string, open: string, close: string) => {
+    const start = raw.indexOf(open);
+    if (start === -1) return raw;
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < raw.length; i++) {
+      const c = raw[i];
+      if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === open) depth++;
+      else if (c === close && --depth === 0) return raw.slice(start, i + 1);
+    }
+    return raw.slice(start);
+  };
+  const sliceObj = (raw: string) => balanced(raw, '{', '}');
+  const sliceArr = (raw: string) => balanced(raw, '[', ']');
   const before = (marker: string) => full.split(marker)[0].trimEnd();
   const after = (marker: string) => full.split(marker)[1]?.trim() ?? '';
 
@@ -199,9 +213,7 @@ function extractAction(full: string): ChatAction & { display: string } | null {
   if (full.includes(QUARTER_PLAN_MARKER)) {
     const raw = after(QUARTER_PLAN_MARKER);
     const aStart = raw.indexOf('['), oStart = raw.indexOf('{');
-    let j = raw;
-    if (aStart !== -1 && (oStart === -1 || aStart < oStart)) j = raw.slice(aStart, raw.lastIndexOf(']') + 1);
-    else if (oStart !== -1) j = raw.slice(oStart, raw.lastIndexOf('}') + 1);
+    const j = (aStart !== -1 && (oStart === -1 || aStart < oStart)) ? sliceArr(raw) : sliceObj(raw);
     const parsed = tryParse(j);
     if (parsed) {
       const plans = (Array.isArray(parsed) ? parsed : [parsed]) as QuarterPlan[];
