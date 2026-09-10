@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, saveUndoSnapshot, restoreUndoSnapshot, hasUndoSnapshot, clearUndoSnapshot } from '../lib/useStore';
+import { useStore, saveUndoSnapshot, restoreUndoSnapshot, hasUndoSnapshot, clearUndoSnapshot, getGlobalStoreData } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -641,6 +641,8 @@ export default function ProgramsPage() {
   // ── AI 분기 계획 적용 (여러 분기 동시 지원) ──────────────────────────────────
   applyQuarterPlanRef.current = (plans: QuarterPlan[]) => {
     saveUndoSnapshot(); // 반영 직전 상태 저장 → 잘못되면 '되돌리기'로 복원
+    // 연속 쓰기 중 '직전 쓰기까지 반영된' 최신 데이터를 읽기 위한 라이브 getter (렌더 스냅샷은 낡아 clobber 발생)
+    const liveEntries = () => getGlobalStoreData().workspaces;
     try { console.log('[Spira apply] start', { myBusinesses: businesses.map(b => ({ id: b.id, name: b.name })), currentWs: wsId, plans }); } catch { /* noop */ }
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
@@ -782,12 +784,12 @@ export default function ProgramsPage() {
     // 기존 프로젝트(데드라인)를 deadlineId → 데드라인 이름(정확/부분) → 소속 프로젝트 이름 순으로 찾기
     const findDeadline = (deadlineId?: string, projectName?: string, scopeWsId?: string) => {
       // 1) deadlineId는 전체에서 정확 매칭(가장 확실) — 이름 매칭보다 우선
-      if (deadlineId) { for (const e of store.allWorkspacesEntries) for (const p of e.programs) { const d = (p.deadlines ?? []).find(x => x.id === deadlineId); if (d) return { e, p, d }; } }
+      if (deadlineId) { for (const e of liveEntries()) for (const p of e.programs) { const d = (p.deadlines ?? []).find(x => x.id === deadlineId); if (d) return { e, p, d }; } }
       const pn = nrm(projectName);
       if (!pn) return null;
       // 이름 매칭은 지정된 비즈니스(scopeWsId)로 범위를 좁혀 다른 비즈니스의 비슷한 이름과 섞이지 않게
       const all: { e: typeof store.allWorkspacesEntries[number]; p: (typeof store.allWorkspacesEntries[number])['programs'][number]; d: ProgramDeadline }[] = [];
-      for (const e of store.allWorkspacesEntries) { if (scopeWsId && e.workspace.id !== scopeWsId) continue; for (const p of e.programs) for (const d of p.deadlines ?? []) all.push({ e, p, d }); }
+      for (const e of liveEntries()) { if (scopeWsId && e.workspace.id !== scopeWsId) continue; for (const p of e.programs) for (const d of p.deadlines ?? []) all.push({ e, p, d }); }
       // 2) 데드라인 이름 정확 → 3) 부분 포함 → 4) 소속 프로젝트 이름
       return all.find(x => nrm(x.d.name) === pn)
         ?? all.find(x => nrm(x.d.name).includes(pn) || pn.includes(nrm(x.d.name)))
@@ -849,7 +851,7 @@ export default function ProgramsPage() {
     };
     // 데드라인(프로젝트) 하나를 새 창으로 retarget — 산출물까지 함께 정렬
     const moveOneDl = (wsIdT: string, progId: string, dlId: string, newDate?: string, newStart?: string) => {
-      const prog = store.allWorkspacesEntries.find(en => en.workspace.id === wsIdT)?.programs.find(p => p.id === progId);
+      const prog = liveEntries().find(en => en.workspace.id === wsIdT)?.programs.find(p => p.id === progId);
       if (!prog) return false;
       const cur = (prog.deadlines ?? []).find(d => d.id === dlId); if (!cur) return false;
       store.updateProgramInWs(wsIdT, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? retargetDl(d, newStart, newDate) : d) });
@@ -857,7 +859,7 @@ export default function ProgramsPage() {
     };
     // 한 비즈니스의 특정 projectId에 속한 '모든 영역의 데드라인'을 새 창으로 retarget (프로젝트=여러 영역 데드라인의 상위). 산출물까지 창 안으로 정렬.
     const retargetProject = (wsIdT: string, projectId: string, newStart?: string, newEnd?: string) => {
-      const entry = store.allWorkspacesEntries.find(en => en.workspace.id === wsIdT);
+      const entry = liveEntries().find(en => en.workspace.id === wsIdT);
       let cnt = 0;
       for (const p of entry?.programs ?? []) {
         const matched = (p.deadlines ?? []).filter(d => d.projectId === projectId);
@@ -879,7 +881,7 @@ export default function ProgramsPage() {
         const target = newDate || newStart;
         // 대상이 특정되지 않고 wsId만 있으면 → 그 비즈니스의 '모든 프로젝트'를 같은 delta로 이동
         if (!mv.deadlineId && !mv.projectName && mv.wsId) {
-          const e = store.allWorkspacesEntries.find(en => en.workspace.id === mv.wsId);
+          const e = liveEntries().find(en => en.workspace.id === mv.wsId);
           if (!e) continue;
           const allDls = e.programs.flatMap(p => (p.deadlines ?? []).map(d => ({ progId: p.id, d })));
           const dates = allDls.map(x => x.d.date || x.d.startDate).filter(Boolean) as string[];
@@ -913,11 +915,11 @@ export default function ProgramsPage() {
         const hit = findDeadline(cp.deadlineId, cp.projectName, cp.wsId);
         if (cp.todoId) {
           // 특정 카테고리(todo)만 완료
-          const e = store.allWorkspacesEntries.find(en => en.programs.some(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => t.id === cp.todoId))));
+          const e = liveEntries().find(en => en.programs.some(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => t.id === cp.todoId))));
           const p = e?.programs.find(pr => (pr.deadlines ?? []).some(d => (d.todos ?? []).some(t => t.id === cp.todoId)));
           if (e && p) { store.updateProgramInWs(e.workspace.id, { ...p, deadlines: (p.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => t.id === cp.todoId ? { ...t, done: true } : t) })) }); doneCount += 1; }
         } else if (hit) {
-          const prog = store.allWorkspacesEntries.find(en => en.workspace.id === hit.e.workspace.id)?.programs.find(p => p.id === hit.p.id) ?? hit.p;
+          const prog = liveEntries().find(en => en.workspace.id === hit.e.workspace.id)?.programs.find(p => p.id === hit.p.id) ?? hit.p;
           store.updateProgramInWs(hit.e.workspace.id, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === hit.d.id ? { ...d, done: true, doneAt: new Date().toISOString() } : d) });
           doneCount += 1;
         }
