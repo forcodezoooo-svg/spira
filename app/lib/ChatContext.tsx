@@ -527,9 +527,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         });
         // 시작 칩 등에서 autoApply면 버튼 없이 즉시 반영 (게이트는 그대로 — 무료는 유료 안내)
         if (opts?.autoApply) runActionRef.current?.(targetIdx, act);
-      } else if (isReconfirm(text) && lastActionRef.current) {
+      } else if (isReconfirm(text) && (lastActionRef.current || [...messagesRef.current].slice(0, -1).reverse().find(m => m.role === 'assistant' && m.action))) {
         // AI가 마커를 빠뜨렸지만 "다시해줘/응/반영해줘" 류 재확인 → 직전 계획 버튼을 다시 붙임(모델 비의존 안전장치)
-        const act = lastActionRef.current;
+        // ref가 비어도(리로드 등) 채팅 이력에서 마지막 액션을 찾아 되살림 → '다시해줘'가 항상 동작
+        const src = lastActionRef.current ?? [...messagesRef.current].slice(0, -1).reverse().find(m => m.role === 'assistant' && m.action)!.action!;
+        const act = { ...src, done: false }; // 이전에 적용(done)됐어도 다시 누를 수 있게 초기화
+        lastActionRef.current = act;
         setMessages(prev => {
           const updated = [...prev];
           const last = updated[updated.length - 1];
