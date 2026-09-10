@@ -810,25 +810,50 @@ export default function ProgramsPage() {
         })),
       })),
     });
-    // 데드라인 하나를 새 날짜로 이동(delta 계산해 통째로 밀기)
+    // 데드라인(프로젝트) 전체 날짜 범위를 새 [newStart~newEnd] 창으로 '비례 매핑' — 하위 산출물/task가 데드라인과 desync 돼 있어도 전부 새 창 안으로 끌어와 정렬(로드맵 막대 드래그와 동일 동작). delta=0(이미 옮겨진 상태)이어도 산출물이 따라오게 하는 핵심.
+    const retargetDl = (d: ProgramDeadline, newStartIn?: string, newEndIn?: string): ProgramDeadline => {
+      const dates: string[] = [];
+      const push = (x?: string) => { if (x) dates.push(x); };
+      push(d.startDate); push(d.date);
+      for (const t of d.todos ?? []) { push(t.date); push(t.deadline); for (const s of t.subtasks ?? []) { push(s.date); push(s.deadline); for (const u of s.units ?? []) { push(u.date); push(u.deadline); } } }
+      const newEnd = newEndIn || newStartIn;
+      if (!newEnd) return d;
+      if (!dates.length) return { ...d, startDate: newStartIn ?? newEnd, date: newEnd };
+      const oldMin = dates.reduce((a, b) => (a < b ? a : b));
+      const oldMax = dates.reduce((a, b) => (a > b ? a : b));
+      const span = daysBetween(oldMin, oldMax); // 원래 폭(일)
+      const newStart = newStartIn ?? addDaysStr(newEnd, -span); // 시작 없으면 폭 유지해 역산
+      const newSpan = daysBetween(newStart, newEnd);
+      const map = (x?: string) => { if (!x) return x; const frac = span > 0 ? daysBetween(oldMin, x) / span : 0; return addDaysStr(newStart, Math.round(frac * newSpan)); };
+      return {
+        ...d,
+        startDate: newStart,
+        date: newEnd,
+        todos: (d.todos ?? []).map(t => ({
+          ...t, date: map(t.date), deadline: map(t.deadline),
+          subtasks: (t.subtasks ?? []).map(s => ({
+            ...s, date: map(s.date), deadline: map(s.deadline),
+            units: (s.units ?? []).map(u => ({ ...u, date: map(u.date), deadline: map(u.deadline) })),
+          })),
+        })),
+      };
+    };
+    // 데드라인(프로젝트) 하나를 새 창으로 retarget — 산출물까지 함께 정렬
     const moveOneDl = (wsIdT: string, progId: string, dlId: string, newDate?: string, newStart?: string) => {
       const prog = store.allWorkspacesEntries.find(en => en.workspace.id === wsIdT)?.programs.find(p => p.id === progId);
       if (!prog) return false;
       const cur = (prog.deadlines ?? []).find(d => d.id === dlId); if (!cur) return false;
-      const base = cur.date || cur.startDate; // 기준일
-      const target = newDate || newStart;
-      const delta = base && target ? daysBetween(base, target) : 0;
-      store.updateProgramInWs(wsIdT, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? shiftDl(d, delta) : d) });
+      store.updateProgramInWs(wsIdT, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? retargetDl(d, newStart, newDate) : d) });
       return true;
     };
-    // 한 비즈니스의 특정 projectId에 속한 '모든 영역의 데드라인'을 delta만큼 함께 이동 (프로젝트=여러 영역 데드라인의 상위)
-    const shiftProject = (wsIdT: string, projectId: string, delta: number) => {
+    // 한 비즈니스의 특정 projectId에 속한 '모든 영역의 데드라인'을 새 창으로 retarget (프로젝트=여러 영역 데드라인의 상위). 산출물까지 창 안으로 정렬.
+    const retargetProject = (wsIdT: string, projectId: string, newStart?: string, newEnd?: string) => {
       const entry = store.allWorkspacesEntries.find(en => en.workspace.id === wsIdT);
       let cnt = 0;
       for (const p of entry?.programs ?? []) {
         const matched = (p.deadlines ?? []).filter(d => d.projectId === projectId);
         if (!matched.length) continue;
-        store.updateProgramInWs(wsIdT, { ...p, deadlines: (p.deadlines ?? []).map(d => d.projectId === projectId ? shiftDl(d, delta) : d) });
+        store.updateProgramInWs(wsIdT, { ...p, deadlines: (p.deadlines ?? []).map(d => d.projectId === projectId ? retargetDl(d, newStart, newEnd) : d) });
         cnt += matched.length;
       }
       return cnt;
@@ -858,18 +883,16 @@ export default function ProgramsPage() {
         }
         const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
         const wsIdT = hit.e.workspace.id;
-        const base = hit.d.date || hit.d.startDate; // 기준일 = 매칭된 데드라인 날짜
-        const delta = base && target ? daysBetween(base, target) : 0;
-        try { console.log('[Spira move]', { deadlineName: hit.d.name, deadlineDate: hit.d.date, deadlineStart: hit.d.startDate, projectId: hit.d.projectId ?? '(없음)', target, delta, todosBefore: (hit.d.todos ?? []).map(t => ({ name: t.name, date: t.date, deadline: t.deadline, days: t.days })) }); } catch { /* noop */ }
+        try { console.log('[Spira move]', { deadlineName: hit.d.name, deadlineDate: hit.d.date, deadlineStart: hit.d.startDate, projectId: hit.d.projectId ?? '(없음)', newStart, newDate, todosBefore: (hit.d.todos ?? []).map(t => ({ name: t.name, date: t.date, deadline: t.deadline, days: t.days })) }); } catch { /* noop */ }
         if (hit.d.projectId) {
-          // 프로젝트 통째로: 같은 projectId의 모든 영역 데드라인을 동일 delta로 이동
+          // 프로젝트 통째로: 같은 projectId의 모든 영역 데드라인을 새 창으로 retarget(산출물까지 정렬)
           const key = `${wsIdT}::${hit.d.projectId}`;
           if (movedProjectKeys.has(key)) continue; // 이미 이 프로젝트를 옮겼으면 skip
           movedProjectKeys.add(key);
-          movedCount += shiftProject(wsIdT, hit.d.projectId, delta);
+          movedCount += retargetProject(wsIdT, hit.d.projectId, newStart, newDate);
           setFocusFrom(wsIdT, target);
         } else {
-          // projectId가 없는 단독 데드라인이면 그것만 이동
+          // projectId가 없는 단독 데드라인이면 그것만 retarget
           if (moveOneDl(wsIdT, hit.p.id, hit.d.id, newDate, newStart)) { movedCount += 1; setFocusFrom(wsIdT, target); }
         }
       }
