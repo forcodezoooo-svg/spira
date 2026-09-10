@@ -810,33 +810,29 @@ export default function ProgramsPage() {
         })),
       })),
     });
-    // 데드라인(프로젝트) 전체 날짜 범위를 새 [newStart~newEnd] 창으로 '비례 매핑' — 하위 산출물/task가 데드라인과 desync 돼 있어도 전부 새 창 안으로 끌어와 정렬(로드맵 막대 드래그와 동일 동작). delta=0(이미 옮겨진 상태)이어도 산출물이 따라오게 하는 핵심.
+    // 프로젝트(데드라인)를 새 시작일 기준으로 이동 — 산출물의 '가장 이른 날짜'를 newStart에 맞춰 전체를 동일하게 shift.
+    // 간격·소요기간을 그대로 보존(압축 없음)하고, 데드라인이 산출물과 desync 돼 있어도 산출물 기준으로 정렬해 함께 이동.
     const retargetDl = (d: ProgramDeadline, newStartIn?: string, newEndIn?: string): ProgramDeadline => {
-      const dates: string[] = [];
-      const push = (x?: string) => { if (x) dates.push(x); };
-      push(d.startDate); push(d.date);
-      for (const t of d.todos ?? []) { push(t.date); push(t.deadline); for (const s of t.subtasks ?? []) { push(s.date); push(s.deadline); for (const u of s.units ?? []) { push(u.date); push(u.deadline); } } }
-      const newEnd = newEndIn || newStartIn;
-      if (!newEnd) return d;
-      if (!dates.length) return { ...d, startDate: newStartIn ?? newEnd, date: newEnd };
-      const oldMin = dates.reduce((a, b) => (a < b ? a : b));
-      const oldMax = dates.reduce((a, b) => (a > b ? a : b));
-      const span = daysBetween(oldMin, oldMax); // 원래 폭(일)
-      const newStart = newStartIn ?? addDaysStr(newEnd, -span); // 시작 없으면 폭 유지해 역산
-      const newSpan = daysBetween(newStart, newEnd);
-      const map = (x?: string) => { if (!x) return x; const frac = span > 0 ? daysBetween(oldMin, x) / span : 0; return addDaysStr(newStart, Math.round(frac * newSpan)); };
-      return {
-        ...d,
-        startDate: newStart,
-        date: newEnd,
-        todos: (d.todos ?? []).map(t => ({
-          ...t, date: map(t.date), deadline: map(t.deadline),
-          subtasks: (t.subtasks ?? []).map(s => ({
-            ...s, date: map(s.date), deadline: map(s.deadline),
-            units: (s.units ?? []).map(u => ({ ...u, date: map(u.date), deadline: map(u.deadline) })),
-          })),
+      const newStart = newStartIn || newEndIn;
+      if (!newStart) return d;
+      // 앵커 = 산출물(todo/subtask/unit) 날짜들의 최솟값 (데드라인 자체 날짜는 desync 소스라 제외)
+      const tds: string[] = [];
+      for (const t of d.todos ?? []) { if (t.date) tds.push(t.date); if (t.deadline) tds.push(t.deadline); for (const s of t.subtasks ?? []) { if (s.date) tds.push(s.date); if (s.deadline) tds.push(s.deadline); for (const u of s.units ?? []) { if (u.date) tds.push(u.date); if (u.deadline) tds.push(u.deadline); } } }
+      const anchor = tds.length ? tds.reduce((a, b) => (a < b ? a : b)) : (d.startDate || d.date);
+      if (!anchor) return { ...d, startDate: newStart, date: newEndIn || newStart };
+      const delta = daysBetween(anchor, newStart); // 산출물 최솟값 → newStart 로 옮기는 이동량(간격 보존)
+      const mv = (x?: string) => (x ? addDaysStr(x, delta) : x);
+      const newTodos = (d.todos ?? []).map(t => ({
+        ...t, date: mv(t.date), deadline: mv(t.deadline),
+        subtasks: (t.subtasks ?? []).map(s => ({
+          ...s, date: mv(s.date), deadline: mv(s.deadline),
+          units: (s.units ?? []).map(u => ({ ...u, date: mv(u.date), deadline: mv(u.deadline) })),
         })),
-      };
+      }));
+      // 데드라인 기간 = [newStart, 이동된 산출물의 최대 날짜와 지정한 newEnd 중 늦은 쪽]
+      const shiftedMax = tds.length ? tds.map(x => mv(x)!).reduce((a, b) => (a > b ? a : b)) : undefined;
+      const dlEnd = [newEndIn, shiftedMax].filter((x): x is string => !!x).reduce((a, b) => (a > b ? a : b), newStart);
+      return { ...d, startDate: newStart, date: dlEnd, todos: newTodos };
     };
     // 데드라인(프로젝트) 하나를 새 창으로 retarget — 산출물까지 함께 정렬
     const moveOneDl = (wsIdT: string, progId: string, dlId: string, newDate?: string, newStart?: string) => {
