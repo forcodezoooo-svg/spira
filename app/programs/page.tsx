@@ -640,6 +640,7 @@ export default function ProgramsPage() {
 
   // ── AI 분기 계획 적용 (여러 분기 동시 지원) ──────────────────────────────────
   applyQuarterPlanRef.current = (plans: QuarterPlan[]) => {
+    try { console.log('[Spira apply] start', { myBusinesses: businesses.map(b => ({ id: b.id, name: b.name })), currentWs: wsId, plans }); } catch { /* noop */ }
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
     let order = nextOrder();
@@ -858,6 +859,14 @@ export default function ProgramsPage() {
         }
       }
     }
+    try {
+      const moveReqs = plans.flatMap(p => p.moves ?? []);
+      console.log('[Spira apply] done', {
+        createdBuckets: [...buckets.values()].map(b => ({ ws: b.targetWs, area: b.areaName, areaId: b.areaId, deadlines: b.deadlines.length })),
+        moveResults: moveReqs.map(mv => ({ deadlineId: mv.deadlineId, projectName: mv.projectName, wsId: mv.wsId, matched: !!(mv.deadlineId || mv.projectName ? findDeadline(mv.deadlineId, mv.projectName) : (mv.wsId ? 'wholeBusiness' : false)) })),
+        movedCount, doneCount,
+      });
+    } catch { /* noop */ }
     if (movedCount || doneCount) toast(`${movedCount ? `프로젝트 ${movedCount}개 일정 조정` : ''}${movedCount && doneCount ? ' · ' : ''}${doneCount ? `기존 ${doneCount}개 종료` : ''}.`, 'success');
     // 적용된 첫 분기로 화면 이동 + 생성된 영역만 펼치기
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
