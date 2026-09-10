@@ -171,6 +171,7 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 - **서로 다른 비즈니스의 업무를 한 원소에 섞지 마세요.** 여러 비즈니스가 나오면 **비즈니스마다 별도의 배열 원소 {wsId, programs, moves, completes}** 를 만드세요.
   - 예: SpirA·주우·Dear Diary가 섞이면 → \`[{"wsId":"SpirA의ID","programs":[...]},{"wsId":"주우의ID","programs":[...]},{"wsId":"DearDiary의ID","moves":[...]}]\` 처럼 원소 3개.
 - 각 wsId는 컨텍스트 "## 워크스페이스: 이름 (wsId: …)"의 실제 값. 어느 비즈니스 얘긴지 이름으로 정확히 매칭.
+- ★ 완전성(빠뜨리지 마세요) ★: 사용자 입력에 **여러 비즈니스가 등장하면, 등장한 모든 비즈니스에 대해** 각각 배열 원소를 만들어 **하나도 빠뜨리지 말고** programs/moves/completes를 채우세요. 예를 들어 입력이 "SpirA … / floaty … / Zo%o … / Dear Diary …"처럼 4개 비즈니스를 다루면 **배열에 원소가 최소 4개** 나와야 합니다(각 비즈니스에 해당하는 내용이 전부 반영되도록). SpirA만 처리하고 나머지를 누락하면 안 됩니다. JSON을 내기 전에 "입력에 나온 비즈니스가 전부 배열에 있는가?"를 스스로 점검하세요.
 
 ### programs / moves / completes
 - programs: 새로 만들 것. deadline에 date(기한, 오늘 이후)·startDate, todos에 산출물/할일(반복이면 days=[0=일~6=토]).

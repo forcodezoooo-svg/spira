@@ -821,13 +821,28 @@ export default function ProgramsPage() {
       store.updateProgramInWs(wsIdT, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? shiftDl(d, delta) : d) });
       return true;
     };
-    // 기존 프로젝트 미루기/기간 변경 — 프로젝트 통째로(내용 포함) 이동
+    // 한 비즈니스의 특정 projectId에 속한 '모든 영역의 데드라인'을 delta만큼 함께 이동 (프로젝트=여러 영역 데드라인의 상위)
+    const shiftProject = (wsIdT: string, projectId: string, delta: number) => {
+      const entry = store.allWorkspacesEntries.find(en => en.workspace.id === wsIdT);
+      let cnt = 0;
+      for (const p of entry?.programs ?? []) {
+        const matched = (p.deadlines ?? []).filter(d => d.projectId === projectId);
+        if (!matched.length) continue;
+        store.updateProgramInWs(wsIdT, { ...p, deadlines: (p.deadlines ?? []).map(d => d.projectId === projectId ? shiftDl(d, delta) : d) });
+        cnt += matched.length;
+      }
+      return cnt;
+    };
+    const setFocusFrom = (ws: string, target?: string) => { if (!focusWs) { focusWs = ws; if (target) { firstYear = Number(target.slice(0, 4)); firstQuarter = Math.floor((Number(target.slice(5, 7)) - 1) / 3) + 1; } } };
+    // 기존 프로젝트 미루기/기간 변경 — 프로젝트 통째로(속한 모든 영역 산출물 포함) 이동
     let movedCount = 0;
+    const movedProjectKeys = new Set<string>(); // 같은 프로젝트 중복 이동 방지 (delta 재계산 방지)
     for (const plan of plans) {
       for (const mv of plan.moves ?? []) {
         const newDate = clampFuture(mv.date);
         const newStart = mv.startDate ? (clampFuture(mv.startDate) ?? mv.startDate) : undefined;
         if (!newDate && !newStart) continue;
+        const target = newDate || newStart;
         // 대상이 특정되지 않고 wsId만 있으면 → 그 비즈니스의 '모든 프로젝트'를 같은 delta로 이동
         if (!mv.deadlineId && !mv.projectName && mv.wsId) {
           const e = store.allWorkspacesEntries.find(en => en.workspace.id === mv.wsId);
@@ -835,16 +850,26 @@ export default function ProgramsPage() {
           const allDls = e.programs.flatMap(p => (p.deadlines ?? []).map(d => ({ progId: p.id, d })));
           const dates = allDls.map(x => x.d.date || x.d.startDate).filter(Boolean) as string[];
           const earliest = dates.length ? dates.sort()[0] : undefined;
-          const delta = earliest && (newDate || newStart) ? daysBetween(earliest, (newDate || newStart)!) : 0;
+          const delta = earliest && target ? daysBetween(earliest, target) : 0;
           for (const p of e.programs) store.updateProgramInWs(e.workspace.id, { ...p, deadlines: (p.deadlines ?? []).map(d => shiftDl(d, delta)) });
           movedCount += allDls.length;
+          setFocusFrom(e.workspace.id, target);
           continue;
         }
         const hit = findDeadline(mv.deadlineId, mv.projectName); if (!hit) continue;
-        if (moveOneDl(hit.e.workspace.id, hit.p.id, hit.d.id, newDate, newStart)) {
-          movedCount += 1;
-          // 생성물이 없으면(이동만 있는 경우) 이동된 프로젝트 위치로 화면 이동
-          if (!focusWs) { const t = newDate || newStart; focusWs = hit.e.workspace.id; if (t) { firstYear = Number(t.slice(0, 4)); firstQuarter = Math.floor((Number(t.slice(5, 7)) - 1) / 3) + 1; } }
+        const wsIdT = hit.e.workspace.id;
+        const base = hit.d.date || hit.d.startDate; // 기준일 = 매칭된 데드라인 날짜
+        const delta = base && target ? daysBetween(base, target) : 0;
+        if (hit.d.projectId) {
+          // 프로젝트 통째로: 같은 projectId의 모든 영역 데드라인을 동일 delta로 이동
+          const key = `${wsIdT}::${hit.d.projectId}`;
+          if (movedProjectKeys.has(key)) continue; // 이미 이 프로젝트를 옮겼으면 skip
+          movedProjectKeys.add(key);
+          movedCount += shiftProject(wsIdT, hit.d.projectId, delta);
+          setFocusFrom(wsIdT, target);
+        } else {
+          // projectId가 없는 단독 데드라인이면 그것만 이동
+          if (moveOneDl(wsIdT, hit.p.id, hit.d.id, newDate, newStart)) { movedCount += 1; setFocusFrom(wsIdT, target); }
         }
       }
     }
