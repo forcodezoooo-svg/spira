@@ -40,15 +40,36 @@ export async function POST(request: Request) {
         const openaiStream = await getClient().chat.completions.create({
           model: 'gpt-4o',
           stream: true,
+          temperature: 0.5, // 형식(마커) 준수율↑
           messages: [
             { role: 'system', content: systemContent },
             ...messages,
           ],
         });
 
+        let full = '';
         for await (const chunk of openaiStream) {
           const text = chunk.choices[0]?.delta?.content ?? '';
-          if (text) controller.enqueue(encoder.encode(text));
+          if (text) { full += text; controller.enqueue(encoder.encode(text)); }
+        }
+
+        // 마커 강제(2차 패스): Process(routine) 모드에서 AI가 계획을 설명하고도 마커를 빠뜨리면 버튼이 안 뜬다.
+        // 마커가 없으면 한 번 더 물어서, '지금 반영할 구체 계획'이 있으면 마커+JSON만 받아 이어붙인다. (단순 질문·조언이면 빈 응답 → 버튼 없음)
+        if (routineMode && !/%%%[A-Z_]+%%%/.test(full)) {
+          try {
+            const follow = await getClient().chat.completions.create({
+              model: 'gpt-4o',
+              temperature: 0,
+              messages: [
+                { role: 'system', content: systemContent },
+                ...messages,
+                { role: 'assistant', content: full },
+                { role: 'user', content: '방금 네 답변이 지금 앱에 반영할 구체적 계획(새 업무 추가 / 프로젝트 미루기 / 기존 종료 등)을 담고 있다면, 설명은 하나도 쓰지 말고 %%%QUARTER_PLAN%%% 마커와 그 다음 줄에 JSON 배열만 출력해. 반영할 구체 계획이 없고 단순 질문·조언·잡담이면 아무것도 출력하지 마(완전히 빈 응답).' },
+              ],
+            });
+            const extra = follow.choices[0]?.message?.content ?? '';
+            if (/%%%QUARTER_PLAN%%%/.test(extra)) controller.enqueue(encoder.encode('\n\n' + extra.slice(extra.indexOf('%%%QUARTER_PLAN%%%'))));
+          } catch { /* 2차 패스 실패해도 본문은 이미 전송됨 */ }
         }
       } catch (err) {
         controller.error(err);
