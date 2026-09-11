@@ -368,28 +368,39 @@ export default function AIChatButton() {
                       </div>
                     )}
                     {/* 대화 내용에서 인식된 '앱에 자동 반영' 버튼 (클릭 시 반영 — 무료는 유료 안내 팝업) */}
-                    {msg.role === 'assistant' && msg.action && (
-                      <button
-                        onClick={() => { if (!msg.action!.done) chat?.applyAction(i); }}
-                        disabled={msg.action.done}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:hover:translate-y-0 disabled:cursor-default"
-                        style={msg.action.done
-                          ? { backgroundColor: '#EAF7DD', color: '#3E6B1F' }
-                          : { backgroundColor: '#9DFE3B', color: '#16211E', boxShadow: '0 6px 16px rgba(157,254,59,0.4)' }}
-                      >
-                        {msg.action.done ? (
-                          <>
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.3l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            반영 완료
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
-                            {msg.action.label}
-                          </>
-                        )}
-                      </button>
-                    )}
+                    {msg.role === 'assistant' && msg.action && (() => {
+                      const done = !!msg.action!.done;
+                      const showUndo = done && !!msg.action!.undoable; // 반영 후 '되돌리기' 버튼으로 변신 (undoable 액션만)
+                      return (
+                        <button
+                          onClick={() => { if (showUndo) chat?.undoAction(i); else if (!done) chat?.applyAction(i); }}
+                          disabled={done && !showUndo}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold transition-transform hover:-translate-y-0.5 disabled:hover:translate-y-0 disabled:cursor-default"
+                          style={showUndo
+                            ? { backgroundColor: '#F1F1EB', color: '#5B6560', border: '1px solid var(--spira-border-subtle)' }
+                            : done
+                              ? { backgroundColor: '#EAF7DD', color: '#3E6B1F' }
+                              : { backgroundColor: '#9DFE3B', color: '#16211E', boxShadow: '0 6px 16px rgba(157,254,59,0.4)' }}
+                        >
+                          {showUndo ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"><path d="M9 5L4 10l5 5M4 10h11a5 5 0 0 1 0 10h-1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              되돌리기
+                            </>
+                          ) : done ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.3l2.3 2.3 4.7-5.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              반영 완료
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>
+                              {msg.action!.label}
+                            </>
+                          )}
+                        </button>
+                      );
+                    })()}
                   </div>
                 ))}
                 {/* AI가 생각 중 — 아직 답변 버블이 스트리밍되기 전 대기 상태 */}

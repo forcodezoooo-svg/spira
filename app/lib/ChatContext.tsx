@@ -8,6 +8,7 @@ import { useUpgrade } from './UpgradeContext';
 import { isOnboardingActive } from './onboarding';
 import { createClient } from './supabase/client';
 import { PLAN_MARKER, ROUTINE_MARKER, GOALS_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, ITEM_REVISE_MARKER, FIN_REPLAN_MARKER } from './ai/markers';
+import { restoreUndoSnapshot, hasUndoSnapshot } from './useStore';
 import { FEEDBACK, AI_COPY } from './ai/messages';
 
 // 대화 내용에서 인식된 '앱에 자동 반영' 액션. 버튼으로 노출되며, 클릭 시 실제 반영(Pro/온보딩 게이트).
@@ -19,6 +20,7 @@ export interface ChatAction {
   label: string;            // 버튼 문구
   feedback: string;         // 반영 완료 후 메시지에 덧붙일 문구
   done?: boolean;           // 이미 반영됨
+  undoable?: boolean;       // 반영 후 '되돌리기'로 복원 가능(스냅샷 저장하는 QUARTER_PLAN 등)
 }
 
 export interface Message {
@@ -138,6 +140,7 @@ interface ChatContextType {
   loading: boolean;
   sendMessage: (text: string, displayText?: string, opts?: SendOptions) => Promise<void>;
   applyAction: (idx: number) => void;
+  undoAction: (idx: number) => void;
   openWithContext: (label: string, content: string) => void;
   openWithTarget: (label: string, content: string, onRevise: (text: string) => void) => void;
   reviseTargetLabel: string | null;
@@ -222,7 +225,7 @@ function extractAction(full: string): ChatAction & { display: string } | null {
     if (parsed) {
       const plans = (Array.isArray(parsed) ? parsed : [parsed]) as QuarterPlan[];
       const progCount = plans.reduce((s, p) => s + (p.programs?.length ?? 0), 0);
-      return { kind: 'goals', marker: QUARTER_PLAN_MARKER, payload: plans, route: '/programs', label: 'Process에 자동으로 채우기', feedback: FEEDBACK.quarterApplied(plans.length, progCount), display: before(QUARTER_PLAN_MARKER) };
+      return { kind: 'goals', marker: QUARTER_PLAN_MARKER, payload: plans, route: '/programs', label: 'Process에 자동으로 채우기', feedback: FEEDBACK.quarterApplied(plans.length, progCount), display: before(QUARTER_PLAN_MARKER), undoable: true };
     }
   }
   if (full.includes(AREA_ASSIGN_MARKER)) {
@@ -614,6 +617,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     runAction(idx, m.action);
   }, [runAction]);
 
+  // 되돌리기 클릭 → 반영 직전 상태로 복원하고, 버튼을 다시 '반영하기'로 되돌림
+  const undoAction = useCallback((idx: number) => {
+    const m = messagesRef.current[idx];
+    if (!m?.action?.done) return;
+    if (!hasUndoSnapshot() || !restoreUndoSnapshot()) { toast('되돌릴 내용이 없어요. (다른 반영을 한 뒤에는 직전 것만 되돌릴 수 있어요)', 'info'); return; }
+    setMessages(prev => {
+      const updated = [...prev];
+      const mm = updated[idx];
+      if (mm?.action) {
+        const fb = mm.action.feedback;
+        const content = fb && mm.content.endsWith(fb) ? mm.content.slice(0, -fb.length).replace(/\n+$/, '') : mm.content; // 덧붙였던 완료 문구 제거
+        updated[idx] = { ...mm, content, action: { ...mm.action, done: false } };
+      }
+      return updated;
+    });
+    toast('반영을 되돌렸어요. ↩︎', 'success');
+  }, [toast]);
+
   const openWithContext = useCallback((label: string, content: string) => {
     if (loadingRef.current) return;
     setOpen(true);
@@ -662,7 +683,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   return (
     <ChatContext.Provider value={{
       open, setOpen, messages, loading,
-      sendMessage, applyAction, openWithContext,
+      sendMessage, applyAction, undoAction, openWithContext,
       openWithTarget, reviseTargetLabel, clearReviseTarget,
       registerPlanHandler, unregisterPlanHandler,
       registerRoutineHandler, unregisterRoutineHandler,

@@ -39,7 +39,6 @@ export function restoreUndoSnapshot(): boolean {
   } catch { return false; }
 }
 export function hasUndoSnapshot() { try { return undoAvailable || !!localStorage.getItem(UNDO_KEY); } catch { return undoAvailable; } }
-export function clearUndoSnapshot() { try { localStorage.removeItem(UNDO_KEY); } catch { /* */ } undoAvailable = false; emitStore(); }
 import { workspaceColor } from './goalTasks';
 import { useToast } from './ToastContext';
 import { ERR } from './copy';

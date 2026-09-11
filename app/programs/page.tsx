@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, saveUndoSnapshot, restoreUndoSnapshot, hasUndoSnapshot, clearUndoSnapshot, getGlobalStoreData } from '../lib/useStore';
+import { useStore, saveUndoSnapshot, getGlobalStoreData } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -1767,22 +1767,6 @@ export default function ProgramsPage() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] min-h-0">
-      {hasUndoSnapshot() && (
-        <div className="fixed top-[72px] right-6 z-50 flex items-center gap-1.5 rounded-full p-1 pl-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
-          <button
-            onClick={() => { if (restoreUndoSnapshot()) { setFilterWsId(null); toast('직전 반영을 되돌렸어요. ↩︎', 'success'); } else { toast('되돌릴 내용이 없어요.', 'info'); } }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-bold text-white transition-transform hover:scale-105"
-            style={{ backgroundColor: '#16211E' }}
-            title="AI 반영 직전 상태로 한 번 되돌립니다"
-          >↩︎ 직전 반영 되돌리기</button>
-          <button
-            onClick={() => { clearUndoSnapshot(); toast('되돌리기를 닫았어요.', 'info'); }}
-            className="px-3 py-2 rounded-full text-[13px] font-semibold transition-colors hover:bg-black/5"
-            style={{ color: '#5B6560' }}
-            title="되돌리기 버튼 닫기(현재 반영 유지)"
-          >취소</button>
-        </div>
-      )}
       <div className="flex-1 min-h-0">
         {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
           /* 비어 있을 때: Plan 사업목표 가져오기 추천 */
