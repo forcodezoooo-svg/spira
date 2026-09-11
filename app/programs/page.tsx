@@ -754,7 +754,6 @@ export default function ProgramsPage() {
         (g.areaId && p.workAreaId === g.areaId)
         || (areaNameNrm && p.workAreaId && nrm(areasForWs(g.targetWs).find(a => a.id === p.workAreaId)?.name ?? '') === areaNameNrm));
       const container = candidates.find(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => !t.done))) ?? candidates[0];
-      try { console.log('[Spira place]', JSON.stringify({ area: g.areaName, areaId: g.areaId, containerFound: !!container, containerId: container?.id, existingCats: (container?.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => t.name)) })); } catch { /* noop */ }
       if (container) {
         // 이 컨테이너의 첫 '미완료 카테고리(todo)' 안에 task 추가; 카테고리가 하나도 없으면 새로 생성
         let placed = false;
