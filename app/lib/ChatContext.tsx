@@ -27,6 +27,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   action?: ChatAction;
+  note?: string;           // 반영 완료 후 UI에만 보여줄 문구(완료 안내). content와 분리 → AI 히스토리엔 안 들어가 흉내내지 못하게
   pendingAction?: boolean; // 스트리밍 중 마커를 감지 — 반영 버튼(숨은 JSON) 생성 중임을 표시
 }
 
@@ -442,7 +443,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const sendMessage = useCallback(async (text: string, displayText?: string, opts?: SendOptions) => {
     const apiMsg: Message = { role: 'user', content: text };
-    const apiNext: Message[] = [...messagesRef.current, apiMsg];
+    // AI에 보낼 히스토리에선 '완료 안내 문구'를 제거 — AI가 그걸 흉내 내 '정리해뒀어요'라고 말하며 마커를 빠뜨리는 것 방지.
+    // (신규 메시지는 note로 분리돼 이미 깨끗하지만, 예전에 content에 덧붙여 저장된 것까지 정리)
+    const cleanForApi = (m: Message): Message => {
+      if (m.role !== 'assistant') return m;
+      const fb = m.action?.feedback;
+      let c = m.content;
+      if (fb && c.endsWith(fb)) c = c.slice(0, -fb.length).replace(/\n+$/, '');
+      return { role: 'assistant', content: c };
+    };
+    const apiNext: Message[] = [...messagesRef.current.map(cleanForApi), apiMsg];
     // hideUser: 사용자 말풍선 없이 조용히 요청 (온보딩 자동 생성용). intro: 답변 문구를 고정.
     if (!opts?.hideUser) {
       posthog.capture('ai_message_sent'); // 사용자가 직접 보낸 채팅만 집계(자동 생성 제외)
@@ -555,13 +565,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return false;
   }, []);
 
-  // 액션 반영 완료 표시: 버튼을 '완료'로 바꾸고 완료 문구를 메시지에 덧붙임
+  // 액션 반영 완료 표시: 버튼을 '완료'로 바꾸고 완료 문구를 note(UI 전용)로 표시 — content엔 안 넣어 AI가 흉내내지 못하게
   const markActionDone = useCallback((idx: number) => {
     setMessages(prev => {
       const updated = [...prev];
       const m = updated[idx];
       if (m?.action && !m.action.done) {
-        updated[idx] = { ...m, content: (m.content ? m.content + '\n\n' : '') + m.action.feedback, action: { ...m.action, done: true } };
+        updated[idx] = { ...m, note: m.action.feedback, action: { ...m.action, done: true } };
       }
       return updated;
     });
@@ -606,11 +616,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setMessages(prev => {
       const updated = [...prev];
       const mm = updated[idx];
-      if (mm?.action) {
-        const fb = mm.action.feedback;
-        const content = fb && mm.content.endsWith(fb) ? mm.content.slice(0, -fb.length).replace(/\n+$/, '') : mm.content; // 덧붙였던 완료 문구 제거
-        updated[idx] = { ...mm, content, action: { ...mm.action, done: false } };
-      }
+      if (mm?.action) updated[idx] = { ...mm, note: undefined, action: { ...mm.action, done: false } };
       return updated;
     });
     toast('반영을 되돌렸어요. ↩︎', 'success');

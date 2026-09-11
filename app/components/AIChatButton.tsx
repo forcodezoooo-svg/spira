@@ -401,6 +401,10 @@ export default function AIChatButton() {
                         </button>
                       );
                     })()}
+                    {/* 반영 완료 안내(UI 전용, AI 히스토리엔 안 들어감) */}
+                    {msg.role === 'assistant' && msg.note && (
+                      <p className="text-[12px] leading-relaxed mt-1" style={{ color: '#5EA63A' }}>{msg.note}</p>
+                    )}
                   </div>
                 ))}
                 {/* AI가 생각 중 — 아직 답변 버블이 스트리밍되기 전 대기 상태 */}
