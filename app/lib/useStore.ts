@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { AppData, WorkspaceEntry, Program, RoutineSystem, ResourceEntry, Subscription, RevenueTarget, Workspace, PlanData, Project, QuickTask, CalendarEvent, TaskProof, TaskTimeRecord, WorkSchedule, WorkDay } from './types';
-import { empty, emptyPlan, load, save, uid, todayStr, todayDow } from './store';
+import { empty, emptyPlan, load, save, uid, todayStr, todayDow, sanitizeDuplicateIds } from './store';
 
 // ── 전역 공유 스토어 ──────────────────────────────────────────────────────────
 // 모든 useStore() 인스턴스가 '같은' 데이터를 본다. (예전엔 컴포넌트마다 독립 useState라
@@ -14,7 +14,7 @@ const subscribeStore = (cb: () => void) => { storeListeners.add(cb); return () =
 const getClientData = () => globalData;
 const getServerData = () => empty;
 // 외부(SyncProvider)에서 서버/초기 데이터로 교체할 때 사용 — 모든 화면을 즉시 갱신
-export function setGlobalStoreData(d: AppData) { globalData = d; hydrated = true; emitStore(); }
+export function setGlobalStoreData(d: AppData) { globalData = sanitizeDuplicateIds(d); hydrated = true; emitStore(); }
 // 라이브(최신) 전역 데이터 읽기 — 한 이벤트 핸들러 안에서 연속으로 여러 번 쓰기(update)할 때,
 // 훅의 렌더 스냅샷(appData)은 낡아 이전 쓰기를 못 보므로 이걸로 직전 쓰기까지 반영된 최신본을 읽는다.
 export function getGlobalStoreData() { return globalData; }

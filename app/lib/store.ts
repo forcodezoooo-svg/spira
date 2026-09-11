@@ -76,6 +76,37 @@ export const empty: AppData = {
   homeHiddenTodos: {},
 };
 
+// 전 트리에서 id 중복 제거 — 이전 버그로 프로그램/데드라인/할일/task/세부작업 id가 겹치면
+// React가 같은 key 자식을 누락시켜 화면에서 사라진다. 겹치는 id만 새 uid로 재발급(항목·데이터는 그대로 보존).
+export function sanitizeDuplicateIds(data: AppData): AppData {
+  if (!data?.workspaces?.length) return data;
+  const seen = new Set<string>();
+  const uniq = (id: string) => { let v = id || uid(); while (seen.has(v)) v = uid(); seen.add(v); return v; };
+  return {
+    ...data,
+    workspaces: data.workspaces.map(e => ({
+      ...e,
+      programs: (e.programs ?? []).map(p => ({
+        ...p,
+        id: uniq(p.id),
+        deadlines: (p.deadlines ?? []).map(d => ({
+          ...d,
+          id: uniq(d.id),
+          todos: (d.todos ?? []).map(t => ({
+            ...t,
+            id: uniq(t.id),
+            subtasks: (t.subtasks ?? []).map(s => ({
+              ...s,
+              id: uniq(s.id),
+              units: (s.units ?? []).map(u => ({ ...u, id: uniq(u.id) })),
+            })),
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
 export function load(): AppData {
   if (typeof window === 'undefined') return empty;
   try {
@@ -135,7 +166,7 @@ export function load(): AppData {
       });
     }
 
-    return { ...empty, ...parsed };
+    return sanitizeDuplicateIds({ ...empty, ...parsed });
   } catch {
     return empty;
   }
