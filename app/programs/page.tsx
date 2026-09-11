@@ -643,6 +643,11 @@ export default function ProgramsPage() {
     saveUndoSnapshot(); // 반영 직전 상태 저장 → 잘못되면 '되돌리기'로 복원
     // 연속 쓰기 중 '직전 쓰기까지 반영된' 최신 데이터를 읽기 위한 라이브 getter (렌더 스냅샷은 낡아 clobber 발생)
     const liveEntries = () => getGlobalStoreData().workspaces;
+    // program이 속할 비즈니스: program 자체 wsId 우선 → plan.wsId → 현재 비즈니스. (creates를 비즈니스별로 흩어지게 하는 핵심)
+    const progWs = (plan: QuarterPlan, prog: { wsId?: string }) => {
+      const w = prog.wsId ?? plan.wsId;
+      return (w && businesses.some(b => b.id === w)) ? w : wsId;
+    };
     try {
       const planSummary = plans.map(p => ({
         wsId: p.wsId,
@@ -689,8 +694,8 @@ export default function ProgramsPage() {
     {
       const need = new Map<string, Map<string, 'routine' | 'build'>>();
       for (const plan of plans) {
-        const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
         for (const prog of plan.programs ?? []) {
+          const targetWs = progWs(plan, prog);
           const pname = (prog.project ?? '').trim();
           if (!pname) continue;
           if (!need.has(targetWs)) need.set(targetWs, new Map());
@@ -716,8 +721,8 @@ export default function ProgramsPage() {
       const AREA_PAL = ['#7C9EF6', '#6FCF97', '#F2994A', '#BB6BD9', '#EB5757', '#56CCF2', '#F2C94C', '#27AE60'];
       const needByWs = new Map<string, Set<string>>();
       for (const plan of plans) {
-        const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
         for (const prog of plan.programs ?? []) {
+          const targetWs = progWs(plan, prog);
           const byId = prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId) : undefined;
           const nm = (prog.workAreaName ?? byId?.name ?? '').trim();
           if (!nm) continue;
@@ -741,7 +746,6 @@ export default function ProgramsPage() {
     }
     const buckets = new Map<string, Bucket>();
     for (const plan of plans) {
-      const targetWs = (plan.wsId && businesses.some(b => b.id === plan.wsId)) ? plan.wsId : wsId;
       // AI가 year/quarter를 안 주므로, 데드라인 날짜에서 유도(안 그러면 현재 분기 컨테이너에 담겨 로드맵에서 안 보임)
       const planDates = (plan.programs ?? []).flatMap(pr => (pr.deadlines ?? []).map(d => d.date)).filter((d): d is string => !!d).sort();
       const firstDate = planDates[0];
@@ -752,6 +756,7 @@ export default function ProgramsPage() {
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
       for (const prog of plan.programs ?? []) {
         if (!prog || !(prog.deadlines?.length)) continue;
+        const targetWs = progWs(plan, prog); // program별 비즈니스(없으면 plan/현재)
         // 영역 id 확정: id 직접매칭 → 이름 매칭/생성한 것(areaIdResolver) 순
         const areaName = (prog.workAreaName ?? (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId)?.name : undefined) ?? '').trim();
         const resolvedId = (prog.workAreaId && areasForWs(targetWs).some(a => a.id === prog.workAreaId)) ? prog.workAreaId

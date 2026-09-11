@@ -102,6 +102,7 @@ export type QuarterPlan = {
   year?: number;
   quarter?: number;
   programs: Array<{
+    wsId?: string; // 이 program이 속할 비즈니스(없으면 plan.wsId) — 한 원소에서도 비즈니스별로 흩어질 수 있게
     name?: string;
     goal?: string;
     project?: string; // 소속 프로젝트(큰 목표) 이름 — 같은 이름끼리 하나의 프로젝트로 묶임

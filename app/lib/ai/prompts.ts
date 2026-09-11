@@ -168,7 +168,7 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 ## A) 새로 만들기 / 미루기 / 기존 종료 → %%%QUARTER_PLAN%%%
 새 프로젝트·산출물·일정을 만들거나(신규), 기존 프로젝트 일정을 미루거나(moves), 이전 유사 업무를 종료(completes)할 때. 한 payload에 함께 담을 수 있어요.
 %%%QUARTER_PLAN%%%
-[{"wsId":"실제ID","programs":[{"project":"프로젝트 이름","workAreaId":"마케팅영역ID","workAreaName":"마케팅","deadlines":[{"name":"게시글 업로드","startDate":"2026-10-01","date":"2026-11-30","todos":[{"name":"게시글 업로드","days":[1,3,5],"deadline":"2026-11-30"}]}]},{"project":"프로젝트 이름","workAreaId":"개발영역ID","workAreaName":"개발","deadlines":[{"name":"서비스 업데이팅","date":"2026-11-30","todos":[{"name":"주간 업데이트","days":[5]}]}]}],"moves":[{"wsId":"실제ID","deadlineId":"기존 deadlineId","projectName":"Dear Diary","startDate":"2027-01-01","date":"2027-01-31"}],"completes":[{"wsId":"실제ID","deadlineId":"종료할 기존 deadlineId","projectName":"이전 게시글 계획"}]}]
+[{"programs":[{"wsId":"SpirA의ID","project":"프로젝트 이름","workAreaId":"SpirA마케팅영역ID","workAreaName":"마케팅","deadlines":[{"name":"게시글 업로드","startDate":"2026-10-01","date":"2026-11-30","todos":[{"name":"게시글 업로드","days":[1,3,5],"deadline":"2026-11-30"}]}]},{"wsId":"SpirA의ID","project":"프로젝트 이름","workAreaId":"SpirA개발영역ID","workAreaName":"개발","deadlines":[{"name":"서비스 업데이팅","date":"2026-11-30","todos":[{"name":"주간 업데이트","days":[5]}]}]},{"wsId":"floaty의ID","project":"floaty 개편","workAreaId":"floaty디자인영역ID","workAreaName":"디자인","deadlines":[{"name":"UI 리디자인","date":"2026-12-15","todos":[{"name":"시안 작업","days":[2,4]}]}]}],"moves":[{"wsId":"DearDiary의ID","deadlineId":"기존 deadlineId","projectName":"Dear Diary 베타","startDate":"2027-01-01"}],"completes":[{"wsId":"SpirA의ID","deadlineId":"종료할 기존 deadlineId","projectName":"이전 게시글 계획"}]}]
 
 ### ⚠️ 업무 영역 분리 — 매우 중요
 - **모든 업무를 한 영역에 몰아넣지 마세요.** 각 업무의 성격에 맞는 업무영역에 넣으세요.
@@ -181,7 +181,8 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 - **서로 다른 비즈니스의 업무를 한 원소에 섞지 마세요.** 여러 비즈니스가 나오면 **비즈니스마다 별도의 배열 원소 {wsId, programs, moves, completes}** 를 만드세요.
   - 예: SpirA·주우·Dear Diary가 섞이면 → \`[{"wsId":"SpirA의ID","programs":[...]},{"wsId":"주우의ID","programs":[...]},{"wsId":"DearDiary의ID","moves":[...]}]\` 처럼 원소 3개.
 - 각 wsId는 컨텍스트 "## 워크스페이스: 이름 (wsId: …)"의 실제 값. 어느 비즈니스 얘긴지 이름으로 정확히 매칭.
-- ★ 완전성(빠뜨리지 마세요) ★: 사용자 입력에 **여러 비즈니스가 등장하면, 등장한 모든 비즈니스에 대해** 각각 배열 원소를 만들어 **하나도 빠뜨리지 말고** programs/moves/completes를 채우세요. 예를 들어 입력이 "SpirA … / floaty … / Zo%o … / Dear Diary …"처럼 4개 비즈니스를 다루면 **배열에 원소가 최소 4개** 나와야 합니다(각 비즈니스에 해당하는 내용이 전부 반영되도록). SpirA만 처리하고 나머지를 누락하면 안 됩니다. JSON을 내기 전에 "입력에 나온 비즈니스가 전부 배열에 있는가?"를 스스로 점검하세요.
+- ★★ 새 task는 각 program에 wsId를 직접 넣기 (가장 확실) ★★: 새로 만드는 **각 program 객체에 그 program이 속할 비즈니스의 `wsId`를 직접** 넣으세요. 그러면 배열을 비즈니스별로 완벽히 나누지 못해도 각 program이 올바른 비즈니스로 갑니다. 예: \`{"wsId":"SpirA의ID","project":"…","workAreaId":"…","workAreaName":"마케팅","deadlines":[…]}\`. **서로 다른 비즈니스의 새 task는 program마다 서로 다른 wsId**를 가져야 합니다 — 전부 한 비즈니스(현재 비즈니스)로 몰아넣으면 안 됩니다.
+- ★ 완전성(빠뜨리지 마세요) ★: 사용자 입력에 **여러 비즈니스가 등장하면, 등장한 모든 비즈니스에 대해** programs/moves를 **하나도 빠뜨리지 말고** 채우세요. 입력이 "SpirA … / floaty … / Zo%o … / Dear Diary …"처럼 4개 비즈니스를 다루면 **4개 비즈니스 각각의 새 task가 각자 wsId를 달고** 나와야 합니다. 한 비즈니스(예: SpirA)에만 넣고 나머지를 누락하면 안 됩니다. JSON을 내기 전에 "입력에 나온 비즈니스가 전부 (program.wsId 또는 원소 wsId로) 담겼는가?"를 점검하세요.
 
 ### programs / moves / completes
 - programs: 새로 만들 것. deadline에 date(기한, 오늘 이후)·startDate, todos에 산출물/할일(반복이면 days=[0=일~6=토]).
