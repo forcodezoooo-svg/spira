@@ -36,7 +36,6 @@ const STATUS_META: Record<string, { label: string; bg: string; color: string }> 
 };
 const HEAD_H = 30;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-const CHILD_NAME: Partial<Record<Lvl, string>> = { deadline: '프로젝트', todo: '영역별 산출물', subtask: 'task', unit: '세부 작업' };
 // minSpan = 데이터가 적어도 최소 이만큼 날짜 범위를 확보(넓게 스크롤). 상한은 안전용 CAP.
 const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> = {
   year: { pxPerDay: 4, buffer: 400, minSpan: 3660 },   // ±5년
@@ -491,15 +490,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     return {};
   };
   // 로드맵에서는 내용을 직접 추가/편집하지 않고 Plan의 해당 사업목표로 이동해 수정·추가한다.
-  const openInPlan = (wsId?: string, programId?: string) => {
-    const prog = programId ? programs.find(p => p.id === programId) : undefined;
-    const qs = new URLSearchParams();
-    if (wsId) qs.set('ws', wsId);
-    if (prog?.planGoalId) qs.set('goal', prog.planGoalId);
-    else if (prog?.name) qs.set('goalName', prog.name);
-    const s = qs.toString();
-    router.push(s ? `/plan?${s}` : '/plan');
-  };
   // 로드맵에서 산출물(영역별 산출물)을 프로젝트 아래에 바로 추가
   const addTodoInline = (r: Row) => {
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
