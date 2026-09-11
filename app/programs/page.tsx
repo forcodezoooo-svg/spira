@@ -643,7 +643,17 @@ export default function ProgramsPage() {
     saveUndoSnapshot(); // 반영 직전 상태 저장 → 잘못되면 '되돌리기'로 복원
     // 연속 쓰기 중 '직전 쓰기까지 반영된' 최신 데이터를 읽기 위한 라이브 getter (렌더 스냅샷은 낡아 clobber 발생)
     const liveEntries = () => getGlobalStoreData().workspaces;
-    try { console.log('[Spira apply] start', { myBusinesses: businesses.map(b => ({ id: b.id, name: b.name })), currentWs: wsId, plans }); } catch { /* noop */ }
+    try {
+      const planSummary = plans.map(p => ({
+        wsId: p.wsId,
+        wsName: businesses.find(b => b.id === p.wsId)?.name ?? '(매칭안됨)',
+        programs: (p.programs ?? []).map(pr => ({ area: pr.workAreaName ?? pr.workAreaId, project: pr.project, deadlines: (pr.deadlines ?? []).length, todos: (pr.deadlines ?? []).reduce((s, d) => s + (d.todos?.length ?? 0), 0) })),
+        moves: (p.moves ?? []).length,
+        completes: (p.completes ?? []).length,
+      }));
+      console.log('[Spira apply] start — 비즈니스', plans.length, '개:', JSON.stringify(planSummary));
+      console.log('[Spira apply] 내 비즈니스:', JSON.stringify(businesses.map(b => ({ id: b.id, name: b.name }))));
+    } catch { /* noop */ }
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
     let focusWs: string | null = null; // 반영 후 이 비즈니스로 화면 전환(안 하면 다른 비즈니스에 생겨 안 보임)
@@ -927,11 +937,11 @@ export default function ProgramsPage() {
     }
     try {
       const moveReqs = plans.flatMap(p => p.moves ?? []);
-      console.log('[Spira apply] done', {
-        createdBuckets: [...buckets.values()].map(b => ({ ws: b.targetWs, area: b.areaName, areaId: b.areaId, deadlines: b.deadlines.length })),
-        moveResults: moveReqs.map(mv => ({ deadlineId: mv.deadlineId, projectName: mv.projectName, wsId: mv.wsId, matched: !!(mv.deadlineId || mv.projectName ? findDeadline(mv.deadlineId, mv.projectName, mv.wsId) : (mv.wsId ? 'wholeBusiness' : false)) })),
+      console.log('[Spira apply] done:', JSON.stringify({
+        createdBuckets: [...buckets.values()].map(b => ({ ws: b.targetWs, area: b.areaName, deadlines: b.deadlines.length })),
+        moveResults: moveReqs.map(mv => ({ projectName: mv.projectName, wsId: mv.wsId, matched: !!(mv.deadlineId || mv.projectName ? findDeadline(mv.deadlineId, mv.projectName, mv.wsId) : (mv.wsId ? 'wholeBusiness' : false)) })),
         movedCount, doneCount,
-      });
+      }));
     } catch { /* noop */ }
     // 반영 결과를 항상 토스트로 안내(생성 포함) — "반영 안 됨"으로 오해하지 않게
     const createdCount = [...buckets.values()].reduce((s, b) => s + b.deadlines.length, 0);
