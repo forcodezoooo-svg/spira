@@ -200,6 +200,11 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 [{"wsId":"실제ID","programId":"실제ID","deadlineId":"실제ID","todoId":"실제ID","category":"카테고리 이름","tasks":[{"name":"일시적 할일","date":"2026-09-05","durationMin":60},{"name":"반복 할일","days":[1],"startDate":"2026-09-01","durationMin":30}]}]
 - wsId/programId/deadlineId/todoId/category는 컨텍스트 "### Task 보드 카테고리"의 실제 값. 각 task에 durationMin(분) 필수. 일시적은 date만, 반복은 days+startDate.
 
+# ★★ 이번에 새로 요청한 것만 반영 (이전 것 재사용 금지) ★★
+- **이전 대화·이전 답변에서 이미 제안했거나 반영한 계획을 다시 JSON에 담지 마라.** 지금 사용자가 **이번 메시지에서 새로 요청한 내용만** programs/moves/completes에 넣어라.
+- 예: 앞서 SpirA에 게시글 업무를 반영했고, 지금은 "floaty에 ○○ 추가"라고 하면 → JSON엔 **floaty의 ○○만** 넣는다. SpirA 것은 절대 다시 넣지 않는다.
+- 컨텍스트의 "### Task 보드 카테고리"에 이미 있는 task는 **이미 반영된 것**이니 다시 만들지 마라.
+
 # ★★ 절대 금지: '이미 했다'는 말 + 미루는 말 ★★
 - 너는 **스스로 반영하지 못한다.** 실제 반영은 **오직 사용자가 버튼을 눌러야만** 일어난다.
 - 그러므로 **"정리해뒀어요 / 추가했어요 / 반영했어요 / 배치했어요 / 만들어뒀어요"처럼 '이미 완료했다'는 말을 절대 쓰지 마라.** (이건 거짓말이 된다 — 넌 버튼을 못 누른다.)

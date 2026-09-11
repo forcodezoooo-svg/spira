@@ -749,9 +749,6 @@ export default function ProgramsPage() {
     const addedHighlightIds = new Set<string>();
     let createdTaskCount = 0;
     for (const g of areaGroups.values()) {
-      if (!focusWs) focusWs = g.targetWs;
-      g.tasks.forEach(t => addedHighlightIds.add(t.id));
-      createdTaskCount += g.tasks.length;
       const entry = liveEntries().find(e => e.workspace.id === g.targetWs);
       const areaNrm = nrm(g.areaName ?? '');
       // 이 사업의 fromPlan 카테고리(todo) 중 '영역이 같은 미완료 카테고리' 하나 찾기 (보드 그룹핑 기준과 동일)
@@ -764,15 +761,23 @@ export default function ProgramsPage() {
         }
         if (target) break;
       }
+      // 이미 이 사업에 같은 이름의 미완료 task가 있으면 중복 추가하지 않음(AI가 이전 계획을 다시 담아도 재반영 방지)
+      const existingNames = new Set<string>();
+      for (const p of entry?.programs ?? []) for (const d of p.deadlines ?? []) for (const t of d.todos ?? []) for (const s of t.subtasks ?? []) if (!s.done) existingNames.add(nrm(s.name));
+      const fresh = g.tasks.filter(t => !existingNames.has(nrm(t.name)));
+      if (!fresh.length) continue; // 새로 추가할 게 없으면 skip (이미 반영된 것)
+      if (!focusWs) focusWs = g.targetWs;
+      fresh.forEach(t => addedHighlightIds.add(t.id));
+      createdTaskCount += fresh.length;
       if (target) {
         // 기존 카테고리 안에 task(subtask) 추가
         const prog = entry!.programs.find(p => p.id === target!.progId)!;
-        store.updateProgramInWs(g.targetWs, { ...prog, fromPlan: true, deadlines: (prog.deadlines ?? []).map(d => d.id !== target!.dlId ? d : ({ ...d, todos: d.todos.map(t => t.id !== target!.todoId ? t : ({ ...t, subtasks: [...(t.subtasks ?? []), ...g.tasks] })) })) });
+        store.updateProgramInWs(g.targetWs, { ...prog, fromPlan: true, deadlines: (prog.deadlines ?? []).map(d => d.id !== target!.dlId ? d : ({ ...d, todos: d.todos.map(t => t.id !== target!.todoId ? t : ({ ...t, subtasks: [...(t.subtasks ?? []), ...fresh] })) })) });
       } else {
         // 그 영역에 카테고리가 없음 → 카테고리 하나 생성(이름 앞에 영역 붙여 보드에서 그 영역으로 그룹핑). 영역 컨테이너 있으면 거기, 없으면 새 컨테이너.
         const catId = uid(); addedHighlightIds.add(catId);
         const catName = g.areaName ? `${g.areaName}: 새 업무` : '새 업무';
-        const dl = { id: uid(), name: catName, date: getQuarterEndDate(g.py, g.pq), todos: [{ id: catId, name: catName, done: false, subtasks: g.tasks }] };
+        const dl = { id: uid(), name: catName, date: getQuarterEndDate(g.py, g.pq), todos: [{ id: catId, name: catName, done: false, subtasks: fresh }] };
         const cont = (entry?.programs ?? []).find(p => g.areaId && p.workAreaId === g.areaId);
         if (cont) store.updateProgramInWs(g.targetWs, { ...cont, fromPlan: true, deadlines: [...(cont.deadlines ?? []), dl] });
         else store.addProgramToWs(g.targetWs, { name: g.areaName ?? '목표', goal: '', color: businessColor(g.targetWs), workAreaId: g.areaId, fromPlan: true, year: g.py, quarter: g.pq, quarters: [qKey(g.py, g.pq)], order: order++, deadlines: [dl] });
