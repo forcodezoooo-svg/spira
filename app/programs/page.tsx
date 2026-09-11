@@ -666,56 +666,10 @@ export default function ProgramsPage() {
     let focusWs: string | null = null; // 반영 후 이 비즈니스로 화면 전환(안 하면 다른 비즈니스에 생겨 안 보임)
     let order = nextOrder();
     const touchedAreas = new Set<string>(); // 생성된 영역만 펼치기 위한 키(영역명 또는 미분류)
-    const touchedProjectKeys = new Set<string>(); // 생성된 프로젝트 박스(wsId::projectId)도 펼쳐서 바로 보이게
-    // (사업 × 업무영역)별로 데드라인을 모은다 — 한 영역 안에서 사업당 컨테이너(데드라인 박스)는 하나만 유지
-    type Bucket = { targetWs: string; py: number; pq: number; areaId?: string; areaName?: string; deadlines: ReturnType<typeof buildDeadlines> };
     // 과거/누락 날짜는 절대 저장하지 않는다 — 오늘 이후만 통과
     const clampFuture = (d?: string) => (d && d >= todayKey ? d : undefined);
     const nowY = new Date().getFullYear();
     const nowQ = Math.floor(new Date().getMonth() / 3) + 1;
-    const buildDeadlines = (prog: NonNullable<QuarterPlan['programs']>[number], py: number, pq: number, projectId?: string) =>
-      (prog.deadlines ?? []).map(d => {
-        const dlDate = clampFuture(d.date) ?? getQuarterEndDate(py, pq); // 과거면 분기말(미래)로
-        const dlStart = clampFuture(d.startDate); // AI가 준 시작일(미래만)
-        return {
-          id: uid(),
-          name: d.name,
-          date: dlDate,
-          ...(dlStart ? { startDate: dlStart } : {}),
-          ...(projectId ? { projectId } : {}),
-          // 할일 날짜도 오늘 이후만 저장 — 과거/누락이면 자체 마감→데드라인 날짜로 보정
-          todos: (d.todos ?? []).map(t => {
-            if (typeof t === 'string') return { id: uid(), name: t, done: false };
-            const td = clampFuture(t.date) ?? clampFuture(t.deadline) ?? dlDate;
-            return { id: uid(), name: t.name, done: false, days: t.days, light: t.light, date: td, deadline: clampFuture(t.deadline) ?? td };
-          }),
-        };
-      });
-    // 프로젝트 준비: 계획에 등장하는 project 이름을 사업별로 모아, 없는 것은 새로 만들고 이름→id 매핑
-    const projectIdByName = new Map<string, string>(); // `${ws}::${name}` -> id
-    {
-      const need = new Map<string, Map<string, 'routine' | 'build'>>();
-      for (const plan of plans) {
-        for (const prog of plan.programs ?? []) {
-          const targetWs = progWs(plan, prog);
-          const pname = (prog.project ?? '').trim();
-          if (!pname) continue;
-          if (!need.has(targetWs)) need.set(targetWs, new Map());
-          if (!need.get(targetWs)!.has(pname)) need.get(targetWs)!.set(pname, prog.projectType === 'routine' ? 'routine' : 'build');
-        }
-      }
-      need.forEach((names, ws) => {
-        const entry = store.allWorkspacesEntries.find(e => e.workspace.id === ws);
-        const existing = entry?.plan.projects ?? [];
-        const toAdd: { id: string; name: string; type: 'routine' | 'build'; order: number }[] = [];
-        names.forEach((type, name) => {
-          const found = existing.find(p => p.name === name);
-          if (found) projectIdByName.set(`${ws}::${name}`, found.id);
-          else { const id = uid(); projectIdByName.set(`${ws}::${name}`, id); toAdd.push({ id, name, type, order: existing.length + toAdd.length }); }
-        });
-        if (toAdd.length && entry) store.updatePlanInWs(ws, { ...entry.plan, projects: [...existing, ...toAdd] });
-      });
-    }
     // ── 업무영역 준비: workAreaId가 안 맞으면 workAreaName으로 찾고, 그래도 없으면 그 영역을 새로 만들어 확실히 분리 ──
     const nrm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
     const areaIdResolver = new Map<string, string>(); // `${ws}::${nrm(areaName)}` -> areaId
@@ -746,57 +700,71 @@ export default function ProgramsPage() {
         if (changed) store.updatePlanInWs(ws, { ...entry.plan, workAreas: areas });
       });
     }
-    const buckets = new Map<string, Bucket>();
+    // 새 업무(deliverable)를 '해당 업무영역의 기존 카테고리 안 task(subtask)'로 추가. 맞는 카테고리가 없을 때만 그 영역에 카테고리 하나 생성. (사용자 선택 구조)
+    const normDur = (m?: number) => { const v = (typeof m === 'number' && m > 0) ? m : 30; return Math.max(5, Math.round(v / 5) * 5); };
+    type TaskAdd = { id: string; name: string; done: boolean; days?: number[]; date?: string; deadline?: string; durationMin: number };
+    type AreaGroup = { targetWs: string; areaId?: string; areaName?: string; py: number; pq: number; tasks: TaskAdd[] };
+    const areaGroups = new Map<string, AreaGroup>();
     for (const plan of plans) {
-      // AI가 year/quarter를 안 주므로, 데드라인 날짜에서 유도(안 그러면 현재 분기 컨테이너에 담겨 로드맵에서 안 보임)
+      // AI가 year/quarter를 안 주므로, 데드라인 날짜에서 유도
       const planDates = (plan.programs ?? []).flatMap(pr => (pr.deadlines ?? []).map(d => d.date)).filter((d): d is string => !!d).sort();
       const firstDate = planDates[0];
       let py = plan.year ?? (firstDate ? Number(firstDate.slice(0, 4)) : year);
       let pq = plan.quarter ?? (firstDate ? Math.floor((Number(firstDate.slice(5, 7)) - 1) / 3) + 1 : quarter);
-      // 과거 분기로 생성됐으면 현재 분기로 보정 (2023 등 방지)
-      if (py < nowY || (py === nowY && pq < nowQ)) { py = nowY; pq = nowQ; }
+      if (py < nowY || (py === nowY && pq < nowQ)) { py = nowY; pq = nowQ; } // 과거 분기 방지
       if (firstYear === null) { firstYear = py; firstQuarter = pq; }
+      const qEnd = getQuarterEndDate(py, pq);
+      const mkTask = (name: string, days?: number[], date?: string, deadline?: string, durationMin?: number): TaskAdd => {
+        const dd = days?.length ? days : undefined;
+        const d0 = clampFuture(date) ?? clampFuture(deadline) ?? qEnd;
+        return dd
+          ? { id: uid(), name, done: false, days: dd, date: clampFuture(date) ?? todayKey, durationMin: normDur(durationMin) }
+          : { id: uid(), name, done: false, date: d0, deadline: clampFuture(deadline) ?? d0, durationMin: normDur(durationMin) };
+      };
       for (const prog of plan.programs ?? []) {
         if (!prog || !(prog.deadlines?.length)) continue;
-        const targetWs = progWs(plan, prog); // program별 비즈니스(없으면 plan/현재)
-        // 영역 id 확정: id 직접매칭 → 이름 매칭/생성한 것(areaIdResolver) 순
+        const targetWs = progWs(plan, prog);
         const areaName = (prog.workAreaName ?? (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId)?.name : undefined) ?? '').trim();
         const resolvedId = (prog.workAreaId && areasForWs(targetWs).some(a => a.id === prog.workAreaId)) ? prog.workAreaId
           : (areaName ? areaIdResolver.get(`${targetWs}::${nrm(areaName)}`) : undefined);
-        // resolver에서 만든/찾은 id를 그대로 사용 — areasForWs 재읽기는 렌더 스냅샷이라 방금 만든 영역을 못 찾음
         const area = resolvedId ? { id: resolvedId, name: areaName } : undefined;
         touchedAreas.add(area?.name ?? NONE);
         const key = `${targetWs}::${area?.id ?? '__none__'}`;
-        const pname = (prog.project ?? '').trim();
-        const projectId = pname ? projectIdByName.get(`${targetWs}::${pname}`) : undefined;
-        if (projectId) touchedProjectKeys.add(`${targetWs}::${projectId}`);
-        const dls = buildDeadlines(prog, py, pq, projectId);
-        const b = buckets.get(key);
-        if (b) b.deadlines.push(...dls);
-        else buckets.set(key, { targetWs, py, pq, areaId: area?.id, areaName: area?.name, deadlines: dls });
+        const g = areaGroups.get(key) ?? { targetWs, areaId: area?.id, areaName: area?.name, py, pq, tasks: [] };
+        for (const d of prog.deadlines ?? []) {
+          const todos = d.todos ?? [];
+          if (todos.length) for (const t of todos) g.tasks.push(typeof t === 'string' ? mkTask(t) : mkTask(t.name, t.days, t.date, t.deadline));
+          else g.tasks.push(mkTask(d.name, undefined, d.startDate, d.date)); // 산출물이 없으면 데드라인 이름 자체를 task로
+        }
+        areaGroups.set(key, g);
       }
     }
-    // 각 (사업 × 영역) 컨테이너에 반영 — 기존 컨테이너가 있으면 데드라인만 추가, 없으면 하나만 생성
-    for (const b of buckets.values()) {
-      if (!focusWs) { focusWs = b.targetWs; firstYear = b.py; firstQuarter = b.pq; } // 첫 생성물 위치로 화면 이동
-      const entry = liveEntries().find(e => e.workspace.id === b.targetWs);
-      const existing = entry?.programs.find(p => (p.workAreaId ?? '__none__') === (b.areaId ?? '__none__'));
-      if (existing) {
-        // fromPlan:true 보장 — 로드맵/Task 보드는 fromPlan 컨테이너만 표시하므로, 아니면 추가한 게 안 보임
-        store.updateProgramInWs(b.targetWs, { ...existing, fromPlan: true, deadlines: [...(existing.deadlines ?? []), ...b.deadlines] });
-      } else {
-        store.addProgramToWs(b.targetWs, {
-          name: b.areaName ?? '목표',
-          goal: '',
-          color: businessColor(b.targetWs),
-          workAreaId: b.areaId,
-          fromPlan: true, // 새 구조의 로드맵/Task 보드는 fromPlan만 표시하므로
-          year: b.py,
-          quarter: b.pq,
-          quarters: [qKey(b.py, b.pq)],
-          order: order++,
-          deadlines: b.deadlines,
+    // 반영: 각 (사업×영역)의 기존 카테고리(todo) 안에 task 추가, 없으면 그 영역에 카테고리 하나 생성
+    const addedHighlightIds = new Set<string>();
+    let createdTaskCount = 0;
+    for (const g of areaGroups.values()) {
+      if (!focusWs) focusWs = g.targetWs;
+      g.tasks.forEach(t => addedHighlightIds.add(t.id));
+      createdTaskCount += g.tasks.length;
+      const mkCategoryDeadline = () => { const catId = uid(); addedHighlightIds.add(catId); return { id: uid(), name: g.areaName ?? '업무', date: getQuarterEndDate(g.py, g.pq), todos: [{ id: catId, name: g.areaName ?? '업무', done: false, subtasks: g.tasks }] }; };
+      const entry = liveEntries().find(e => e.workspace.id === g.targetWs);
+      const container = entry?.programs.find(p => (p.workAreaId ?? '__none__') === (g.areaId ?? '__none__'));
+      if (container) {
+        // 이 컨테이너의 첫 '미완료 카테고리(todo)' 안에 task 추가; 카테고리가 하나도 없으면 새로 생성
+        let placed = false;
+        const newDeadlines = (container.deadlines ?? []).map(d => {
+          if (placed) return d;
+          const todos = [...(d.todos ?? [])];
+          const idx = todos.findIndex(t => !t.done);
+          if (idx < 0) return d;
+          todos[idx] = { ...todos[idx], subtasks: [...(todos[idx].subtasks ?? []), ...g.tasks] };
+          placed = true;
+          return { ...d, todos };
         });
+        const deadlines = placed ? newDeadlines : [...(container.deadlines ?? []), mkCategoryDeadline()];
+        store.updateProgramInWs(g.targetWs, { ...container, fromPlan: true, deadlines });
+      } else {
+        store.addProgramToWs(g.targetWs, { name: g.areaName ?? '목표', goal: '', color: businessColor(g.targetWs), workAreaId: g.areaId, fromPlan: true, year: g.py, quarter: g.pq, quarters: [qKey(g.py, g.pq)], order: order++, deadlines: [mkCategoryDeadline()] });
       }
     }
     // 기존 프로젝트(데드라인)를 deadlineId → 데드라인 이름(정확/부분) → 소속 프로젝트 이름 순으로 찾기
@@ -943,21 +911,18 @@ export default function ProgramsPage() {
       }
     }
     // 반영 결과를 항상 토스트로 안내(생성 포함) — "반영 안 됨"으로 오해하지 않게
-    const createdCount = [...buckets.values()].reduce((s, b) => s + b.deadlines.length, 0);
     const parts: string[] = [];
-    if (createdCount) parts.push(`새 업무 ${createdCount}개`);
+    if (createdTaskCount) parts.push(`task ${createdTaskCount}개 추가`);
     if (movedCount) parts.push(`프로젝트 ${movedCount}개 이동`);
     if (doneCount) parts.push(`기존 ${doneCount}개 종료`);
     if (parts.length) toast(parts.join(' · ') + ' 반영했어요. 🌿', 'success');
-    // 방금 생성된 카테고리(todo)·task(subtask) id 수집 → Task 보드에서 테두리 하이라이트
-    const added = new Set<string>();
-    for (const b of buckets.values()) for (const d of b.deadlines) for (const t of (d.todos ?? [])) added.add(t.id);
-    if (added.size) setJustAddedIds(added);
+    // 방금 추가된 task(및 새로 만든 카테고리) id → Task 보드에서 테두리 하이라이트
+    if (addedHighlightIds.size) setJustAddedIds(addedHighlightIds);
     // 반영 결과가 다른 비즈니스에 생겼어도 보이도록 '전체 비즈니스 표시'로 전환(특정 비즈니스로 좁히면 나머지가 숨겨져 '사라진 것처럼' 보임) + 해당 분기로 이동
     if (focusWs) setFilterWsId(null);
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
-    if (touchedAreas.size || touchedProjectKeys.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas, ...touchedProjectKeys]));
+    if (touchedAreas.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas]));
   };
 
   // AI가 기존 데드라인을 프로젝트로 정리 — 프로젝트를 만들고(있으면 재사용) 데드라인에 projectId 배정
