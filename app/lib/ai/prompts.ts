@@ -181,7 +181,7 @@ export const ROUTINE_SYSTEM = `${PERSONA}
 - **서로 다른 비즈니스의 업무를 한 원소에 섞지 마세요.** 여러 비즈니스가 나오면 **비즈니스마다 별도의 배열 원소 {wsId, programs, moves, completes}** 를 만드세요.
   - 예: SpirA·주우·Dear Diary가 섞이면 → \`[{"wsId":"SpirA의ID","programs":[...]},{"wsId":"주우의ID","programs":[...]},{"wsId":"DearDiary의ID","moves":[...]}]\` 처럼 원소 3개.
 - 각 wsId는 컨텍스트 "## 워크스페이스: 이름 (wsId: …)"의 실제 값. 어느 비즈니스 얘긴지 이름으로 정확히 매칭.
-- ★★ 새 task는 각 program에 wsId를 직접 넣기 (가장 확실) ★★: 새로 만드는 **각 program 객체에 그 program이 속할 비즈니스의 `wsId`를 직접** 넣으세요. 그러면 배열을 비즈니스별로 완벽히 나누지 못해도 각 program이 올바른 비즈니스로 갑니다. 예: \`{"wsId":"SpirA의ID","project":"…","workAreaId":"…","workAreaName":"마케팅","deadlines":[…]}\`. **서로 다른 비즈니스의 새 task는 program마다 서로 다른 wsId**를 가져야 합니다 — 전부 한 비즈니스(현재 비즈니스)로 몰아넣으면 안 됩니다.
+- ★★ 새 task는 각 program에 wsId를 직접 넣기 (가장 확실) ★★: 새로 만드는 **각 program 객체에 그 program이 속할 비즈니스의 wsId를 직접** 넣으세요. 그러면 배열을 비즈니스별로 완벽히 나누지 못해도 각 program이 올바른 비즈니스로 갑니다. 예: {"wsId":"SpirA의ID","project":"…","workAreaId":"…","workAreaName":"마케팅","deadlines":[…]}. **서로 다른 비즈니스의 새 task는 program마다 서로 다른 wsId**를 가져야 합니다 — 전부 한 비즈니스(현재 비즈니스)로 몰아넣으면 안 됩니다.
 - ★ 완전성(빠뜨리지 마세요) ★: 사용자 입력에 **여러 비즈니스가 등장하면, 등장한 모든 비즈니스에 대해** programs/moves를 **하나도 빠뜨리지 말고** 채우세요. 입력이 "SpirA … / floaty … / Zo%o … / Dear Diary …"처럼 4개 비즈니스를 다루면 **4개 비즈니스 각각의 새 task가 각자 wsId를 달고** 나와야 합니다. 한 비즈니스(예: SpirA)에만 넣고 나머지를 누락하면 안 됩니다. JSON을 내기 전에 "입력에 나온 비즈니스가 전부 (program.wsId 또는 원소 wsId로) 담겼는가?"를 점검하세요.
 
 ### programs / moves / completes
