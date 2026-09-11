@@ -979,6 +979,17 @@ export default function ProgramsPage() {
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
     if (touchedAreas.size || touchedProjectKeys.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas, ...touchedProjectKeys]));
+    // 검증: 반영 직후 실제 저장된 데이터를 되읽어, 생성한 데드라인 id가 각 비즈니스에 실제로 들어갔는지 확인
+    try {
+      const touchedWs = new Set([...buckets.values()].map(b => b.targetWs));
+      const createdDlIds = new Set([...buckets.values()].flatMap(b => b.deadlines.map(d => d.id)));
+      const verify = liveEntries().filter(e => touchedWs.has(e.workspace.id)).map(e => {
+        const allDls = e.programs.flatMap(p => (p.deadlines ?? []));
+        const found = allDls.filter(d => createdDlIds.has(d.id)).map(d => d.name);
+        return { ws: e.workspace.name, fromPlanPrograms: e.programs.filter(p => p.fromPlan).length, totalPrograms: e.programs.length, createdDlFound: found };
+      });
+      console.log('[Spira verify] 저장확인:', JSON.stringify(verify), '| filterWsId→null, year/q:', firstYear, firstQuarter);
+    } catch { /* noop */ }
   };
 
   // AI가 기존 데드라인을 프로젝트로 정리 — 프로젝트를 만들고(있으면 재사용) 데드라인에 projectId 배정
