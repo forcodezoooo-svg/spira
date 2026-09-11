@@ -32,7 +32,7 @@ export interface Message {
 export interface SendOptions {
   hideUser?: boolean;  // 사용자 말풍선 없이 조용히 요청
   intro?: string;      // 답변 문구를 이 문구로 고정 (모델 산문 대신)
-  autoApply?: boolean; // 응답에 반영 액션이 있으면 버튼 없이 바로 반영 (시작 칩용)
+  autoApply?: boolean; // 응답에 반영 액션이 있으면 버튼 없이 바로 반영 (Plan 항목별 채우기 전용)
   financeMode?: boolean; // 재무 계획 상담 — §25 CORE INSTRUCTION 적용
 }
 
@@ -321,7 +321,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const financeHandlerRef = useRef<((proposal: FinReplanProposal) => void) | null>(null);
   // 페이지 핸들러가 등록될 때 대기 중인 액션을 반영(아래에서 실제 함수 주입)
   const flushPendingRef = useRef<((marker: string) => void) | null>(null);
-  // autoApply용: 액션을 즉시 반영하는 함수(아래에서 주입)
+  // autoApply용(Plan 항목별 채우기): 액션을 즉시 반영하는 함수(아래에서 주입)
   const runActionRef = useRef<((idx: number, action: ChatAction) => void) | null>(null);
   // 마지막으로 버튼이 떴던 액션 — "다시해줘/응" 같은 재확인 때 AI가 마커를 빠뜨려도 버튼을 다시 붙이기 위함
   const lastActionRef = useRef<ChatAction | null>(null);
@@ -459,15 +459,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const path = typeof window !== 'undefined' ? window.location.pathname : '';
       const onPlanRoute = path === '/plan';
       const onProgramsRoute = path === '/programs'; // Process 페이지: 업무(task) 설계·추가 모드
-      // 진단: AI에게 보내는 앱 컨텍스트가 완전한지(비즈니스·업무영역 수) 확인
-      try {
-        const ctx = appContextRef.current || '';
-        const wsCount = (ctx.match(/## 워크스페이스:/g) || []).length;
-        const areaCount = (ctx.match(/### 업무 영역/g) || []).length;
-        const catCount = (ctx.match(/### Task 보드 카테고리/g) || []).length;
-        console.log('[Spira ctx] 길이:', ctx.length, '| 비즈니스:', wsCount, '| 업무영역섹션:', areaCount, '| 카테고리섹션:', catCount);
-        console.log('[Spira ctx] 내용:', ctx);
-      } catch { /* noop */ }
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -524,19 +515,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // 자동 반영 마커가 있으면 즉시 반영하지 않고 '앱에 반영' 버튼(액션)으로 메시지에 붙인다.
       // 반영은 버튼 클릭 시점에 Pro/온보딩 게이트를 통과해야 실행됨 → '대화'와 '유료 기능'을 분리.
       const action = extractAction(full);
-      // 진단: AI 원본 응답 전체 + 마커/파싱 결과 (버튼이 왜 안 뜨는지 확인용)
-      try { console.log('[Spira AI raw]', { hasMarker: /%%%[A-Z_]+%%%/.test(full), actionFound: !!action, marker: action?.marker, full }); } catch { /* noop */ }
       if (action) {
         const { display, ...act } = action;
         lastActionRef.current = act; // 재확인 대비 기억
-        const targetIdx = messagesRef.current.length - 1; // 마지막 assistant 메시지 인덱스
+        const targetIdx = messagesRef.current.length - 1;
         setMessages(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: 'assistant', content: opts?.intro ?? display ?? '', action: act };
           return updated;
         });
-        // 시작 칩 등에서 autoApply면 버튼 없이 즉시 반영 (게이트는 그대로 — 무료는 유료 안내)
-        if (opts?.autoApply) runActionRef.current?.(targetIdx, act);
+        if (opts?.autoApply) runActionRef.current?.(targetIdx, act); // Plan 항목별 채우기: 버튼 없이 즉시 반영
       } else if (isReconfirm(text) && (lastActionRef.current || [...messagesRef.current].slice(0, -1).reverse().find(m => m.role === 'assistant' && m.action))) {
         // AI가 마커를 빠뜨렸지만 "다시해줘/응/반영해줘" 류 재확인 → 직전 계획 버튼을 다시 붙임(모델 비의존 안전장치)
         // ref가 비어도(리로드 등) 채팅 이력에서 마지막 액션을 찾아 되살림 → '다시해줘'가 항상 동작
@@ -610,7 +598,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const canAutofill = isProRef.current || isOnboardingActive();
     if (!canAutofill) { upgradeRef.current('autofill'); return; }
     posthog.capture('ai_action_applied', { marker: action.marker, label: action.label }); // AI 제안을 앱에 반영
-    try { console.log('[Spira AI action]', action.marker, JSON.stringify(action.payload)); } catch { /* noop */ } // 진단용: 어떤 마커/데이터로 반영되는지
     if (applyToHandler(action.marker, action.payload)) {
       markActionDone(idx);
     } else {

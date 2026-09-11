@@ -661,17 +661,6 @@ export default function ProgramsPage() {
       if (plan.wsId && businesses.some(b => b.id === plan.wsId)) return plan.wsId;
       return wsId;
     };
-    try {
-      const planSummary = plans.map(p => ({
-        wsId: p.wsId,
-        wsName: businesses.find(b => b.id === p.wsId)?.name ?? '(매칭안됨)',
-        programs: (p.programs ?? []).map(pr => ({ area: pr.workAreaName ?? pr.workAreaId, project: pr.project, deadlines: (pr.deadlines ?? []).length, todos: (pr.deadlines ?? []).reduce((s, d) => s + (d.todos?.length ?? 0), 0) })),
-        moves: (p.moves ?? []).length,
-        completes: (p.completes ?? []).length,
-      }));
-      console.log('[Spira apply] start — 비즈니스', plans.length, '개:', JSON.stringify(planSummary));
-      console.log('[Spira apply] 내 비즈니스:', JSON.stringify(businesses.map(b => ({ id: b.id, name: b.name }))));
-    } catch { /* noop */ }
     let firstYear: number | null = null;
     let firstQuarter: number | null = null;
     let focusWs: string | null = null; // 반영 후 이 비즈니스로 화면 전환(안 하면 다른 비즈니스에 생겨 안 보임)
@@ -770,7 +759,6 @@ export default function ProgramsPage() {
       for (const prog of plan.programs ?? []) {
         if (!prog || !(prog.deadlines?.length)) continue;
         const targetWs = progWs(plan, prog); // program별 비즈니스(없으면 plan/현재)
-        try { console.log('[Spira prog]', JSON.stringify({ project: prog.project, wsIdGiven: prog.wsId ?? null, workAreaId: prog.workAreaId ?? null, workAreaName: prog.workAreaName ?? null, areaMatchesExisting: !!(prog.workAreaId && wsByArea.has(prog.workAreaId)), ownerWs: prog.workAreaId ? (wsByArea.get(prog.workAreaId) ?? null) : null, resolvedWs: targetWs, resolvedWsName: businesses.find(b => b.id === targetWs)?.name })); } catch { /* noop */ }
         // 영역 id 확정: id 직접매칭 → 이름 매칭/생성한 것(areaIdResolver) 순
         const areaName = (prog.workAreaName ?? (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId)?.name : undefined) ?? '').trim();
         const resolvedId = (prog.workAreaId && areasForWs(targetWs).some(a => a.id === prog.workAreaId)) ? prog.workAreaId
@@ -924,7 +912,6 @@ export default function ProgramsPage() {
         }
         const hit = findDeadline(mv.deadlineId, mv.projectName, mv.wsId); if (!hit) continue;
         const wsIdT = hit.e.workspace.id;
-        try { console.log('[Spira move]', { deadlineName: hit.d.name, deadlineDate: hit.d.date, deadlineStart: hit.d.startDate, projectId: hit.d.projectId ?? '(없음)', newStart, newDate, todosBefore: (hit.d.todos ?? []).map(t => ({ name: t.name, date: t.date, deadline: t.deadline, days: t.days })) }); } catch { /* noop */ }
         if (hit.d.projectId) {
           // 프로젝트 통째로: 같은 projectId의 모든 영역 데드라인을 새 창으로 retarget(산출물까지 정렬)
           const key = `${wsIdT}::${hit.d.projectId}`;
@@ -955,14 +942,6 @@ export default function ProgramsPage() {
         }
       }
     }
-    try {
-      const moveReqs = plans.flatMap(p => p.moves ?? []);
-      console.log('[Spira apply] done:', JSON.stringify({
-        createdBuckets: [...buckets.values()].map(b => ({ ws: b.targetWs, area: b.areaName, deadlines: b.deadlines.length })),
-        moveResults: moveReqs.map(mv => ({ projectName: mv.projectName, wsId: mv.wsId, matched: !!(mv.deadlineId || mv.projectName ? findDeadline(mv.deadlineId, mv.projectName, mv.wsId) : (mv.wsId ? 'wholeBusiness' : false)) })),
-        movedCount, doneCount,
-      }));
-    } catch { /* noop */ }
     // 반영 결과를 항상 토스트로 안내(생성 포함) — "반영 안 됨"으로 오해하지 않게
     const createdCount = [...buckets.values()].reduce((s, b) => s + b.deadlines.length, 0);
     const parts: string[] = [];
@@ -979,17 +958,6 @@ export default function ProgramsPage() {
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
     // 생성된 영역 + 프로젝트 박스를 펼쳐 결과(데드라인·업무)를 바로 보이게 — 온보딩 드래그 단계에서 업무가 가려지지 않도록
     if (touchedAreas.size || touchedProjectKeys.size) setExpandedAreas(prev => new Set([...prev, ...touchedAreas, ...touchedProjectKeys]));
-    // 검증: 반영 직후 실제 저장된 데이터를 되읽어, 생성한 데드라인 id가 각 비즈니스에 실제로 들어갔는지 확인
-    try {
-      const touchedWs = new Set([...buckets.values()].map(b => b.targetWs));
-      const createdDlIds = new Set([...buckets.values()].flatMap(b => b.deadlines.map(d => d.id)));
-      const verify = liveEntries().filter(e => touchedWs.has(e.workspace.id)).map(e => {
-        const allDls = e.programs.flatMap(p => (p.deadlines ?? []));
-        const found = allDls.filter(d => createdDlIds.has(d.id)).map(d => d.name);
-        return { ws: e.workspace.name, fromPlanPrograms: e.programs.filter(p => p.fromPlan).length, totalPrograms: e.programs.length, createdDlFound: found };
-      });
-      console.log('[Spira verify] 저장확인:', JSON.stringify(verify), '| filterWsId→null, year/q:', firstYear, firstQuarter);
-    } catch { /* noop */ }
   };
 
   // AI가 기존 데드라인을 프로젝트로 정리 — 프로젝트를 만들고(있으면 재사용) 데드라인에 projectId 배정
