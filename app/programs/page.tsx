@@ -986,17 +986,18 @@ export default function ProgramsPage() {
     const byProg = new Map<string, { wsId: string; progId: string; adds: Map<string, NewSub[]> }>();
     const norm = (s?: string) => (s ?? '').replace(/\s+/g, '').toLowerCase();
     const areaOf = (name: string) => { const m = name.match(/^(.*?)\s*[:：]/); return m ? m[1].trim() : name; };
-    // 모든 fromPlan 카테고리(todo)를 이름 매칭용으로 수집
-    const allCats = store.allWorkspacesEntries.flatMap(e => e.programs.filter(p => p.fromPlan).flatMap(p => (p.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => ({ wsId: e.workspace.id, prog: p, dl: d, todo: t })))));
+    // 모든 fromPlan 카테고리(todo)를 이름 매칭용으로 수집 (라이브 최신본)
+    const allCats = getGlobalStoreData().workspaces.flatMap(e => e.programs.filter(p => p.fromPlan).flatMap(p => (p.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => ({ wsId: e.workspace.id, prog: p, dl: d, todo: t })))));
     for (const it of list) {
       if (!it.tasks?.length) continue;
       // 정확도 우선 매칭: 카테고리 이름(전체/영역) → todoId. 애매한 폴백(deadlineId/programId, 부분일치)은
       // 엉뚱한 카테고리로 들어가므로 쓰지 않는다. 확실히 못 찾으면 그 항목은 건너뛴다.
       const catKey = it.category ? norm(it.category) : '';
       const catArea = it.category ? norm(areaOf(it.category)) : '';
-      let hit = (catKey && allCats.find(c => norm(c.todo.name) === catKey)) || null;              // 전체 이름 정확
+      // 우선순위: todoId 정확(가장 확실) → 카테고리 전체 이름 정확 → 영역명 정확(같은 영역 첫 카테고리)
+      let hit = (it.todoId && allCats.find(c => c.todo.id === it.todoId)) || null;                 // todoId 정확 — 최우선
+      if (!hit && catKey) hit = allCats.find(c => norm(c.todo.name) === catKey) ?? null;           // 전체 이름 정확
       if (!hit && catArea) hit = allCats.find(c => norm(areaOf(c.todo.name)) === catArea) ?? null; // 영역명 정확
-      if (!hit && it.todoId) hit = allCats.find(c => c.todo.id === it.todoId) ?? null;             // todoId 정확
       if (!hit) continue;
       const newSubs: NewSub[] = it.tasks.filter(t => t?.name).map(t => {
         const days = (t.days && t.days.length) ? t.days : undefined;
@@ -1014,9 +1015,9 @@ export default function ProgramsPage() {
       if (!b) { b = { wsId: hit.wsId, progId: hit.prog.id, adds: new Map<string, typeof newSubs>() }; byProg.set(pkey, b); }
       b.adds.set(hit.todo.id, [...(b.adds.get(hit.todo.id) ?? []), ...newSubs]);
     }
-    // 프로그램별로 '한 번에' 반영 (최신 스토어 상태 기준)
+    // 프로그램별로 '한 번에' 반영 (라이브 최신 상태 기준 — 직전 쓰기 반영)
     for (const b of byProg.values()) {
-      const prog = store.allWorkspacesEntries.find(e => e.workspace.id === b.wsId)?.programs.find(p => p.id === b.progId);
+      const prog = getGlobalStoreData().workspaces.find(e => e.workspace.id === b.wsId)?.programs.find(p => p.id === b.progId);
       if (!prog) continue;
       store.updateProgramInWs(b.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => { const add = b.adds.get(t.id); if (!add) return t; addedTo += 1; return { ...t, subtasks: [...(t.subtasks ?? []), ...add] }; }) })) });
     }
