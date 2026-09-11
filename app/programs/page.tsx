@@ -764,6 +764,7 @@ export default function ProgramsPage() {
       for (const prog of plan.programs ?? []) {
         if (!prog || !(prog.deadlines?.length)) continue;
         const targetWs = progWs(plan, prog); // program별 비즈니스(없으면 plan/현재)
+        try { console.log('[Spira prog]', JSON.stringify({ project: prog.project, wsIdGiven: prog.wsId ?? null, workAreaId: prog.workAreaId ?? null, workAreaName: prog.workAreaName ?? null, areaMatchesExisting: !!(prog.workAreaId && wsByArea.has(prog.workAreaId)), ownerWs: prog.workAreaId ? (wsByArea.get(prog.workAreaId) ?? null) : null, resolvedWs: targetWs, resolvedWsName: businesses.find(b => b.id === targetWs)?.name })); } catch { /* noop */ }
         // 영역 id 확정: id 직접매칭 → 이름 매칭/생성한 것(areaIdResolver) 순
         const areaName = (prog.workAreaName ?? (prog.workAreaId ? areasForWs(targetWs).find(a => a.id === prog.workAreaId)?.name : undefined) ?? '').trim();
         const resolvedId = (prog.workAreaId && areasForWs(targetWs).some(a => a.id === prog.workAreaId)) ? prog.workAreaId
