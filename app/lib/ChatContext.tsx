@@ -459,6 +459,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const path = typeof window !== 'undefined' ? window.location.pathname : '';
       const onPlanRoute = path === '/plan';
       const onProgramsRoute = path === '/programs'; // Process 페이지: 업무(task) 설계·추가 모드
+      // 진단: AI에게 보내는 앱 컨텍스트가 완전한지(비즈니스·업무영역 수) 확인
+      try {
+        const ctx = appContextRef.current || '';
+        const wsCount = (ctx.match(/## 워크스페이스:/g) || []).length;
+        const areaCount = (ctx.match(/### 업무 영역/g) || []).length;
+        const catCount = (ctx.match(/### Task 보드 카테고리/g) || []).length;
+        console.log('[Spira ctx] 길이:', ctx.length, '| 비즈니스:', wsCount, '| 업무영역섹션:', areaCount, '| 카테고리섹션:', catCount);
+        console.log('[Spira ctx] 내용:', ctx);
+      } catch { /* noop */ }
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
