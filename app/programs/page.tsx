@@ -376,6 +376,12 @@ export default function ProgramsPage() {
 
   // 사업 필터 (null = 모든 사업)
   const [filterWsId, setFilterWsId] = useState<string | null>(null);
+  const [justAddedIds, setJustAddedIds] = useState<Set<string>>(new Set()); // AI가 방금 추가한 task/카테고리 id — Task 보드에서 테두리 하이라이트
+  useEffect(() => { // 하이라이트는 잠시 후 자동 해제(45초)
+    if (!justAddedIds.size) return;
+    const t = setTimeout(() => setJustAddedIds(new Set()), 45000);
+    return () => clearTimeout(t);
+  }, [justAddedIds]);
   const [addingProject, setAddingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectWsId, setNewProjectWsId] = useState<string | null>(null); // '전체' 보기에서 어느 사업에 만들지 선택
@@ -963,6 +969,10 @@ export default function ProgramsPage() {
     if (movedCount) parts.push(`프로젝트 ${movedCount}개 이동`);
     if (doneCount) parts.push(`기존 ${doneCount}개 종료`);
     if (parts.length) toast(parts.join(' · ') + ' 반영했어요. 🌿', 'success');
+    // 방금 생성된 카테고리(todo)·task(subtask) id 수집 → Task 보드에서 테두리 하이라이트
+    const added = new Set<string>();
+    for (const b of buckets.values()) for (const d of b.deadlines) for (const t of (d.todos ?? [])) added.add(t.id);
+    if (added.size) setJustAddedIds(added);
     // 반영 결과가 다른 비즈니스에 생겼어도 보이도록 '전체 비즈니스 표시'로 전환(특정 비즈니스로 좁히면 나머지가 숨겨져 '사라진 것처럼' 보임) + 해당 분기로 이동
     if (focusWs) setFilterWsId(null);
     if (firstYear !== null) { setYear(firstYear); setQuarter(firstQuarter!); }
@@ -1039,11 +1049,14 @@ export default function ProgramsPage() {
       b.adds.set(hit.todo.id, [...(b.adds.get(hit.todo.id) ?? []), ...newSubs]);
     }
     // 프로그램별로 '한 번에' 반영 (라이브 최신 상태 기준 — 직전 쓰기 반영)
+    const addedTaskIds = new Set<string>();
     for (const b of byProg.values()) {
       const prog = getGlobalStoreData().workspaces.find(e => e.workspace.id === b.wsId)?.programs.find(p => p.id === b.progId);
       if (!prog) continue;
+      b.adds.forEach(subs => subs.forEach(s => addedTaskIds.add(s.id))); // 새 task id 수집 → 하이라이트
       store.updateProgramInWs(b.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => ({ ...d, todos: d.todos.map(t => { const add = b.adds.get(t.id); if (!add) return t; addedTo += 1; return { ...t, subtasks: [...(t.subtasks ?? []), ...add] }; }) })) });
     }
+    if (addedTaskIds.size) setJustAddedIds(addedTaskIds);
     if (total > 0) toast(`업무 ${total}개를 카테고리 ${addedTo}곳에 추가했어요${recurring ? ` (반복 ${recurring}개 포함)` : ''}. Task 보드에서 확인하세요.`, 'success');
     else if (allCats.length === 0) toast('Task 보드에 카테고리가 없어요. 먼저 목표를 가져와 프로젝트·산출물을 만들어 주세요.', 'info');
     else toast('어느 카테고리에 넣을지 못 찾았어요. 채팅에서 카테고리 이름을 정확히 알려주세요.', 'info');
@@ -1871,7 +1884,7 @@ export default function ProgramsPage() {
             </div>
           </div>
         ) : (
-          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" wsFilter={{ list: businesses.map(b => ({ id: b.id, name: b.name })), current: filterWsId, set: setFilterWsId }} />
+          <GoalsRoadmap ref={calRef} programs={visiblePrograms} businessColor={businessColor} resolveProject={resolveProject} cardClassName="h-full" wsFilter={{ list: businesses.map(b => ({ id: b.id, name: b.name })), current: filterWsId, set: setFilterWsId }} highlightIds={justAddedIds} />
         )}
       </div>
 

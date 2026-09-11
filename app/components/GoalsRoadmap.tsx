@@ -23,7 +23,7 @@ type SelItem = { key: string; kind: Lvl; name: string; wsId: string; programId: 
 type BulkPatch = { name?: string; deadline?: string; durationMin?: number };
 
 export interface GoalsRoadmapHandle { focus: (level: Lvl, key: string, start?: string, end?: string, name?: string) => void; startListDrag: (payload: Payload, e: React.DragEvent) => void; }
-interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string; status?: string } | null; cardClassName?: string; wsFilter?: { list: { id: string; name: string }[]; current: string | null; set: (id: string | null) => void }; }
+interface Props { programs: CalProgram[]; businessColor: (wsId: string) => string; resolveProject: (wsId: string, id?: string) => { name: string; status?: string } | null; cardClassName?: string; wsFilter?: { list: { id: string; name: string }[]; current: string | null; set: (id: string | null) => void }; highlightIds?: Set<string>; }
 
 const LABEL_W = 240;
 const ROW_H = 34;
@@ -46,7 +46,7 @@ const CFG: Record<Scale, { pxPerDay: number; buffer: number; minSpan: number }> 
 const SPAN_CAP = 9000;
 
 const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap(
-  { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0', wsFilter }, ref,
+  { programs, businessColor, resolveProject, cardClassName = 'flex-1 min-h-0', wsFilter, highlightIds }, ref,
 ) {
   const store = useStore();
   const { toast } = useToast();
@@ -1091,7 +1091,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           onDrop: (e: React.DragEvent) => { if (kbDrag) { e.stopPropagation(); const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.findIndex(x => x.id === s.id); kbInsertAt(col, kbDrag, at); setKbDrag(null); } },
         } : {})}
         data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}task · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'} / 카테고리: ${col.area}] task: ${s.name}`}
-        className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={{ borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }}>
+        className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={highlightIds?.has(s.id)
+          ? { borderColor: '#5EA63A', boxShadow: '0 0 0 2px #B8E29A, 0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }
+          : { borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }}>
         {showCat && (
           <div className="flex items-center gap-1 mb-1 min-w-0">
             <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
@@ -1294,7 +1296,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ) : (
           <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbColsView.map(col => (
-            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
+            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={highlightIds?.has(col.todoId)
+              ? { borderColor: '#5EA63A', boxShadow: '0 0 0 3px #D6EFC2', backgroundColor: '#F6FCEF' }
+              : { borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) { e.preventDefault(); const end = col.subtasks.length; setKbDragOver(prev => (prev && prev.todoId === col.todoId && prev.index === end) ? prev : { todoId: col.todoId, index: end }); } }}
               onDrop={() => { if (kbDrag) { const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.length; kbInsertAt(col, kbDrag, at); setKbDrag(null); } }}>
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
