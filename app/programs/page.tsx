@@ -643,10 +643,17 @@ export default function ProgramsPage() {
     saveUndoSnapshot(); // 반영 직전 상태 저장 → 잘못되면 '되돌리기'로 복원
     // 연속 쓰기 중 '직전 쓰기까지 반영된' 최신 데이터를 읽기 위한 라이브 getter (렌더 스냅샷은 낡아 clobber 발생)
     const liveEntries = () => getGlobalStoreData().workspaces;
-    // program이 속할 비즈니스: program 자체 wsId 우선 → plan.wsId → 현재 비즈니스. (creates를 비즈니스별로 흩어지게 하는 핵심)
-    const progWs = (plan: QuarterPlan, prog: { wsId?: string }) => {
-      const w = prog.wsId ?? plan.wsId;
-      return (w && businesses.some(b => b.id === w)) ? w : wsId;
+    // 업무영역 id → 그 영역이 속한 비즈니스 id (각 workArea는 한 비즈니스에만 속함 → 영역만 알면 비즈니스가 결정됨)
+    const wsByArea = new Map<string, string>();
+    for (const e of liveEntries()) for (const a of (e.plan.workAreas ?? [])) wsByArea.set(a.id, e.workspace.id);
+    // program이 속할 비즈니스 판정 우선순위:
+    // ① program.wsId → ② program.workAreaId가 속한 비즈니스(AI가 준 영역 지정을 존중) → ③ plan.wsId → ④ 현재 비즈니스
+    // 현재 비즈니스로 강제하지 않는다 — AI가 미리보기에서 정한 영역/비즈니스를 그대로 반영.
+    const progWs = (plan: QuarterPlan, prog: { wsId?: string; workAreaId?: string }) => {
+      if (prog.wsId && businesses.some(b => b.id === prog.wsId)) return prog.wsId;
+      if (prog.workAreaId && wsByArea.has(prog.workAreaId)) return wsByArea.get(prog.workAreaId)!;
+      if (plan.wsId && businesses.some(b => b.id === plan.wsId)) return plan.wsId;
+      return wsId;
     };
     try {
       const planSummary = plans.map(p => ({
