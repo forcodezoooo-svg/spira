@@ -794,7 +794,8 @@ export default function ProgramsPage() {
       const entry = liveEntries().find(e => e.workspace.id === b.targetWs);
       const existing = entry?.programs.find(p => (p.workAreaId ?? '__none__') === (b.areaId ?? '__none__'));
       if (existing) {
-        store.updateProgramInWs(b.targetWs, { ...existing, deadlines: [...(existing.deadlines ?? []), ...b.deadlines] });
+        // fromPlan:true 보장 — 로드맵/Task 보드는 fromPlan 컨테이너만 표시하므로, 아니면 추가한 게 안 보임
+        store.updateProgramInWs(b.targetWs, { ...existing, fromPlan: true, deadlines: [...(existing.deadlines ?? []), ...b.deadlines] });
       } else {
         store.addProgramToWs(b.targetWs, {
           name: b.areaName ?? '목표',
