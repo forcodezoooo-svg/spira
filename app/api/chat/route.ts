@@ -55,7 +55,10 @@ export async function POST(request: Request) {
 
         // 마커 강제(2차 패스): Process(routine) 모드에서 AI가 계획을 설명하고도 마커를 빠뜨리면 버튼이 안 뜬다.
         // 마커가 없으면 한 번 더 물어서, '지금 반영할 구체 계획'이 있으면 마커+JSON만 받아 이어붙인다. (단순 질문·조언이면 빈 응답 → 버튼 없음)
-        if (routineMode && !/%%%[A-Z_]+%%%/.test(full)) {
+        // 응답이 '지금 반영할 계획 제안'처럼 보일 때만 2차 패스 실행 → 단순 질문·조언엔 로딩/버튼 안 뜨게.
+        // (프롬프트가 계획 제안 시 "반영할까요?/버튼을 누르면…"으로 쓰게 하므로 그 신호 + 날짜가 있으면 계획으로 간주)
+        const looksLikePlan = /반영할까요|반영하면|반영해도|추가할까요|추가하면|미룰까요|미루면|만들까요|정리할까요|버튼을 누르|이렇게 (반영|추가|정리|배치|진행)|\d{4}-\d{2}-\d{2}/.test(full);
+        if (routineMode && looksLikePlan && !/%%%[A-Z_]+%%%/.test(full)) {
           controller.enqueue(encoder.encode('%%%PENDING%%%')); // 클라이언트: 2차 패스 동안 '반영 버튼 준비 중…' 로딩 표시
           try {
             const follow = await getClient().chat.completions.create({
