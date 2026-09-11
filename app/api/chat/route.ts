@@ -56,6 +56,7 @@ export async function POST(request: Request) {
         // 마커 강제(2차 패스): Process(routine) 모드에서 AI가 계획을 설명하고도 마커를 빠뜨리면 버튼이 안 뜬다.
         // 마커가 없으면 한 번 더 물어서, '지금 반영할 구체 계획'이 있으면 마커+JSON만 받아 이어붙인다. (단순 질문·조언이면 빈 응답 → 버튼 없음)
         if (routineMode && !/%%%[A-Z_]+%%%/.test(full)) {
+          controller.enqueue(encoder.encode('%%%PENDING%%%')); // 클라이언트: 2차 패스 동안 '반영 버튼 준비 중…' 로딩 표시
           try {
             const follow = await getClient().chat.completions.create({
               model: 'gpt-4o',

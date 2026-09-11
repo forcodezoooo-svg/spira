@@ -487,6 +487,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
+      const PENDING = '%%%PENDING%%%'; // 서버 2차 패스(마커 생성) 대기 신호 — 로딩 모션용
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -494,6 +495,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
         if (opts?.intro) continue; // 고정 문구 모드: 스트리밍 중엔 '생각 중' 상태 유지, 완료 시 intro+버튼 표시
 
+        const pending2nd = full.includes(PENDING); // 서버가 마커 생성 중 → 버튼 준비 로딩
+        full = full.split(PENDING).join(''); // 신호는 본문에서 제거
         const display = full.includes(ITEM_REVISE_MARKER)
           ? full.split(ITEM_REVISE_MARKER)[0].trimEnd()
           : full.includes(FIN_REPLAN_MARKER)
@@ -510,8 +513,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           ? full.split(PROJECT_ASSIGN_MARKER)[0].trimEnd()
           : full;
 
-        // 마커가 등장했으면(=반영 JSON을 만드는 중) 버튼이 뜰 때까지 로딩 표시를 켠다
-        const pendingAction = [ITEM_REVISE_MARKER, FIN_REPLAN_MARKER, PLAN_MARKER, ROUTINE_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, GOALS_MARKER].some(m => full.includes(m));
+        // 마커가 등장했거나(=반영 JSON 생성 중) 서버 2차 패스 대기 중이면 버튼이 뜰 때까지 로딩 표시를 켠다
+        const pendingAction = pending2nd || [ITEM_REVISE_MARKER, FIN_REPLAN_MARKER, PLAN_MARKER, ROUTINE_MARKER, QUARTER_PLAN_MARKER, AREA_ASSIGN_MARKER, PROJECT_ASSIGN_MARKER, GOALS_MARKER].some(m => full.includes(m));
         setMessages(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: 'assistant', content: stripJsonNote(display), pendingAction };
@@ -535,6 +538,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setMessages(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: 'assistant', content: opts.intro! };
+          return updated;
+        });
+      } else {
+        // 액션이 없으면(2차 패스도 마커를 안 냄) 로딩 모션(pendingAction)을 끈다 — 무한 로딩 방지
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last?.role === 'assistant' && last.pendingAction) updated[updated.length - 1] = { ...last, pendingAction: false };
           return updated;
         });
       }
