@@ -748,7 +748,13 @@ export default function ProgramsPage() {
       createdTaskCount += g.tasks.length;
       const mkCategoryDeadline = () => { const catId = uid(); addedHighlightIds.add(catId); return { id: uid(), name: g.areaName ?? '업무', date: getQuarterEndDate(g.py, g.pq), todos: [{ id: catId, name: g.areaName ?? '업무', done: false, subtasks: g.tasks }] }; };
       const entry = liveEntries().find(e => e.workspace.id === g.targetWs);
-      const container = entry?.programs.find(p => (p.workAreaId ?? '__none__') === (g.areaId ?? '__none__'));
+      const areaNameNrm = g.areaName ? nrm(g.areaName) : '';
+      // 기존 컨테이너 찾기: ① workAreaId 일치 → ② 그 컨테이너의 업무영역 '이름'이 같음(빈 컨테이너보다 카테고리 있는 걸 우선)
+      const candidates = (entry?.programs ?? []).filter(p =>
+        (g.areaId && p.workAreaId === g.areaId)
+        || (areaNameNrm && p.workAreaId && nrm(areasForWs(g.targetWs).find(a => a.id === p.workAreaId)?.name ?? '') === areaNameNrm));
+      const container = candidates.find(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => !t.done))) ?? candidates[0];
+      try { console.log('[Spira place]', JSON.stringify({ area: g.areaName, areaId: g.areaId, containerFound: !!container, containerId: container?.id, existingCats: (container?.deadlines ?? []).flatMap(d => (d.todos ?? []).filter(t => !t.done).map(t => t.name)) })); } catch { /* noop */ }
       if (container) {
         // 이 컨테이너의 첫 '미완료 카테고리(todo)' 안에 task 추가; 카테고리가 하나도 없으면 새로 생성
         let placed = false;
