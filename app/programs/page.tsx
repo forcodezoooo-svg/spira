@@ -762,7 +762,7 @@ export default function ProgramsPage() {
     // 각 (사업 × 영역) 컨테이너에 반영 — 기존 컨테이너가 있으면 데드라인만 추가, 없으면 하나만 생성
     for (const b of buckets.values()) {
       if (!focusWs) { focusWs = b.targetWs; firstYear = b.py; firstQuarter = b.pq; } // 첫 생성물 위치로 화면 이동
-      const entry = store.allWorkspacesEntries.find(e => e.workspace.id === b.targetWs);
+      const entry = liveEntries().find(e => e.workspace.id === b.targetWs);
       const existing = entry?.programs.find(p => (p.workAreaId ?? '__none__') === (b.areaId ?? '__none__'));
       if (existing) {
         store.updateProgramInWs(b.targetWs, { ...existing, deadlines: [...(existing.deadlines ?? []), ...b.deadlines] });
