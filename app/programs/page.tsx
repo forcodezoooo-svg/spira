@@ -739,6 +739,12 @@ export default function ProgramsPage() {
         areaGroups.set(key, g);
       }
     }
+    // todo(카테고리)의 '영역' 판정 — 보드가 실제로 쓰는 방식과 동일하게: 이름 앞부분("마케팅: …") 우선, 없으면 컨테이너의 업무영역 이름
+    const areaOfTodo = (wsIdT: string, cont: { workAreaId?: string }, todoName: string) => {
+      const m = todoName.match(/^\s*(.+?)\s*[:：]/);
+      if (m) return m[1].trim();
+      return areasForWs(wsIdT).find(a => a.id === cont.workAreaId)?.name ?? '';
+    };
     // 반영: 각 (사업×영역)의 기존 카테고리(todo) 안에 task 추가, 없으면 그 영역에 카테고리 하나 생성
     const addedHighlightIds = new Set<string>();
     let createdTaskCount = 0;
@@ -746,30 +752,30 @@ export default function ProgramsPage() {
       if (!focusWs) focusWs = g.targetWs;
       g.tasks.forEach(t => addedHighlightIds.add(t.id));
       createdTaskCount += g.tasks.length;
-      const mkCategoryDeadline = () => { const catId = uid(); addedHighlightIds.add(catId); return { id: uid(), name: g.areaName ?? '업무', date: getQuarterEndDate(g.py, g.pq), todos: [{ id: catId, name: g.areaName ?? '업무', done: false, subtasks: g.tasks }] }; };
       const entry = liveEntries().find(e => e.workspace.id === g.targetWs);
-      const areaNameNrm = g.areaName ? nrm(g.areaName) : '';
-      // 기존 컨테이너 찾기: ① workAreaId 일치 → ② 그 컨테이너의 업무영역 '이름'이 같음(빈 컨테이너보다 카테고리 있는 걸 우선)
-      const candidates = (entry?.programs ?? []).filter(p =>
-        (g.areaId && p.workAreaId === g.areaId)
-        || (areaNameNrm && p.workAreaId && nrm(areasForWs(g.targetWs).find(a => a.id === p.workAreaId)?.name ?? '') === areaNameNrm));
-      const container = candidates.find(p => (p.deadlines ?? []).some(d => (d.todos ?? []).some(t => !t.done))) ?? candidates[0];
-      if (container) {
-        // 이 컨테이너의 첫 '미완료 카테고리(todo)' 안에 task 추가; 카테고리가 하나도 없으면 새로 생성
-        let placed = false;
-        const newDeadlines = (container.deadlines ?? []).map(d => {
-          if (placed) return d;
-          const todos = [...(d.todos ?? [])];
-          const idx = todos.findIndex(t => !t.done);
-          if (idx < 0) return d;
-          todos[idx] = { ...todos[idx], subtasks: [...(todos[idx].subtasks ?? []), ...g.tasks] };
-          placed = true;
-          return { ...d, todos };
-        });
-        const deadlines = placed ? newDeadlines : [...(container.deadlines ?? []), mkCategoryDeadline()];
-        store.updateProgramInWs(g.targetWs, { ...container, fromPlan: true, deadlines });
+      const areaNrm = nrm(g.areaName ?? '');
+      // 이 사업의 fromPlan 카테고리(todo) 중 '영역이 같은 미완료 카테고리' 하나 찾기 (보드 그룹핑 기준과 동일)
+      let target: { progId: string; dlId: string; todoId: string } | undefined;
+      for (const p of entry?.programs ?? []) {
+        if (!p.fromPlan) continue;
+        for (const d of p.deadlines ?? []) {
+          const t = (d.todos ?? []).find(x => !x.done && areaNrm && nrm(areaOfTodo(g.targetWs, p, x.name)) === areaNrm);
+          if (t) { target = { progId: p.id, dlId: d.id, todoId: t.id }; break; }
+        }
+        if (target) break;
+      }
+      if (target) {
+        // 기존 카테고리 안에 task(subtask) 추가
+        const prog = entry!.programs.find(p => p.id === target!.progId)!;
+        store.updateProgramInWs(g.targetWs, { ...prog, fromPlan: true, deadlines: (prog.deadlines ?? []).map(d => d.id !== target!.dlId ? d : ({ ...d, todos: d.todos.map(t => t.id !== target!.todoId ? t : ({ ...t, subtasks: [...(t.subtasks ?? []), ...g.tasks] })) })) });
       } else {
-        store.addProgramToWs(g.targetWs, { name: g.areaName ?? '목표', goal: '', color: businessColor(g.targetWs), workAreaId: g.areaId, fromPlan: true, year: g.py, quarter: g.pq, quarters: [qKey(g.py, g.pq)], order: order++, deadlines: [mkCategoryDeadline()] });
+        // 그 영역에 카테고리가 없음 → 카테고리 하나 생성(이름 앞에 영역 붙여 보드에서 그 영역으로 그룹핑). 영역 컨테이너 있으면 거기, 없으면 새 컨테이너.
+        const catId = uid(); addedHighlightIds.add(catId);
+        const catName = g.areaName ? `${g.areaName}: 새 업무` : '새 업무';
+        const dl = { id: uid(), name: catName, date: getQuarterEndDate(g.py, g.pq), todos: [{ id: catId, name: catName, done: false, subtasks: g.tasks }] };
+        const cont = (entry?.programs ?? []).find(p => g.areaId && p.workAreaId === g.areaId);
+        if (cont) store.updateProgramInWs(g.targetWs, { ...cont, fromPlan: true, deadlines: [...(cont.deadlines ?? []), dl] });
+        else store.addProgramToWs(g.targetWs, { name: g.areaName ?? '목표', goal: '', color: businessColor(g.targetWs), workAreaId: g.areaId, fromPlan: true, year: g.py, quarter: g.pq, quarters: [qKey(g.py, g.pq)], order: order++, deadlines: [dl] });
       }
     }
     // 기존 프로젝트(데드라인)를 deadlineId → 데드라인 이름(정확/부분) → 소속 프로젝트 이름 순으로 찾기
