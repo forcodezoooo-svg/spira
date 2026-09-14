@@ -645,6 +645,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       return { id: uid(), name: t.name, done: false, date: d, deadline: d, ...du, schedulingType: t.schedulingType, priority: t.priority, units };
     });
     const newTodo = { id: uid(), name: n, done: false, date: start, deadline: dl.date || start, subtasks };
+    try { console.log('[Spira addCat]', JSON.stringify({ wsId: catTarget.wsId, progId: prog.id, progName: prog.name, fromPlan: prog.fromPlan, dlId: catTarget.dlId, dlName: dl.name, dlDone: dl.done, dlEnabled: dl.enabled, dlProjectId: dl.projectId, todoName: n, todoDate: start })); } catch { /* noop */ }
     store.updateProgramInWs(catTarget.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== catTarget.dlId ? d : { ...d, todos: [...d.todos, newTodo] }) });
     if (opts?.batch) return adjustedCount;
     if (adjustedCount > 0) toast(`실제 기록을 반영해 예상시간 ${adjustedCount}개를 조정했어요 (평균 ${Math.round((factor - 1) * 100) > 0 ? '+' : ''}${Math.round((factor - 1) * 100)}%).`, 'success');
