@@ -882,8 +882,10 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbDelCategory = (col: KbCol) => {
     if (!window.confirm(`카테고리 ‘${col.area}’를 삭제할까요? 안의 task도 모두 삭제돼요.`)) return;
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    const deadlines = (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.filter(t => t.id !== col.todoId) })
-      .filter(dl => (dl.todos?.length ?? 0) > 0 || !!dl.projectId); // 비고 projectId 없는 데드라인은 함께 제거
+    const deadlines = (prog.deadlines ?? [])
+      .map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.filter(t => t.id !== col.todoId) })
+      // 이 카테고리를 지운 '그 데드라인'이 비면 로드맵에도 안 남게 데드라인 자체를 제거(projectId 유무 무관). 다른 데드라인은 그대로.
+      .filter(dl => dl.id !== col.dlId || (dl.todos?.length ?? 0) > 0);
     if (deadlines.length === 0) store.deleteProgramInWs(col.p.wsId, prog.id); // 프로그램이 완전히 비면 프로그램도 삭제
     else store.updateProgramInWs(col.p.wsId, { ...prog, deadlines });
   };
