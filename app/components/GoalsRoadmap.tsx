@@ -459,7 +459,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const dls = (p.deadlines ?? []).filter(dl => dlVisible(p.wsId, dl))
       .sort((a, b) => (dlPeriod(p, a).start || a.date || '9999-99-99').localeCompare(dlPeriod(p, b).start || b.date || '9999-99-99')); // 시작일 순
     // 사업목표(program, level 0) 행은 로드맵에 표시하지 않고, 프로젝트(deadline)를 최상위로 보여준다.
-    if (dls.length === 0) rows.push({ key: `add-${pgKey}`, level: 1, kind: 'deadline', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, pgKey, isAdd: true, addKind: 'deadline' });
+    // 데드라인이 하나도 없는 빈 프로그램은 로드맵에 그리지 않는다('여기서 추가'만 잔뜩 남는 문제 방지).
+    if (dls.length === 0) continue;
     for (const dl of dls) {
       const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl);
       const todos = dl.todos.filter(t => !t.done).sort((a, b) => ((a.date || a.deadline || '9999-99-99').localeCompare(b.date || b.deadline || '9999-99-99'))); // 산출물도 시작일 순
@@ -514,6 +515,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const prog = findProg(r.wsId, r.programId); if (!prog) return;
     if (r.kind === 'program') { if (!window.confirm(`'${r.name}'을(를) 삭제할까요?`)) return; store.deleteProgramInWs(r.wsId, prog.id); return; }
     if (!window.confirm(`'${r.name}'을(를) 삭제할까요?`)) return;
+    // 프로젝트(데드라인)를 지워 프로그램이 완전히 비면 프로그램(컨테이너)도 삭제 → 로드맵에 '여기서 추가'만 남지 않게
+    if (r.kind === 'deadline' && (prog.deadlines ?? []).filter(dl => dl.id !== r.deadlineId).length === 0) { store.deleteProgramInWs(r.wsId, prog.id); return; }
     store.updateProgramInWs(r.wsId, { ...prog, deadlines: (prog.deadlines ?? []).flatMap(dl => {
       if (dl.id !== r.deadlineId) return [dl];
       if (r.kind === 'deadline') return [];
@@ -645,7 +648,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       return { id: uid(), name: t.name, done: false, date: d, deadline: d, ...du, schedulingType: t.schedulingType, priority: t.priority, units };
     });
     const newTodo = { id: uid(), name: n, done: false, date: start, deadline: dl.date || start, subtasks };
-    try { console.log('[Spira addCat]', JSON.stringify({ wsId: catTarget.wsId, progId: prog.id, progName: prog.name, fromPlan: prog.fromPlan, dlId: catTarget.dlId, dlName: dl.name, dlDone: dl.done, dlEnabled: dl.enabled, dlProjectId: dl.projectId, todoName: n, todoDate: start })); } catch { /* noop */ }
     store.updateProgramInWs(catTarget.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id !== catTarget.dlId ? d : { ...d, todos: [...d.todos, newTodo] }) });
     if (opts?.batch) return adjustedCount;
     if (adjustedCount > 0) toast(`실제 기록을 반영해 예상시간 ${adjustedCount}개를 조정했어요 (평균 ${Math.round((factor - 1) * 100) > 0 ? '+' : ''}${Math.round((factor - 1) * 100)}%).`, 'success');
