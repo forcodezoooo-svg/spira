@@ -1624,19 +1624,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <p className="text-[13px] text-center py-6" style={{ color: '#9AA39D' }}>비즈니스를 먼저 만들어주세요.</p>
               ) : (
                 <>
-                  <div className="space-y-1.5">
-                    {areas.length === 0 && <p className="text-[12px] text-center py-3" style={{ color: '#9AA39D' }}>아직 업무 영역이 없어요. 아래에서 추가해보세요.</p>}
+                  {/* 짧은 추가 입력(맨 왼쪽) + 영역 키워드 칩들이 오른쪽으로 나열 */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <input value={newAreaName} onChange={e => setNewAreaName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newAreaName.trim()) { store.addWorkArea(targetWs, { name: newAreaName.trim() }); setNewAreaName(''); } }} placeholder="영역 추가" className="w-[76px] bg-neutral-50 border rounded-full px-2.5 py-1.5 text-[12px] outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+                      <button onClick={() => { if (newAreaName.trim()) { store.addWorkArea(targetWs, { name: newAreaName.trim() }); setNewAreaName(''); } }} disabled={!newAreaName.trim()} className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[16px] leading-none disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="추가">+</button>
+                    </div>
                     {areas.map(a => (
-                      <div key={a.id} className="flex items-center gap-2 border rounded-xl px-2.5 py-2" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                        <button onClick={() => { const i = AREA_PAL.indexOf(a.color); store.updateWorkArea(targetWs, a.id, { color: AREA_PAL[(i + 1) % AREA_PAL.length] }); }} className="w-4 h-4 rounded-full flex-shrink-0 border border-black/10" style={{ backgroundColor: a.color }} title="색 바꾸기" />
-                        <input value={a.name} onChange={e => store.updateWorkArea(targetWs, a.id, { name: e.target.value })} placeholder="영역 이름" className="flex-1 min-w-0 bg-transparent text-[13px] font-bold outline-none" style={{ color: '#16211E' }} />
-                        <button onClick={() => { if (window.confirm(`'${a.name || '이 영역'}'을(를) 삭제할까요?\n이 영역의 일정은 미분류로 남습니다.`)) store.deleteWorkArea(targetWs, a.id); }} className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0" title="영역 삭제">×</button>
+                      <div key={a.id} className="flex items-center gap-1 rounded-full border pl-1.5 pr-1 py-1" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
+                        <button onClick={() => { const i = AREA_PAL.indexOf(a.color); store.updateWorkArea(targetWs, a.id, { color: AREA_PAL[(i + 1) % AREA_PAL.length] }); }} className="w-3 h-3 rounded-full flex-shrink-0 border border-black/10" style={{ backgroundColor: a.color }} title="색 바꾸기" />
+                        <input value={a.name} onChange={e => store.updateWorkArea(targetWs, a.id, { name: e.target.value })} placeholder="영역" className="bg-transparent text-[12px] font-bold outline-none min-w-[20px]" style={{ color: '#16211E', width: `${Math.max((a.name || '').length, 2) + 1}ch` }} />
+                        <button onClick={() => { if (window.confirm(`'${a.name || '이 영역'}'을(를) 삭제할까요?\n이 영역의 일정은 미분류로 남습니다.`)) store.deleteWorkArea(targetWs, a.id); }} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 px-0.5" title="영역 삭제">×</button>
                       </div>
                     ))}
-                  </div>
-                  <div className="flex gap-1.5 mt-3">
-                    <input value={newAreaName} onChange={e => setNewAreaName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newAreaName.trim()) { store.addWorkArea(targetWs, { name: newAreaName.trim() }); setNewAreaName(''); } }} placeholder="새 업무 영역 (예: 마케팅)" className="flex-1 bg-neutral-50 border rounded-xl px-3 py-2 text-[13px] outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
-                    <button onClick={() => { if (newAreaName.trim()) { store.addWorkArea(targetWs, { name: newAreaName.trim() }); setNewAreaName(''); } }} disabled={!newAreaName.trim()} className="px-3.5 py-2 rounded-xl text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
                   </div>
                 </>
               )}
