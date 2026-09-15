@@ -1971,24 +1971,21 @@ function GoalsSection({
                   )}
                 </div>
                 {projects.length > 0 && <p className="mt-1 ml-6 text-[12px] text-neutral-500 truncate">프로젝트: {projects.map(p => p.name).join(' · ')}</p>}
-                {prog !== null && (
-                  <div className="mt-2 ml-6 flex items-center gap-2">
+                <div className="mt-2 ml-6 flex items-center gap-2 flex-wrap">
+                  {prog !== null && (<>
                     <div className="w-28 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#EEF1EC' }}>
                       <div className="h-full rounded-full" style={{ width: `${Math.round(prog * 100)}%`, backgroundColor: '#5EA63A' }} />
                     </div>
                     <span className="text-[11px] font-semibold text-neutral-500 tabular-nums">{doneCount}/{projects.length} 완료 · {Math.round(prog * 100)}%</span>
-                  </div>
-                )}
+                  </>)}
+                  {/* 업무 영역별 전략·성과 지표: 진행 바 옆 버튼으로 펼치기(클릭 시 목표도 함께 펼침) */}
+                  <button onClick={() => { setOpenGoals(prev => new Set(prev).add(g.id)); toggle(setDetailGoals, g.id); }} className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors"><Chevron open={detailGoals.has(g.id)} />업무 영역별 전략 · 성과 지표</button>
+                </div>
               </div>
 
               {/* 펼침: Goal 상세 + Strategy + Projects */}
               {gOpen && (
                 <div className="px-4 pb-4 pl-9 space-y-4 border-t border-neutral-100 pt-3">
-                  {/* 업무 영역별 전략 · 성과 지표 — 버튼으로 펼치기 */}
-                  <button onClick={() => toggle(setDetailGoals, g.id)} className="flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1.5 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">
-                    <Chevron open={detailGoals.has(g.id)} />
-                    업무 영역별 전략 · 성과 지표
-                  </button>
                   {detailGoals.has(g.id) && (<>
                   {/* 업무 영역별 전략 (제일 상단) */}
                   <div className="bg-neutral-50 rounded-xl p-3">
