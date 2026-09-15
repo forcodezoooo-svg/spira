@@ -1174,32 +1174,31 @@ function WorkAreasSection({
       </div>
 
       <div className="bg-white border border-neutral-200 rounded-xl px-4 py-3">
-        {areas.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2.5">
-            {areas.map(a => (
-              <span key={a.id} className="group/area inline-flex items-center gap-1.5 rounded-full pl-2.5 pr-1.5 py-1 border" style={{ borderColor: a.color, backgroundColor: `${a.color}14` }}>
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
-                <input
-                  value={a.name}
-                  onChange={e => onUpdate(a.id, { name: e.target.value })}
-                  className="bg-transparent text-[13px] font-semibold text-neutral-800 outline-none min-w-0"
-                  style={{ width: `${Math.max(2, a.name.length + 1)}ch` }}
-                  title="이름 수정"
-                />
-                <button onClick={() => onRemove(a.id)} className="text-neutral-300 hover:text-red-500 text-sm leading-none flex-shrink-0" title="삭제">×</button>
-              </span>
-            ))}
+        {/* 짧은 추가 입력(맨 왼쪽) + 영역 키워드 칩들이 오른쪽으로 나열 */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) add(name); }}
+              placeholder="영역 추가"
+              className="w-[76px] bg-neutral-50 border border-neutral-200 rounded-full px-2.5 py-1 text-[13px] outline-none focus:border-violet-400 transition-colors"
+            />
+            <button onClick={() => add(name)} disabled={!name.trim()} className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[16px] leading-none disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="추가">+</button>
           </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) add(name); }}
-            placeholder="새 업무 영역 (예: 마케팅)"
-            className="flex-1 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-1.5 text-[13px] outline-none focus:border-violet-400 transition-colors"
-          />
-          <button onClick={() => add(name)} disabled={!name.trim()} className="px-3 py-1.5 rounded-lg text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>추가</button>
+          {areas.map(a => (
+            <span key={a.id} className="group/area inline-flex items-center gap-1.5 rounded-full pl-2.5 pr-1.5 py-1 border" style={{ borderColor: a.color, backgroundColor: `${a.color}14` }}>
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: a.color }} />
+              <input
+                value={a.name}
+                onChange={e => onUpdate(a.id, { name: e.target.value })}
+                className="bg-transparent text-[13px] font-semibold text-neutral-800 outline-none min-w-0"
+                style={{ width: `${Math.max(2, a.name.length + 1)}ch` }}
+                title="이름 수정"
+              />
+              <button onClick={() => onRemove(a.id)} className="text-neutral-300 hover:text-red-500 text-sm leading-none flex-shrink-0" title="삭제">×</button>
+            </span>
+          ))}
         </div>
         {areas.length === 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2.5">
