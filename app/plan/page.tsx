@@ -1761,11 +1761,12 @@ function GoalsSection({
   onAddGoal, onUpdateGoal, onRemoveGoal,
   onAddProject, onUpdateProject, onRemoveProject,
   onReviewGoal, onBreakdownGoal, onBreakdownProject, onSuggestGoals, onImportGoal, onReviseProjects, onResequenceProjects, onToggleAreaDone, onSetProjectStatus,
-  aiBusyId, aiEnabled, focusGoal, onFocusHandled, deliverableTaskCount, onOpenTasks,
+  aiBusyId, aiEnabled, focusGoal, onFocusHandled, deliverableTaskCount, onOpenTasks, areaColorOf,
 }: {
   goals: Goal[];
   projectsOfGoal: (goalId: string) => Project[];
   workAreas: string[];
+  areaColorOf?: (name: string) => string | undefined;
   focusGoal?: { id?: string; name?: string } | null;
   onFocusHandled?: () => void;
   onAddGoal: (name: string) => void;
@@ -1789,6 +1790,7 @@ function GoalsSection({
   aiEnabled?: boolean;
 }) {
   const chat = useChatContext();
+  const router = useRouter();
   const [openGoals, setOpenGoals] = useState<Set<string>>(new Set());
   const [aiMenuGoal, setAiMenuGoal] = useState<string | null>(null); // AI 버튼 드롭다운 열린 목표
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
@@ -1864,6 +1866,7 @@ function GoalsSection({
           <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       )}
+      {areaColorOf && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-2.5 border border-black/5" style={{ backgroundColor: areaColorOf(area) || '#D4D4D4' }} title={area || '업무 영역'} />}
       <AreaField value={area} onChange={onArea} options={workAreas} placeholder={areaPh} done={done} className={inputCls} />
       <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
         <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
@@ -2063,43 +2066,50 @@ function GoalsSection({
                         return (
                           <Fragment key={p.id}>
                             <div data-teach="project-card" className="border border-neutral-200 rounded-xl bg-neutral-50">
-                              <div className="flex items-center gap-2 px-3 py-2">
-                                <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                                  <Chevron open={pOpen} />
-                                  {editId === p.id ? nameInput(n => onUpdateProject(p.id, { name: n })) : (
-                                    <>
+                              <div className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                                    <Chevron open={pOpen} />
+                                    {editId === p.id ? nameInput(n => onUpdateProject(p.id, { name: n })) : (
                                       <span className="text-[13px] font-semibold text-neutral-900 truncate">{p.name}</span>
-                                      {(p.startDate || p.endDate) && <span className="text-[10px] text-neutral-400 flex-shrink-0">{dateShort(p.startDate)}–{dateShort(p.endDate)}</span>}
+                                    )}
+                                  </button>
+                                  {editId !== p.id && (
+                                    <>
+                                      {/* 날짜: 타이틀 우측 (펼치면 편집, 접히면 요약) */}
+                                      {pOpen ? (
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                          <input type="date" value={p.startDate ?? ''} onChange={e => onUpdateProject(p.id, { startDate: e.target.value })} className={inputCls} />
+                                          <span className="text-neutral-300 text-xs">–</span>
+                                          <input type="date" value={p.endDate ?? ''} onChange={e => onUpdateProject(p.id, { endDate: e.target.value })} className={inputCls} />
+                                        </div>
+                                      ) : ((p.startDate || p.endDate) && <span className="text-[10px] text-neutral-400 flex-shrink-0">{dateShort(p.startDate)}–{dateShort(p.endDate)}</span>)}
+                                      {/* 상태 */}
+                                      {pOpen ? (
+                                        <select value={p.status ?? 'planned'} onChange={e => (onSetProjectStatus ? onSetProjectStatus(p.id, e.target.value as ProjectStatus) : onUpdateProject(p.id, { status: e.target.value as ProjectStatus }))} className={inputCls}>
+                                          <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
+                                        </select>
+                                      ) : (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: pst.bg, color: pst.color }}>{pst.label}</span>
+                                      )}
+                                      {pOpen && <button onClick={() => router.push('/programs')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#EAF3FF', color: '#2B62C4' }} title="Process 페이지에서 이 프로젝트를 상세 계획해요">Process에서 상세계획</button>}
+                                      <button onClick={() => startEdit(p.id, p.name)} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
+                                      <button onClick={() => onRemoveProject(p.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
                                     </>
                                   )}
-                                </button>
-                                {editId !== p.id && (
-                                  <>
-                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: pst.bg, color: pst.color }}>{pst.label}</span>
-                                    <button onClick={() => startEdit(p.id, p.name)} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
-                                    <button onClick={() => onRemoveProject(p.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
-                                  </>
+                                </div>
+                                {/* 최종 결과물: 타이틀 아래 부제(작은 글씨) */}
+                                {editId !== p.id && pOpen && (
+                                  <input value={p.finalDeliverable ?? ''} onChange={e => onUpdateProject(p.id, { finalDeliverable: e.target.value })} placeholder="최종 결과물 (이 프로젝트가 끝났을 때의 결과)" className="ml-6 mt-0.5 w-[calc(100%-1.5rem)] text-[12px] text-neutral-500 bg-transparent outline-none placeholder-neutral-300" />
                                 )}
                               </div>
                               {pOpen && (
                                 <div className="px-3 pb-3 pl-8 space-y-2.5 border-t border-neutral-200 pt-2">
                                   <div>
-                                    <label className="text-[10px] font-semibold text-neutral-400 block mb-1">최종 결과물 (Final Deliverable)</label>
-                                    <div className="bg-white border border-neutral-200 rounded-lg px-3 py-1.5">
-                                      <AutoTextarea value={p.finalDeliverable ?? ''} onChange={v => onUpdateProject(p.id, { finalDeliverable: v })} placeholder="이 프로젝트가 끝났을 때의 최종 결과물" />
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <label className="text-[10px] font-semibold text-neutral-400">업무 영역별 산출물{(() => { const ads = p.areaDeliverables ?? []; const d = ads.filter(x => x.done).length; return ads.length ? ` · ${d}/${ads.length} 완료` : ''; })()}</label>
+                                      <Hint text="이 프로젝트를 완성하려면 각 업무 영역에서 만들어야 할 결과물이에요. 영역별로 결과물을 적고, 오른쪽 'task 개수'를 눌러 Process에서 세부 task를 관리하세요." />
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <label className="text-[10px] text-neutral-400">기간</label>
-                                    <input type="date" value={p.startDate ?? ''} onChange={e => onUpdateProject(p.id, { startDate: e.target.value })} className={inputCls} />
-                                    <span className="text-neutral-300 text-xs">–</span>
-                                    <input type="date" value={p.endDate ?? ''} onChange={e => onUpdateProject(p.id, { endDate: e.target.value })} className={inputCls} />
-                                    <select value={p.status ?? 'planned'} onChange={e => (onSetProjectStatus ? onSetProjectStatus(p.id, e.target.value as ProjectStatus) : onUpdateProject(p.id, { status: e.target.value as ProjectStatus }))} className={inputCls}>
-                                      <option value="planned">예정</option><option value="active">진행 중</option><option value="done">완료</option><option value="onhold">보류</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] font-semibold text-neutral-400 block mb-1">업무 영역별 산출물{(() => { const ads = p.areaDeliverables ?? []; const d = ads.filter(x => x.done).length; return ads.length ? ` · ${d}/${ads.length} 완료` : ''; })()}</label>
                                     <div className="space-y-1.5">
                                       {(p.areaDeliverables ?? []).map(a => areaRow(
                                         a.id,
@@ -3427,6 +3437,7 @@ export default function PlanPage() {
           goals={plan.goals ?? []}
           projectsOfGoal={projectsOfGoal}
           workAreas={(plan.workAreas ?? []).map(a => a.name)}
+          areaColorOf={name => (plan.workAreas ?? []).find(a => a.name === name)?.color}
           onAddGoal={addGoal}
           onUpdateGoal={updateGoal}
           onRemoveGoal={removeGoal}
