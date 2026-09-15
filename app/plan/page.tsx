@@ -1724,8 +1724,8 @@ function MetricRow({ c, onPatch, onDel, inputCls }: {
 }
 
 // 업무 영역 입력 — 자유 입력 + ▼로 기존 업무 영역 '전체'를 언제나 다시 선택 (datalist 필터 문제 해결)
-function AreaField({ value, onChange, options, placeholder, done, className }: {
-  value: string; onChange: (v: string) => void; options: string[]; placeholder: string; done?: boolean; className: string;
+function AreaField({ value, onChange, options, placeholder, done, className, color }: {
+  value: string; onChange: (v: string) => void; options: string[]; placeholder: string; done?: boolean; className: string; color?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1738,7 +1738,8 @@ function AreaField({ value, onChange, options, placeholder, done, className }: {
   return (
     <div ref={ref} className="relative w-28 flex-shrink-0">
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className={`w-full ${options.length ? 'pr-6' : ''} font-semibold ${className} ${done ? 'line-through text-neutral-400' : ''}`} />
+        className={`w-full ${options.length ? 'pr-6' : ''} font-semibold ${className} ${done ? 'line-through text-neutral-400' : ''}`}
+        style={color ? { borderColor: color, backgroundColor: `${color}14` } : undefined} />
       {options.length > 0 && (
         <button type="button" onClick={() => setOpen(o => !o)} className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700" title="업무 영역 선택">
           <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -1866,8 +1867,7 @@ function GoalsSection({
           <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       )}
-      {areaColorOf && <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-2.5 border border-black/5" style={{ backgroundColor: areaColorOf(area) || '#D4D4D4' }} title={area || '업무 영역'} />}
-      <AreaField value={area} onChange={onArea} options={workAreas} placeholder={areaPh} done={done} className={inputCls} />
+      <AreaField value={area} onChange={onArea} options={workAreas} placeholder={areaPh} done={done} className={inputCls} color={areaColorOf ? areaColorOf(area) : undefined} />
       <div className={`flex-1 min-w-0 bg-white border border-neutral-200 rounded-lg px-3 py-1.5 ${done ? 'opacity-60' : ''}`}>
         <AutoTextarea value={content} onChange={onContent} placeholder={contentPh} />
       </div>
@@ -2107,7 +2107,7 @@ function GoalsSection({
                                 <div className="px-3 pb-3 pl-8 space-y-2.5 border-t border-neutral-200 pt-2">
                                   <div>
                                     <div className="flex items-center gap-1.5 mb-1">
-                                      <label className="text-[10px] font-semibold text-neutral-400">업무 영역별 산출물{(() => { const ads = p.areaDeliverables ?? []; const d = ads.filter(x => x.done).length; return ads.length ? ` · ${d}/${ads.length} 완료` : ''; })()}</label>
+                                      <label className="text-[10px] font-semibold text-neutral-400">업무 영역별 산출물</label>
                                       <Hint text="이 프로젝트를 완성하려면 각 업무 영역에서 만들어야 할 결과물이에요. 영역별로 결과물을 적고, 오른쪽 'task 개수'를 눌러 Process에서 세부 task를 관리하세요." />
                                     </div>
                                     <div className="space-y-1.5">
@@ -2118,8 +2118,8 @@ function GoalsSection({
                                         v => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, content: v } : x) }),
                                         () => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).filter(x => x.id !== a.id) }),
                                         '업무 영역', '이 영역의 결과물',
-                                        a.done,
-                                        () => (onToggleAreaDone ? onToggleAreaDone(p.id, a.id) : onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, done: !x.done } : x) })),
+                                        undefined, // 완료 표시 없음
+                                        undefined, // 완료 토글 없음
                                         undefined, // AI 다이아 버튼 제거
                                         deliverableTaskCount ? deliverableTaskCount(a.id) : 0,
                                         onOpenTasks,
