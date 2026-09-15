@@ -1797,6 +1797,7 @@ function GoalsSection({
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
+  const [editVal2, setEditVal2] = useState(''); // 프로젝트 '이름 수정' 시 최종 결과물도 함께 편집
   const [chartGoals, setChartGoals] = useState<Set<string>>(new Set()); // 그래프 탭 켜진 목표
   const [detailGoals, setDetailGoals] = useState<Set<string>>(new Set()); // '업무 영역별 전략·성과 지표' 펼친 목표(버튼으로 열기)
   const [chartFocus, setChartFocus] = useState<Record<string, string | null>>({}); // 목표별 포커스 지표
@@ -2063,19 +2064,31 @@ function GoalsSection({
                       {projects.map((p, pi) => {
                         const pOpen = openProjects.has(p.id);
                         const pst = GOAL_STATUS_META[p.status ?? 'planned'];
+                        const commitProj = () => { const n = editVal.trim(); onUpdateProject(p.id, { ...(n ? { name: n } : {}), finalDeliverable: editVal2.trim() || undefined }); setEditId(null); };
                         return (
                           <Fragment key={p.id}>
                             <div data-teach="project-card" className="border border-neutral-200 rounded-xl bg-neutral-50">
                               <div className="px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
-                                    <Chevron open={pOpen} />
-                                    {editId === p.id ? nameInput(n => onUpdateProject(p.id, { name: n })) : (
-                                      <span className="text-[13px] font-semibold text-neutral-900 truncate">{p.name}</span>
-                                    )}
-                                  </button>
-                                  {editId !== p.id && (
-                                    <>
+                                {editId === p.id ? (
+                                  /* 제목 + 최종 결과물을 함께 편집 */
+                                  <div className="flex items-start gap-2" onClick={e => e.stopPropagation()}>
+                                    <div className="flex-1 min-w-0 space-y-1">
+                                      <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') commitProj(); if (e.key === 'Escape') setEditId(null); }}
+                                        placeholder="프로젝트 이름" className="w-full bg-neutral-50 border border-violet-300 rounded-lg px-2 py-1 text-sm font-semibold outline-none" />
+                                      <input value={editVal2} onChange={e => setEditVal2(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') commitProj(); if (e.key === 'Escape') setEditId(null); }}
+                                        placeholder="최종 결과물 (이 프로젝트가 끝났을 때의 결과)" className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-[12px] text-neutral-600 outline-none" />
+                                    </div>
+                                    <button onClick={commitProj} className="text-[11px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>저장</button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center gap-2">
+                                      <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                                        <Chevron open={pOpen} />
+                                        <span className="text-[13px] font-semibold text-neutral-900 truncate">{p.name}</span>
+                                      </button>
                                       {/* 날짜: 타이틀 우측 (펼치면 편집, 접히면 요약) */}
                                       {pOpen ? (
                                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -2093,14 +2106,14 @@ function GoalsSection({
                                         <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: pst.bg, color: pst.color }}>{pst.label}</span>
                                       )}
                                       {pOpen && <button onClick={() => router.push('/programs')} className="text-[11px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#EAF3FF', color: '#2B62C4' }} title="Process 페이지에서 이 프로젝트를 상세 계획해요">Process에서 상세계획</button>}
-                                      <button onClick={() => startEdit(p.id, p.name)} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
+                                      <button onClick={() => { startEdit(p.id, p.name); setEditVal2(p.finalDeliverable ?? ''); }} className="text-neutral-300 hover:text-neutral-700 text-[11px] transition-colors flex-shrink-0">이름 수정</button>
                                       <button onClick={() => onRemoveProject(p.id)} className="text-neutral-300 hover:text-red-500 text-sm transition-colors flex-shrink-0">×</button>
-                                    </>
-                                  )}
-                                </div>
-                                {/* 최종 결과물: 타이틀 아래 부제(작은 글씨) */}
-                                {editId !== p.id && pOpen && (
-                                  <input value={p.finalDeliverable ?? ''} onChange={e => onUpdateProject(p.id, { finalDeliverable: e.target.value })} placeholder="최종 결과물 (이 프로젝트가 끝났을 때의 결과)" className="ml-6 mt-0.5 w-[calc(100%-1.5rem)] text-[12px] text-neutral-500 bg-transparent outline-none placeholder-neutral-300" />
+                                    </div>
+                                    {/* 최종 결과물: 타이틀 아래 부제(읽기 전용, '이름 수정'으로 편집) */}
+                                    {pOpen && p.finalDeliverable && (
+                                      <p className="ml-6 mt-0.5 text-[12px] text-neutral-500 truncate">{p.finalDeliverable}</p>
+                                    )}
+                                  </>
                                 )}
                               </div>
                               {pOpen && (
