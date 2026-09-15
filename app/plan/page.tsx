@@ -1795,6 +1795,7 @@ function GoalsSection({
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState('');
   const [chartGoals, setChartGoals] = useState<Set<string>>(new Set()); // 그래프 탭 켜진 목표
+  const [detailGoals, setDetailGoals] = useState<Set<string>>(new Set()); // '업무 영역별 전략·성과 지표' 펼친 목표(버튼으로 열기)
   const [chartFocus, setChartFocus] = useState<Record<string, string | null>>({}); // 목표별 포커스 지표
   // Goals 로드맵 '내용 수정'으로 진입 시(?goal=/?goalName=) 해당 목표를 펼치고 스크롤
   useEffect(() => {
@@ -1983,6 +1984,12 @@ function GoalsSection({
               {/* 펼침: Goal 상세 + Strategy + Projects */}
               {gOpen && (
                 <div className="px-4 pb-4 pl-9 space-y-4 border-t border-neutral-100 pt-3">
+                  {/* 업무 영역별 전략 · 성과 지표 — 버튼으로 펼치기 */}
+                  <button onClick={() => toggle(setDetailGoals, g.id)} className="flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1.5 rounded-lg border border-neutral-200 text-neutral-500 hover:border-violet-300 hover:text-violet-600 transition-colors">
+                    <Chevron open={detailGoals.has(g.id)} />
+                    업무 영역별 전략 · 성과 지표
+                  </button>
+                  {detailGoals.has(g.id) && (<>
                   {/* 업무 영역별 전략 (제일 상단) */}
                   <div className="bg-neutral-50 rounded-xl p-3">
                     <div className="flex items-center gap-1.5 mb-2">
@@ -2041,6 +2048,7 @@ function GoalsSection({
                       );
                     })()}
                   </div>
+                  </>)}
 
                   {/* Projects (진행 순서 → 화살표) */}
                   <div>
