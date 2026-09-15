@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { uid } from '../lib/store';
+import LevelBadge from './LevelBadge';
 import type { Program, ProjectStatus } from '../lib/types';
 import ActualTimeModal from './ActualTimeModal';
 import { areaFactor, scheduleTasksByCapacity, scheduleParallel, ParallelGroup, ParallelTask } from '../lib/capacity';
@@ -18,7 +19,7 @@ type Lvl = 'program' | 'deadline' | 'todo' | 'subtask' | 'unit';
 type CalProgram = Program & { wsId: string; wsName?: string };
 type Deadline = NonNullable<Program['deadlines']>[number];
 type Payload = { level: Lvl; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string };
-type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; subName?: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string; isAdd?: boolean; addKind?: Lvl };
+type Row = { key: string; level: 0 | 1 | 2 | 3 | 4; kind: Lvl; name: string; subName?: string; start?: string; end?: string; color: string; hasChildren: boolean; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; pgKey: string; isAdd?: boolean; addKind?: Lvl; badgeN?: number };
 type SelItem = { key: string; kind: Lvl; name: string; wsId: string; programId: string; deadlineId?: string; todoId?: string; subtaskId?: string; unitId?: string; deadline?: string; durationMin?: number };
 type BulkPatch = { name?: string; deadline?: string; durationMin?: number };
 
@@ -458,21 +459,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     // 사업목표(program, level 0) 행은 로드맵에 표시하지 않고, 프로젝트(deadline)를 최상위로 보여준다.
     // 데드라인이 하나도 없는 빈 프로그램은 로드맵에 그리지 않는다('여기서 추가'만 잔뜩 남는 문제 방지).
     if (dls.length === 0) continue;
-    for (const dl of dls) {
+    dls.forEach((dl, dli) => {
       const dKey = `d-${dl.id}`; const dp = dlPeriod(p, dl);
       const todos = dl.todos.filter(t => !t.done).sort((a, b) => ((a.date || a.deadline || '9999-99-99').localeCompare(b.date || b.deadline || '9999-99-99'))); // 산출물도 시작일 순
-      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey });
-      if (!isOpen(dKey, 1)) continue;
+      rows.push({ key: dKey, level: 1, kind: 'deadline', name: dl.name, start: dp.start, end: dp.end, color: pColor, hasChildren: true, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, badgeN: dli + 1 });
+      if (!isOpen(dKey, 1)) return;
       if (todos.length === 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
-      for (const t of todos) {
+      todos.forEach((t, ti) => {
         // 산출물(2단계)이 로드맵의 최하위 — 하위 task들은 칸반 탭에서 관리
         const tKey = `t-${t.id}`;
         const ts = t.date || t.deadline, te = t.deadline || t.date;
-        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey });
-      }
+        rows.push({ key: tKey, level: 2, kind: 'todo', name: t.name, start: ts && te ? (ts > te ? te : ts) : undefined, end: te || ts, color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, pgKey, badgeN: ti + 1 });
+      });
       // 산출물이 이미 있어도 '여기서 바로 추가' 행을 항상 노출 (프로젝트 아래에 산출물 직접 추가)
       if (todos.length > 0) rows.push({ key: `add-${dKey}`, level: 2, kind: 'todo', name: '', color: pColor, hasChildren: false, wsId: p.wsId, programId: p.id, deadlineId: dl.id, pgKey, isAdd: true, addKind: 'todo' });
-    }
+    });
   }
   }
   const rowsDraw = rows.map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
@@ -1442,7 +1443,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     {r.hasChildren ? (
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                     ) : <span className="w-4 flex-shrink-0" />}
-                    <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />
+                    {r.badgeN != null && (r.kind === 'deadline' || r.kind === 'todo')
+                      ? <LevelBadge shape={r.kind === 'deadline' ? 'triangle' : 'circle'} n={r.badgeN} color={r.color} size={r.kind === 'deadline' ? 16 : 15} />
+                      : <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />}
                     <span className="flex-1 min-w-0 py-1 leading-snug">
                       {editingKey === r.key ? (
                         <input autoFocus defaultValue={r.name} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}

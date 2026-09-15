@@ -5,6 +5,7 @@ import { useToast } from '../lib/ToastContext';
 import { useRouter } from 'next/navigation';
 import posthog from 'posthog-js';
 import { ListSkeleton } from '../components/Skeleton';
+import LevelBadge from '../components/LevelBadge';
 import { PlanData, PlanItem, TargetCustomer, GrowthStage, WorkArea, BizGoal, Deliverable, AreaDeliverable, BusinessOverview, PlanDoc, Goal, Strategy, Project, ProjectStatus, SuccessCriterion } from '../lib/types';
 
 // AI가 돌려주는 성과 기준(id 없음)
@@ -1860,8 +1861,9 @@ function GoalsSection({
     );
   };
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
-  const areaRow = (rowKey: string, area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void, taskCount?: number, onTasks?: () => void) => (
+  const areaRow = (rowKey: string, area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void, taskCount?: number, onTasks?: () => void, badgeN?: number) => (
     <div key={rowKey} className="flex items-start gap-2" data-ask data-ask-label={area || '항목'} data-ask-content={area ? `${area}: ${content}` : content}>
+      {badgeN != null && <span className="mt-1.5 flex-shrink-0"><LevelBadge shape="circle" n={badgeN} color={(areaColorOf && areaColorOf(area)) || '#7A9463'} size={17} /></span>}
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
           className={`flex-shrink-0 mt-1.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
@@ -1902,7 +1904,7 @@ function GoalsSection({
       </div>
       <p className="text-[12px] text-neutral-400 mb-4">현실적인 수치 기반 목표를 세우고, 목표 아래 프로젝트로 실행하세요. 프로젝트를 완료할 때마다 진행도가 올라가요. AI 추천은 바로 추가되고, 점검·쪼개기는 확인 후 반영돼요.</p>
       <div className="space-y-2.5">
-        {goals.map(g => {
+        {goals.map((g, gi) => {
           const gOpen = openGoals.has(g.id);
           const projects = projectsOfGoal(g.id);
           const doneCount = projects.filter(p => (p.status ?? 'planned') === 'done').length;
@@ -1915,6 +1917,7 @@ function GoalsSection({
                 <div className="flex items-center gap-2">
                   <button onClick={() => toggle(setOpenGoals, g.id)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                     <Chevron open={gOpen} />
+                    <LevelBadge shape="square" n={gi + 1} color="#16211E" />
                     {editId === g.id ? nameInput(n => onUpdateGoal(g.id, { name: n })) : (
                       <span className="text-sm font-bold text-neutral-900 truncate">{g.name}</span>
                     )}
@@ -2087,6 +2090,7 @@ function GoalsSection({
                                     <div className="flex items-center gap-2">
                                       <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
                                         <Chevron open={pOpen} />
+                                        <LevelBadge shape="triangle" n={pi + 1} color="#5EA63A" size={17} />
                                         <span className="text-[13px] font-semibold text-neutral-900 truncate">{p.name}</span>
                                       </button>
                                       {/* 날짜: 타이틀 우측 (펼치면 편집, 접히면 요약) */}
@@ -2124,7 +2128,7 @@ function GoalsSection({
                                       <Hint text="이 프로젝트를 완성하려면 각 업무 영역에서 만들어야 할 결과물이에요. 영역별로 결과물을 적고, 오른쪽 'task 개수'를 눌러 Process에서 세부 task를 관리하세요." />
                                     </div>
                                     <div className="space-y-1.5">
-                                      {(p.areaDeliverables ?? []).map(a => areaRow(
+                                      {(p.areaDeliverables ?? []).map((a, ai) => areaRow(
                                         a.id,
                                         a.area, a.content,
                                         v => onUpdateProject(p.id, { areaDeliverables: (p.areaDeliverables ?? []).map(x => x.id === a.id ? { ...x, area: v } : x) }),
@@ -2136,6 +2140,7 @@ function GoalsSection({
                                         undefined, // AI 다이아 버튼 제거
                                         deliverableTaskCount ? deliverableTaskCount(a.id) : 0,
                                         onOpenTasks,
+                                        ai + 1, // 동그라미 번호표
                                       ))}
                                       <button onClick={() => onUpdateProject(p.id, { areaDeliverables: [...(p.areaDeliverables ?? []), { id: uid(), area: '', content: '' }] })}
                                         className="w-full py-1.5 rounded-lg border-2 border-dashed border-neutral-200 text-[12px] text-neutral-400 hover:text-neutral-600 hover:border-violet-300 transition-all">+ 업무 영역별 산출물</button>
