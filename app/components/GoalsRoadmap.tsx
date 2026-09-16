@@ -1418,12 +1418,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               {/* 막대 연결선 (의존성) */}
               {connLines.length > 0 && (
                 <svg className="absolute top-0 left-0 pointer-events-none" width={contentWidth} height="100%" style={{ overflow: 'visible', zIndex: 5 }}>
-                  {connLines.map((l, i) => { const mx = (l.x1 + l.x2) / 2; return (
-                    <g key={i}>
-                      <path d={`M ${l.x1} ${l.y1} C ${mx} ${l.y1}, ${mx} ${l.y2}, ${l.x2} ${l.y2}`} fill="none" stroke="#2B62C4" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
-                      <circle cx={l.x2} cy={l.y2} r={2.5} fill="#2B62C4" opacity={0.7} />
-                    </g>
-                  ); })}
+                  {connLines.map((l, i) => {
+                    const mx = (l.x1 + l.x2) / 2;
+                    const dy = l.y2 - l.y1; const dir = dy >= 0 ? 1 : -1;
+                    // 90도 엘보(수평→수직→수평) + 모서리 라운드
+                    const r = Math.max(0, Math.min(7, Math.abs(dy) / 2, Math.abs(mx - l.x1), Math.abs(l.x2 - mx)));
+                    const d = Math.abs(dy) < 1
+                      ? `M ${l.x1} ${l.y1} H ${l.x2}`
+                      : `M ${l.x1} ${l.y1} H ${mx - r} Q ${mx} ${l.y1} ${mx} ${l.y1 + dir * r} V ${l.y2 - dir * r} Q ${mx} ${l.y2} ${mx + r} ${l.y2} H ${l.x2}`;
+                    return (
+                      <g key={i}>
+                        <path d={d} fill="none" stroke="#2B62C4" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx={l.x2} cy={l.y2} r={2.5} fill="#2B62C4" opacity={0.7} />
+                      </g>
+                    );
+                  })}
                 </svg>
               )}
               {dayLines.map((x, i) => <div key={`d${i}`} className="absolute top-0 bottom-0 w-px" style={{ left: x, backgroundColor: '#EEEEE8' }} />)}
