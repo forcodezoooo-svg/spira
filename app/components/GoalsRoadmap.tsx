@@ -73,6 +73,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
   const [openMap, setOpenMap] = useState<Map<string, boolean>>(new Map());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [barScope, setBarScope] = useState<string | null>(null); // 로드맵 막대 클릭 → 그 막대(카테고리)의 task 보드를 옆에 부분적으로 펼침
   const [scrollTarget, setScrollTarget] = useState<string | null>(null); // enterLevel 시 스크롤 목표 날짜
   const [visLabel, setVisLabel] = useState('');
   const [notPlaced, setNotPlaced] = useState<string | null>(null);
@@ -332,7 +333,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   useEffect(() => { try { if (localStorage.getItem('spira_open_task_board')) { localStorage.removeItem('spira_open_task_board'); setKanban(true); } } catch { /* empty */ } }, []);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
-  useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
+  useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); setBarScope(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
 
   // Goals 티칭 투어: 카테고리 보드 뷰 전환 / 우클릭 팝업 닫기 요청
   useEffect(() => {
@@ -1169,7 +1170,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
       {/* 로드맵 박스 · task 박스를 한 페이지에 가로로 나열하고, 좌우로 슬라이드하며 전환 (비활성 박스는 옆에 걸쳐 보임) */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : 'translateX(0px)' }}>
+        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : barScope ? 'translateX(-308px)' : 'translateX(0px)' }}>
           {/* ── 로드맵 박스 ── */}
           <div className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
@@ -1348,7 +1349,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
-                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
+                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } if (barScope === r.key) { setBarScope(null); setSelectedKey(null); } else { enterLevel(r); setBarScope(r.key); } }}
                         onPointerDown={e => startPress(r, e)} onPointerMove={movePress} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress}
                         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); clearPress(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
@@ -1415,11 +1416,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           {/* ── task 박스 ── */}
           <div className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
-          <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>업무 영역별 task</span>
-          <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
+          {barScope && (
+            <button onClick={() => { setBarScope(null); setSelectedKey(null); }} title="닫기" className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors hover:bg-neutral-100" style={{ color: '#9AA39D' }}>
+              <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          )}
+          <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{barScope ? (kbScopeName || '선택 항목') : '업무 영역별 task'}</span>
+          {!barScope && <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>}
+          {barScope && <button onClick={() => setKanban(true)} title="task 전체 보기" className="ml-auto flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-1 flex-shrink-0 transition-colors" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}><svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>전체</button>}
         </div>
         <div className="flex-1 min-h-0 flex flex-col">
-          <div className="flex items-center gap-2 mb-2 flex-shrink-0 flex-wrap">
+          {!barScope && <div className="flex items-center gap-2 mb-2 flex-shrink-0 flex-wrap">
             <span className="text-[13px] font-bold" style={{ color: '#5B6560' }}>카테고리{kbColsView.length > 0 ? ` · ${kbColsView.length}` : ''}</span>
             {/* 뷰 전환: 업무영역별 칼럼 ↔ 날짜순 목록 */}
             <div className="flex rounded-full p-0.5" style={{ backgroundColor: '#F0F0EA' }}>
@@ -1451,7 +1458,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 카테고리 추가{store.boardTemplates.length > 0 ? ` · 템플릿 ${store.boardTemplates.length}` : ''}
               </button>
             )}
-          </div>
+          </div>}
           {kbColsView.length === 0 && recentDone.length === 0 ? (
             <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
           ) : kbFlat ? (
@@ -1544,8 +1551,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             </div>
           ))}
-            {/* 최근 완료: 완료 후 2주간 되살리기 가능, 이후 사라짐 */}
-            {recentDone.length > 0 && (
+            {/* 최근 완료: 완료 후 2주간 되살리기 가능, 이후 사라짐 (막대 스코프 중엔 숨김) */}
+            {!barScope && recentDone.length > 0 && (
               <div className="flex flex-col min-h-0 w-[280px] flex-shrink-0 rounded-xl border-2 border-dashed" style={{ borderColor: '#D8D8D0', backgroundColor: '#FAFAF7' }}>
                 <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
                   <div className="text-[13px] font-black" style={{ color: '#5B6560' }}>최근 완료 · {recentDone.length}</div>
@@ -1570,7 +1577,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
           )}
         </div>
-            {!kanban && <div onClick={() => setKanban(true)} data-teach="kb-toggle" className="absolute inset-0 z-40 cursor-pointer" title="task 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
+            {!kanban && !barScope && <div onClick={() => setKanban(true)} data-teach="kb-toggle" className="absolute inset-0 z-40 cursor-pointer" title="task 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
         </div>
       </div>
