@@ -1172,11 +1172,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : barScope ? 'translateX(-308px)' : 'translateX(0px)' }}>
           {/* ── 로드맵 박스 ── */}
-          <div onClick={e => { if (barScope && e.target === e.currentTarget) { setBarScope(null); setSelectedKey(null); } }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+          <div onClick={e => { if (kanban) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; if (barScope) { setBarScope(null); setSelectedKey(null); } else setKanban(true); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
           {/* 막대 스코프 중엔 상단 컨트롤을 오른쪽 여백만큼 밀어, 겹쳐 뜨는 task 패널에 가리지 않고 뷰를 계속 조작할 수 있게 */}
           <div className="flex-shrink-0 relative z-10" style={{ transform: barScope ? 'translateX(308px)' : undefined, paddingRight: barScope ? 304 : undefined, transition: 'transform 300ms ease-out, padding 300ms ease-out' }}>
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
-          <div onClick={e => { if (e.target !== e.currentTarget || kanban) return; if (barScope) { setBarScope(null); setSelectedKey(null); } else setKanban(true); }} title={barScope ? '빈 곳을 누르면 접기' : '빈 곳을 누르면 task 보기로 전환'} className={`flex items-center justify-between mb-2.5 gap-2 ${!kanban ? 'cursor-pointer' : ''}`}>
+          <div className="flex items-center justify-between mb-2.5 gap-2">
             <div className="flex items-center gap-1 min-w-0">
               <button onClick={() => scrollByScreen(-1)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#9AA39D' }} title="이전"><svg className="w-4 h-4" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
               <button onClick={scrollToToday} className="text-[12px] font-semibold rounded-full px-2.5 py-1 transition-colors flex-shrink-0" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>오늘</button>
@@ -1231,7 +1231,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           {notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
           {linkFrom && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center flex items-center justify-center gap-2" style={{ backgroundColor: '#E7F0FF', color: '#2B62C4' }}>선행 막대를 골랐어요. <b>뒤에 올 막대의 🔗 를 클릭</b>해 연결하세요. <button onClick={() => setLinkFrom(null)} className="underline">취소</button></div>}
       </div>
-      <div ref={scrollRef} onScroll={e => updateVisLabel(e.currentTarget)} onClick={() => { if (barScope) { setBarScope(null); setSelectedKey(null); } }} className="flex-1 min-h-0 overflow-auto overscroll-contain border rounded-xl" style={{ borderColor: 'var(--spira-border-subtle)' }} onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
+      <div ref={scrollRef} onScroll={e => updateVisLabel(e.currentTarget)} className="flex-1 min-h-0 overflow-auto overscroll-contain border rounded-xl" style={{ borderColor: 'var(--spira-border-subtle)' }} onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
         <div className="relative" style={{ width: LABEL_W + contentWidth }}>
           {/* 헤더 */}
           <div className="flex sticky top-0 z-20" style={{ height: HEAD_H }}>
@@ -1417,8 +1417,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
           {/* ── task 박스 ── (막대 스코프 중엔 로드맵을 그대로 두고 왼쪽으로 슬라이드해 오른쪽 위에 겹침 / 배경 클릭 시 전체 확장) */}
-          <div onClick={() => { if (barScope) setKanban(true); }} className={`relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4 ${barScope ? 'cursor-pointer' : ''}`} title={barScope ? '클릭하면 task 전체 보기로 전환' : undefined} style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
-        <div onClick={e => { if (e.target === e.currentTarget && kanban) setKanban(false); }} title={kanban ? '빈 곳을 누르면 로드맵 보기로 전환' : undefined} className={`flex items-center gap-1.5 mb-3 min-w-0 ${kanban ? 'cursor-pointer' : ''}`}>
+          <div onClick={e => { if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; setKanban(!kanban ? true : false); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+        <div className="flex items-center gap-1.5 mb-3 min-w-0">
           <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{barScope ? (kbScopeName || '선택 항목') : '업무 영역별 task'}</span>
           {!barScope && <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>}
         </div>
