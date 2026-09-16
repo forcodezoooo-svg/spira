@@ -1454,13 +1454,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   >
                     {/* 사업목표 그룹 세로 라인(비즈니스 색, 그룹 안은 연결·그룹 경계에서 끊김) + 그룹 첫 행에 사업목표 사각형 번호 */}
                     <span className="absolute" style={{ left: 8, width: 2.5, top: groupFirstKey.has(r.key) ? 12 : -1, bottom: groupLastKey.has(r.key) ? 12 : -1, backgroundColor: businessColor(r.wsId) }} />
-                    {groupFirstKey.has(r.key) && <span className="absolute z-10" style={{ left: 1.5, top: '50%', transform: 'translateY(-50%)' }} title={`사업목표: ${programs.find(p => p.id === r.programId)?.name || `#${goalGroupNum.get(r.pgKey) ?? 1}`}`}><LevelBadge shape="square" n={goalGroupNum.get(r.pgKey) ?? 1} color={businessColor(r.wsId)} size={16} /></span>}
+                    {groupFirstKey.has(r.key) && (
+                      <span className="absolute z-30 group/goal" style={{ left: 1.5, top: '50%', transform: 'translateY(-50%)' }}>
+                        <LevelBadge shape="square" n={goalGroupNum.get(r.pgKey) ?? 1} color={businessColor(r.wsId)} size={19} />
+                        <span className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-1.5 whitespace-nowrap px-2 py-1 rounded-md text-[11px] font-semibold text-white opacity-0 group-hover/goal:opacity-100 z-50" style={{ backgroundColor: '#16211E' }}>사업목표: {programs.find(p => p.id === r.programId)?.name || `#${goalGroupNum.get(r.pgKey) ?? 1}`}</span>
+                      </span>
+                    )}
                     {selMode && <SelCheck on={checked} />}
                     {r.hasChildren ? (
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                     ) : <span className="w-4 flex-shrink-0" />}
                     {r.badgeN != null && (r.kind === 'deadline' || r.kind === 'todo')
-                      ? <LevelBadge shape={r.kind === 'deadline' ? 'triangle' : 'circle'} n={r.badgeN} color={r.color} size={r.kind === 'deadline' ? 16 : 15} />
+                      ? <LevelBadge shape={r.kind === 'deadline' ? 'triangle' : 'circle'} n={r.badgeN} color={r.color} size={r.kind === 'deadline' ? 19 : 18} />
                       : <span className="rounded-full flex-shrink-0" style={{ width: r.level === 0 ? 8 : 6, height: r.level === 0 ? 8 : 6, backgroundColor: r.color, opacity: r.level >= 2 ? 0.6 : 1 }} />}
                     <span className="flex-1 min-w-0 py-1 leading-snug">
                       {editingKey === r.key ? (

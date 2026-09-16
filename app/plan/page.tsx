@@ -1863,7 +1863,7 @@ function GoalsSection({
   const inputCls = 'bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-violet-400';
   const areaRow = (rowKey: string, area: string, content: string, onArea: (v: string) => void, onContent: (v: string) => void, onDel: () => void, areaPh: string, contentPh: string, done?: boolean, onToggle?: () => void, onDiscuss?: () => void, taskCount?: number, onTasks?: () => void, badgeN?: number) => (
     <div key={rowKey} className="flex items-start gap-2" data-ask data-ask-label={area || '항목'} data-ask-content={area ? `${area}: ${content}` : content}>
-      {badgeN != null && <span className="mt-1.5 flex-shrink-0"><LevelBadge shape="circle" n={badgeN} color={(areaColorOf && areaColorOf(area)) || '#7A9463'} size={17} /></span>}
+      {badgeN != null && <span className="mt-1.5 flex-shrink-0"><LevelBadge shape="circle" n={badgeN} color={(areaColorOf && areaColorOf(area)) || '#7A9463'} size={20} /></span>}
       {onToggle && (
         <button onClick={onToggle} title={done ? '완료됨 (눌러서 해제)' : '완료로 표시'}
           className={`flex-shrink-0 mt-1.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${done ? 'bg-[#5EA63A] border-[#5EA63A] text-white' : 'bg-white border-neutral-300 text-transparent hover:border-[#5EA63A]'}`}>
@@ -2090,7 +2090,7 @@ function GoalsSection({
                                     <div className="flex items-center gap-2">
                                       <button onClick={() => toggle(setOpenProjects, p.id)} className="flex items-center gap-2 min-w-0 flex-1 text-left">
                                         <Chevron open={pOpen} />
-                                        <LevelBadge shape="triangle" n={pi + 1} color="#5EA63A" size={17} />
+                                        <LevelBadge shape="triangle" n={pi + 1} color="#5EA63A" size={20} />
                                         <span className="text-[13px] font-semibold text-neutral-900 truncate">{p.name}</span>
                                       </button>
                                       {/* 날짜: 타이틀 우측 (펼치면 편집, 접히면 요약) */}
