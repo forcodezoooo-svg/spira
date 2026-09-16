@@ -1417,7 +1417,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: LABEL_W, width: contentWidth }}>
               {/* 막대 연결선 (의존성) */}
               {connLines.length > 0 && (
-                <svg className="absolute top-0 left-0 pointer-events-none" width={contentWidth} height="100%" style={{ overflow: 'visible', zIndex: 5 }}>
+                <svg className="absolute top-0 left-0 pointer-events-none" width={contentWidth} height="100%" style={{ overflow: 'visible', zIndex: 0 }}>
                   {connLines.map((l, i) => {
                     const mx = (l.x1 + l.x2) / 2;
                     const dy = l.y2 - l.y1; const dir = dy >= 0 ? 1 : -1;
