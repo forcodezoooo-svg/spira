@@ -1170,11 +1170,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
       {/* 로드맵 박스 · task 박스를 한 페이지에 가로로 나열하고, 좌우로 슬라이드하며 전환 (비활성 박스는 옆에 걸쳐 보임) */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : 'translateX(0px)' }}>
+        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : barScope ? 'translateX(-308px)' : 'translateX(0px)' }}>
           {/* ── 로드맵 박스 ── */}
           <div onClick={e => { if (barScope && e.target === e.currentTarget) { setBarScope(null); setSelectedKey(null); } }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
           {/* 막대 스코프 중엔 상단 컨트롤을 오른쪽 여백만큼 밀어, 겹쳐 뜨는 task 패널에 가리지 않고 뷰를 계속 조작할 수 있게 */}
-          <div className="flex-shrink-0" style={{ paddingRight: barScope ? 304 : undefined, transition: 'padding 300ms ease-out' }}>
+          <div className="flex-shrink-0 relative z-10" style={{ transform: barScope ? 'translateX(308px)' : undefined, paddingRight: barScope ? 304 : undefined, transition: 'transform 300ms ease-out, padding 300ms ease-out' }}>
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
           <div className="flex items-center justify-between mb-2.5 gap-2">
             <div className="flex items-center gap-1 min-w-0">
@@ -1417,7 +1417,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
           {/* ── task 박스 ── (막대 스코프 중엔 로드맵을 그대로 두고 왼쪽으로 슬라이드해 오른쪽 위에 겹침 / 배경 클릭 시 전체 확장) */}
-          <div onClick={() => { if (barScope) setKanban(true); }} className={`relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4 transition-transform duration-300 ease-out ${barScope ? 'cursor-pointer' : ''}`} title={barScope ? '클릭하면 task 전체 보기로 전환' : undefined} style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)', transform: barScope ? 'translateX(-308px)' : undefined, zIndex: barScope ? 20 : undefined }}>
+          <div onClick={() => { if (barScope) setKanban(true); }} className={`relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4 ${barScope ? 'cursor-pointer' : ''}`} title={barScope ? '클릭하면 task 전체 보기로 전환' : undefined} style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
           <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{barScope ? (kbScopeName || '선택 항목') : '업무 영역별 task'}</span>
           {!barScope && <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>}
