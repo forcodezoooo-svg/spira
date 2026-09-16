@@ -1423,7 +1423,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               if (r.isAdd) return (
                 <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
                   <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 22 + (r.level - 1) * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
-                    <span className="absolute rounded-full" style={{ left: 8, width: 2.5, top: groupFirstKey.has(r.key) ? 10 : 0, bottom: groupLastKey.has(r.key) ? 10 : 0, backgroundColor: businessColor(r.wsId) }} />
+                    <span className="absolute" style={{ left: 8, width: 2.5, top: groupFirstKey.has(r.key) ? 12 : -1, bottom: groupLastKey.has(r.key) ? 12 : -1, backgroundColor: businessColor(r.wsId) }} />
                     <button onClick={() => (r.addKind === 'todo' ? addTodoInline(r) : addDeadlineInline(r))} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#3E7A2E' }} title={`여기서 ${r.addKind === 'todo' ? '산출물' : '프로젝트'} 바로 추가`}>
                       <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>여기서 추가
                     </button>
@@ -1452,9 +1452,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     onDragStart={!selMode && r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, e); } : undefined}
                     title={!placed && r.level > 0 ? '드래그해서 타임라인에 배치' : r.name}
                   >
-                    {/* 사업목표 그룹 세로 라인(비즈니스 색, 그룹 경계에서 끊김) + 그룹 첫 행에 사업목표 사각형 번호 */}
-                    <span className="absolute rounded-full" style={{ left: 8, width: 2.5, top: groupFirstKey.has(r.key) ? 10 : 0, bottom: groupLastKey.has(r.key) ? 10 : 0, backgroundColor: businessColor(r.wsId) }} />
-                    {groupFirstKey.has(r.key) && <span className="absolute z-10" style={{ left: 1.5, top: '50%', transform: 'translateY(-50%)' }} title={`사업목표 ${goalGroupNum.get(r.pgKey) ?? 1}`}><LevelBadge shape="square" n={goalGroupNum.get(r.pgKey) ?? 1} color={businessColor(r.wsId)} size={16} /></span>}
+                    {/* 사업목표 그룹 세로 라인(비즈니스 색, 그룹 안은 연결·그룹 경계에서 끊김) + 그룹 첫 행에 사업목표 사각형 번호 */}
+                    <span className="absolute" style={{ left: 8, width: 2.5, top: groupFirstKey.has(r.key) ? 12 : -1, bottom: groupLastKey.has(r.key) ? 12 : -1, backgroundColor: businessColor(r.wsId) }} />
+                    {groupFirstKey.has(r.key) && <span className="absolute z-10" style={{ left: 1.5, top: '50%', transform: 'translateY(-50%)' }} title={`사업목표: ${programs.find(p => p.id === r.programId)?.name || `#${goalGroupNum.get(r.pgKey) ?? 1}`}`}><LevelBadge shape="square" n={goalGroupNum.get(r.pgKey) ?? 1} color={businessColor(r.wsId)} size={16} /></span>}
                     {selMode && <SelCheck on={checked} />}
                     {r.hasChildren ? (
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
