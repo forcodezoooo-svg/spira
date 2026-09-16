@@ -897,9 +897,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
   const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, { date: due || undefined, deadline: due || undefined });
-  const kbSetTodoDue = (col: KbCol, due: string) => {
-    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, deadline: due || undefined, date: t.date || due || undefined }) }) });
+  // 카테고리(산출물)의 날짜 칸 클릭 → 로드맵을 열고 그 산출물 막대로 스코프(위치 강조·스크롤) + task는 그 카테고리 하나만
+  const locateOnRoadmap = (col: KbCol) => {
+    const key = `t-${col.todoId}`;
+    const row = rowsDraw.find(r => r.todoId === col.todoId && r.kind === 'todo');
+    setKanban(false);
+    setSelectedKey(key);
+    setBarScope(key);
+    setScrollTarget(row?.start ?? row?.end ?? col.due ?? col.start ?? null);
   };
   const kbTogglePin = (col: KbCol) => store.updateProgramTodo(col.p.wsId, col.p.id, col.dlId, col.todoId, { pinned: !col.pinned });
   // 카테고리(산출물=todo) 삭제 — 안의 task도 함께 삭제. 이 삭제로 데드라인/프로그램이 비면 함께 정리.
@@ -1516,8 +1521,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 </div>
                 {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
                 <div className="flex items-center gap-1.5 mt-1 ml-3.5">
-                  <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
-                  <DdayBadge d={col.due} />
+                  <button onClick={() => locateOnRoadmap(col)} title="클릭하면 로드맵에서 이 산출물 막대 위치를 보여줘요" className="flex items-center gap-1.5 group/date cursor-pointer">
+                    <span className="flex items-center gap-1 text-[10px] tabular-nums bg-white border rounded px-1.5 py-0.5 transition-colors group-hover/date:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }}>
+                      <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M8 1.5a5 5 0 0 0-5 5c0 3.3 5 8 5 8s5-4.7 5-8a5 5 0 0 0-5-5z" strokeLinejoin="round" /><circle cx="8" cy="6.5" r="1.6" /></svg>
+                      {col.due ? (() => { const d = new Date(col.due + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일`; })() : '기한 없음'}
+                    </span>
+                    <DdayBadge d={col.due} />
+                  </button>
                   {col.projectId && (() => { const meta = STATUS_META[col.status || 'planned'] ?? STATUS_META.planned; return (
                     <select value={col.status || 'planned'} onChange={e => kbSetStatus(col, e.target.value)} title="프로젝트 상태" className="text-[10px] font-bold rounded-full pl-2 pr-1 py-0.5 border-0 outline-none cursor-pointer appearance-none flex-shrink-0 ml-auto" style={{ backgroundColor: meta.bg, color: meta.color }}>
                       <option value="planned">예정</option><option value="active">진행중</option><option value="done">완료</option><option value="onhold">보류</option>
