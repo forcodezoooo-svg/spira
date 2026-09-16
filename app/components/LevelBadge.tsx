@@ -7,15 +7,15 @@ export default function LevelBadge({ shape, n, color = '#5EA63A', size = 20 }: {
   color?: string;
   size?: number;
 }) {
+  // 숫자는 SVG <text> + dominant-baseline로 정확히 중앙에 배치(HTML 텍스트의 line-height 쏠림 방지).
+  // 삼각형은 무게중심이 아래쪽이라 y를 살짝 내려 시각적 중앙을 맞춘다.
+  const cy = shape === 'triangle' ? 12.6 : 10;
   return (
-    <span className="inline-flex items-center justify-center flex-shrink-0 relative" style={{ width: size, height: size }} aria-hidden>
-      <svg width={size} height={size} viewBox="0 0 20 20" className="absolute inset-0">
-        {shape === 'square' && <rect x="1.2" y="1.2" width="17.6" height="17.6" rx="4.5" fill={color} />}
-        {shape === 'circle' && <circle cx="10" cy="10" r="9" fill={color} />}
-        {/* 삼각형: 같은 색 stroke + 둥근 joins 으로 모서리를 라운드 처리 */}
-        {shape === 'triangle' && <path d="M10 3.4 L16.6 16 L3.4 16 Z" fill={color} stroke={color} strokeWidth="3" strokeLinejoin="round" />}
-      </svg>
-      <span className="relative text-white tabular-nums" style={{ fontSize: Math.round(size * 0.55), fontWeight: 800, lineHeight: 1, marginTop: shape === 'triangle' ? size * 0.16 : 0 }}>{n}</span>
-    </span>
+    <svg width={size} height={size} viewBox="0 0 20 20" className="inline-block flex-shrink-0 align-middle" aria-hidden>
+      {shape === 'square' && <rect x="1.2" y="1.2" width="17.6" height="17.6" rx="4.5" fill={color} />}
+      {shape === 'circle' && <circle cx="10" cy="10" r="9" fill={color} />}
+      {shape === 'triangle' && <path d="M10 3.4 L16.6 16 L3.4 16 Z" fill={color} stroke={color} strokeWidth="3" strokeLinejoin="round" />}
+      <text x="10" y={cy} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize="10.5" fontWeight="800" style={{ fontVariantNumeric: 'tabular-nums' }}>{n}</text>
+    </svg>
   );
 }
