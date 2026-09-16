@@ -1160,28 +1160,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   return (
     <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
-      {/* 최상위 페이지 전환: 로드맵 / 카테고리 보드 */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex gap-1 rounded-full p-1 flex-1" style={{ backgroundColor: '#EDEDE7' }}>
-          {([[false, '로드맵'], [true, 'Task']] as [boolean, string][]).map(([kb, label]) => (
-            <button key={label} onClick={() => setKanban(kb)} data-teach={kb ? 'kb-toggle' : undefined} className="flex-1 py-2 rounded-full text-[13px] font-bold transition-colors" style={kanban === kb ? { backgroundColor: '#16211E', color: '#fff' } : { color: '#8D9A8D' }}>{label}</button>
-          ))}
+      {/* 다중 선택 편집 시에만 상단에 수정 버튼 노출 (뷰 전환은 좌우 슬라이드) */}
+      {sel.size > 0 && (
+        <div className="flex items-center justify-end mb-3">
+          <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>
         </div>
-        {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
-      </div>
+      )}
 
-      {/* 로드맵 박스 · task 박스를 한 페이지에 가로로 나열: 활성 박스는 펼쳐지고, 비활성 박스는 옆에 걸쳐(peek) 있다가 누르면 펼쳐짐 */}
-      <div className="flex-1 min-h-0 flex gap-3">
-        {/* task 활성 시: 로드맵 박스가 왼쪽에 접혀 걸쳐 있다가 클릭하면 펼쳐짐 */}
-        {kanban && (
-          <button onClick={() => setKanban(false)} title="로드맵 열기" className="w-[52px] flex-shrink-0 rounded-[18px] border-2 flex items-center justify-center transition-colors hover:bg-neutral-50" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
-            <span className="text-[14px] font-black tracking-wide" style={{ writingMode: 'vertical-rl', color: '#5B6560' }}>로드맵</span>
-          </button>
-        )}
-        {/* 활성 패널 (로드맵 or task) — 헤더(위)+본문(아래)을 세로로 채움 */}
-        <div className="flex-1 min-w-0 flex flex-col">
-      {!kanban ? (
-        <>
+      {/* 로드맵 박스 · task 박스를 한 페이지에 가로로 나열하고, 좌우로 슬라이드하며 전환 (비활성 박스는 옆에 걸쳐 보임) */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : 'translateX(0px)' }}>
+          {/* ── 로드맵 박스 ── */}
+          <div className="relative flex-shrink-0 flex flex-col min-w-0" style={{ width: 'calc(100% - 64px)' }}>
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
           <div className="flex items-center justify-between mb-2.5 gap-2">
             <div className="flex items-center gap-1 min-w-0">
@@ -1237,170 +1227,6 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           )}
           {notPlaced && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center" style={{ backgroundColor: '#FCF3E6', color: '#96631A' }}>‘{notPlaced}’은(는) 아직 배치되지 않았어요. 라벨을 타임라인으로 드래그해 배치하세요.</div>}
           {linkFrom && <div className="mb-2 rounded-xl px-3 py-2 text-[12px] text-center flex items-center justify-center gap-2" style={{ backgroundColor: '#E7F0FF', color: '#2B62C4' }}>선행 막대를 골랐어요. <b>뒤에 올 막대의 🔗 를 클릭</b>해 연결하세요. <button onClick={() => setLinkFrom(null)} className="underline">취소</button></div>}
-        </>
-      ) : (
-        <div className="flex items-center gap-1.5 mb-3 min-w-0">
-          <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>업무 영역별 task</span>
-          <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
-        </div>
-      )}
-
-      {kanban ? (
-        /* 칸반: 타이틀 영역(우측 카테고리 추가) + 영역별 산출물(칸) */
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div className="flex items-center gap-2 mb-2 flex-shrink-0 flex-wrap">
-            <span className="text-[13px] font-bold" style={{ color: '#5B6560' }}>카테고리{kbColsView.length > 0 ? ` · ${kbColsView.length}` : ''}</span>
-            {/* 뷰 전환: 업무영역별 칼럼 ↔ 날짜순 목록 */}
-            <div className="flex rounded-full p-0.5" style={{ backgroundColor: '#F0F0EA' }}>
-              {([[false, '업무영역별'], [true, '날짜순']] as [boolean, string][]).map(([f, label]) => (
-                <button key={label} onClick={() => setKbFlat(f)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={kbFlat === f ? { backgroundColor: '#fff', color: '#16211E' } : { color: '#9AA39D' }}>{label}</button>
-              ))}
-            </div>
-            {/* 비즈니스 필터: 보드에 2개 이상 비즈니스가 있을 때만 */}
-            {kbBusinesses.length > 1 && (
-              <div className="flex items-center gap-1 flex-wrap">
-                <button onClick={() => setKbBiz(null)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={!kbBizActive ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}>전체</button>
-                {kbBusinesses.map(b => (
-                  <button key={b.id} onClick={() => setKbBiz(b.id)} className="flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={kbBizActive === b.id ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title={`${b.name}만 보기`}>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(b.id) }} />{b.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex-1" />
-            {kbColsView.length > 0 && (
-              <button onClick={() => { setGroupSelIds(new Set(kbColsView.map(c => c.todoId))); setGroupSaveName(''); setGroupSaveOpen(true); }} data-teach="kb-template" className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="저장할 카테고리를 골라 템플릿으로 저장">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /></svg>
-                그룹 저장
-              </button>
-            )}
-            {catTarget && (
-              <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
-                카테고리 추가{store.boardTemplates.length > 0 ? ` · 템플릿 ${store.boardTemplates.length}` : ''}
-              </button>
-            )}
-          </div>
-          {kbColsView.length === 0 && recentDone.length === 0 ? (
-            <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
-          ) : kbFlat ? (
-          /* 날짜순 목록 뷰: 모든 task를 기한 날짜 순으로 나열(날짜별 그룹) */
-          (() => {
-            const flat = kbColsView.flatMap(col => col.subtasks.map(s => ({ col, s })));
-            const keyOf = (x: { s: Sub }) => x.s.deadline || x.s.date || '';
-            flat.sort((a, b) => (keyOf(a) || '9999-99-99').localeCompare(keyOf(b) || '9999-99-99'));
-            const groups: { key: string; items: { col: KbCol; s: Sub }[] }[] = [];
-            for (const it of flat) { const k = keyOf(it) || '__none__'; const last = groups[groups.length - 1]; if (last && last.key === k) last.items.push(it); else groups.push({ key: k, items: [it] }); }
-            const fmtHead = (k: string) => k === '__none__' ? '기한 없음' : (() => { const d = new Date(k + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]})`; })();
-            return (
-              <div className="flex-1 min-h-0">
-                {flat.length === 0 ? (
-                  <div className="h-full flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 task가 없어요.</p></div>
-                ) : (
-                  <div className="h-full flex gap-3 overflow-x-auto pb-1">
-                    {groups.map(g => (
-                      <div key={g.key} className="flex flex-col min-h-0 w-[300px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: kbDrag ? '#C9B8F5' : 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
-                        onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) kbMoveTaskToDate(kbDrag, g.key); setKbDrag(null); }}>
-                        <div className="px-3 py-2 border-b flex items-center gap-2 flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                          <span className="text-[14px] font-black" style={{ color: g.key === '__none__' ? '#9AA39D' : '#16211E' }}>{fmtHead(g.key)}</span>
-                          {g.key !== '__none__' && <DdayBadge d={g.key} />}
-                          <span className="text-[11px] tabular-nums ml-auto" style={{ color: '#9AA39D' }}>{g.items.length}</span>
-                        </div>
-                        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
-                          {g.items.map(({ col, s }) => renderTaskCard(col, s, true))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })()
-          ) : (
-          <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
-            {kbColsView.map(col => (
-            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={highlightIds?.has(col.todoId)
-              ? { borderColor: '#5EA63A', boxShadow: '0 0 0 3px #D6EFC2', backgroundColor: '#F6FCEF' }
-              : { borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
-              onDragOver={e => { if (kbDrag) { e.preventDefault(); const end = col.subtasks.length; setKbDragOver(prev => (prev && prev.todoId === col.todoId && prev.index === end) ? prev : { todoId: col.todoId, index: end }); } }}
-              onDrop={() => { if (kbDrag) { const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.length; kbInsertAt(col, kbDrag, at); setKbDrag(null); } }}>
-              {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
-              <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
-                {/* 어떤 비즈니스의 카테고리인지 */}
-                <div className="flex items-center gap-1 mb-1 min-w-0">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
-                  <span className="text-[10px] font-bold truncate" style={{ color: businessColor(col.p.wsId) }}>{col.p.wsName || '내 비즈니스'}</span>
-                </div>
-                <div className="group/col flex items-center gap-1.5 min-w-0">
-                  <button onClick={() => kbTogglePin(col)} title={col.pinned ? '우선 해제' : '우선 표시 (맨 앞으로)'} className="flex-shrink-0 transition-transform hover:scale-110">
-                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill={col.pinned ? '#F0B429' : 'none'} stroke={col.pinned ? '#F0B429' : '#C7CEC7'} strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8L10 2z" strokeLinejoin="round" /></svg>
-                  </button>
-                  <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
-                  <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
-                  <button onClick={() => kbDelCategory(col)} title="카테고리 삭제" className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ lineHeight: 1 }}>×</button>
-                </div>
-                {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
-                <div className="flex items-center gap-1.5 mt-1 ml-3.5">
-                  <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
-                  <DdayBadge d={col.due} />
-                  {col.projectId && (() => { const meta = STATUS_META[col.status || 'planned'] ?? STATUS_META.planned; return (
-                    <select value={col.status || 'planned'} onChange={e => kbSetStatus(col, e.target.value)} title="프로젝트 상태" className="text-[10px] font-bold rounded-full pl-2 pr-1 py-0.5 border-0 outline-none cursor-pointer appearance-none flex-shrink-0 ml-auto" style={{ backgroundColor: meta.bg, color: meta.color }}>
-                      <option value="planned">예정</option><option value="active">진행중</option><option value="done">완료</option><option value="onhold">보류</option>
-                    </select>
-                  ); })()}
-                </div>
-              </div>
-              {/* 태스크 */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-2">
-                    <div className="space-y-2">
-                      {col.subtasks.map((s, i) => (
-                        <div key={s.id}>
-                          {kbDrag && kbDrag !== s.id && kbDragOver?.todoId === col.todoId && kbDragOver.index === i && <div className="h-[3px] rounded-full mb-2" style={{ backgroundColor: '#7C3AED' }} />}
-                          {renderTaskCard(col, s)}
-                        </div>
-                      ))}
-                      {kbDrag && kbDragOver?.todoId === col.todoId && kbDragOver.index >= col.subtasks.length && <div className="h-[3px] rounded-full" style={{ backgroundColor: '#7C3AED' }} />}
-                      <div className="flex gap-1.5">
-                        <button onClick={() => kbAddTask(col)} className="flex-1 py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task</button>
-                        <button onClick={() => kbAiTasks(col)} data-teach="kb-ai" disabled={!!kbAiBusy} title="AI로 이 산출물의 task 생성" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
-                          {kbAiBusy === col.todoId
-                            ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                            : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
-                          AI
-                        </button>
-                      </div>
-                    </div>
-              </div>
-            </div>
-          ))}
-            {/* 최근 완료: 완료 후 2주간 되살리기 가능, 이후 사라짐 */}
-            {recentDone.length > 0 && (
-              <div className="flex flex-col min-h-0 w-[280px] flex-shrink-0 rounded-xl border-2 border-dashed" style={{ borderColor: '#D8D8D0', backgroundColor: '#FAFAF7' }}>
-                <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                  <div className="text-[13px] font-black" style={{ color: '#5B6560' }}>최근 완료 · {recentDone.length}</div>
-                  <p className="text-[10px] mt-0.5" style={{ color: '#9AA39D' }}>완료 후 {RETAIN_DAYS}일간 되살릴 수 있어요</p>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
-                  {recentDone.map(({ p, dl, daysLeft }) => (
-                    <div key={dl.id} className="bg-white border rounded-lg p-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
-                        <span className="text-[12px] font-bold flex-1 min-w-0 line-clamp-2" style={{ color: '#16211E' }}>{dl.name}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[10px] font-semibold" style={{ color: daysLeft <= 3 ? '#C0392B' : '#9AA39D' }}>{daysLeft}일 후 사라짐</span>
-                        <button onClick={() => kbRestoreDeadline(p, dl.id, dl.projectId)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#E4F5E0', color: '#3E6B1F' }}>되살리기</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          )}
-        </div>
-      ) : (
-      /* 간트: 좌측 트리(고정) + 우측 타임라인(연속 가로/세로 스크롤) */
       <div ref={scrollRef} onScroll={e => updateVisLabel(e.currentTarget)} className="flex-1 min-h-0 overflow-auto overscroll-contain border rounded-xl" style={{ borderColor: 'var(--spira-border-subtle)' }} onDragOver={e => { if (dragPayloadRef.current) e.preventDefault(); }} onDrop={onTrackDrop}>
         <div className="relative" style={{ width: LABEL_W + contentWidth }}>
           {/* 헤더 */}
@@ -1584,14 +1410,169 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           </div>
         </div>
       </div>
-      )}
+            {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
+          </div>
+          {/* ── task 박스 ── */}
+          <div className="relative flex-shrink-0 flex flex-col min-w-0" style={{ width: 'calc(100% - 64px)' }}>
+        <div className="flex items-center gap-1.5 mb-3 min-w-0">
+          <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>업무 영역별 task</span>
+          <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
         </div>
-        {/* 로드맵 활성 시: task 박스가 오른쪽에 접혀 걸쳐 있다가 클릭하면 펼쳐짐 */}
-        {!kanban && (
-          <button onClick={() => setKanban(true)} title="task 열기" data-teach="kb-toggle" className="w-[52px] flex-shrink-0 rounded-[18px] border-2 flex items-center justify-center transition-colors hover:bg-neutral-50" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
-            <span className="text-[14px] font-black tracking-wide" style={{ writingMode: 'vertical-rl', color: '#5B6560' }}>task</span>
-          </button>
-        )}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex items-center gap-2 mb-2 flex-shrink-0 flex-wrap">
+            <span className="text-[13px] font-bold" style={{ color: '#5B6560' }}>카테고리{kbColsView.length > 0 ? ` · ${kbColsView.length}` : ''}</span>
+            {/* 뷰 전환: 업무영역별 칼럼 ↔ 날짜순 목록 */}
+            <div className="flex rounded-full p-0.5" style={{ backgroundColor: '#F0F0EA' }}>
+              {([[false, '업무영역별'], [true, '날짜순']] as [boolean, string][]).map(([f, label]) => (
+                <button key={label} onClick={() => setKbFlat(f)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={kbFlat === f ? { backgroundColor: '#fff', color: '#16211E' } : { color: '#9AA39D' }}>{label}</button>
+              ))}
+            </div>
+            {/* 비즈니스 필터: 보드에 2개 이상 비즈니스가 있을 때만 */}
+            {kbBusinesses.length > 1 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                <button onClick={() => setKbBiz(null)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={!kbBizActive ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }}>전체</button>
+                {kbBusinesses.map(b => (
+                  <button key={b.id} onClick={() => setKbBiz(b.id)} className="flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={kbBizActive === b.id ? { backgroundColor: '#16211E', color: '#fff' } : { backgroundColor: '#F0F0EA', color: '#5B6560' }} title={`${b.name}만 보기`}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(b.id) }} />{b.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex-1" />
+            {kbColsView.length > 0 && (
+              <button onClick={() => { setGroupSelIds(new Set(kbColsView.map(c => c.todoId))); setGroupSaveName(''); setGroupSaveOpen(true); }} data-teach="kb-template" className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="저장할 카테고리를 골라 템플릿으로 저장">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /></svg>
+                그룹 저장
+              </button>
+            )}
+            {catTarget && (
+              <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+                카테고리 추가{store.boardTemplates.length > 0 ? ` · 템플릿 ${store.boardTemplates.length}` : ''}
+              </button>
+            )}
+          </div>
+          {kbColsView.length === 0 && recentDone.length === 0 ? (
+            <div className="flex-1 min-h-0 flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 산출물이 없어요.<br />로드맵에서 프로젝트/산출물을 선택하거나 먼저 만들어보세요.</p></div>
+          ) : kbFlat ? (
+          /* 날짜순 목록 뷰: 모든 task를 기한 날짜 순으로 나열(날짜별 그룹) */
+          (() => {
+            const flat = kbColsView.flatMap(col => col.subtasks.map(s => ({ col, s })));
+            const keyOf = (x: { s: Sub }) => x.s.deadline || x.s.date || '';
+            flat.sort((a, b) => (keyOf(a) || '9999-99-99').localeCompare(keyOf(b) || '9999-99-99'));
+            const groups: { key: string; items: { col: KbCol; s: Sub }[] }[] = [];
+            for (const it of flat) { const k = keyOf(it) || '__none__'; const last = groups[groups.length - 1]; if (last && last.key === k) last.items.push(it); else groups.push({ key: k, items: [it] }); }
+            const fmtHead = (k: string) => k === '__none__' ? '기한 없음' : (() => { const d = new Date(k + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]})`; })();
+            return (
+              <div className="flex-1 min-h-0">
+                {flat.length === 0 ? (
+                  <div className="h-full flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 task가 없어요.</p></div>
+                ) : (
+                  <div className="h-full flex gap-3 overflow-x-auto pb-1">
+                    {groups.map(g => (
+                      <div key={g.key} className="flex flex-col min-h-0 w-[300px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: kbDrag ? '#C9B8F5' : 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
+                        onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) kbMoveTaskToDate(kbDrag, g.key); setKbDrag(null); }}>
+                        <div className="px-3 py-2 border-b flex items-center gap-2 flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                          <span className="text-[14px] font-black" style={{ color: g.key === '__none__' ? '#9AA39D' : '#16211E' }}>{fmtHead(g.key)}</span>
+                          {g.key !== '__none__' && <DdayBadge d={g.key} />}
+                          <span className="text-[11px] tabular-nums ml-auto" style={{ color: '#9AA39D' }}>{g.items.length}</span>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                          {g.items.map(({ col, s }) => renderTaskCard(col, s, true))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()
+          ) : (
+          <div ref={boardRef} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
+            {kbColsView.map(col => (
+            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={highlightIds?.has(col.todoId)
+              ? { borderColor: '#5EA63A', boxShadow: '0 0 0 3px #D6EFC2', backgroundColor: '#F6FCEF' }
+              : { borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
+              onDragOver={e => { if (kbDrag) { e.preventDefault(); const end = col.subtasks.length; setKbDragOver(prev => (prev && prev.todoId === col.todoId && prev.index === end) ? prev : { todoId: col.todoId, index: end }); } }}
+              onDrop={() => { if (kbDrag) { const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.length; kbInsertAt(col, kbDrag, at); setKbDrag(null); } }}>
+              {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
+              <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
+                {/* 어떤 비즈니스의 카테고리인지 */}
+                <div className="flex items-center gap-1 mb-1 min-w-0">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(col.p.wsId) }} />
+                  <span className="text-[10px] font-bold truncate" style={{ color: businessColor(col.p.wsId) }}>{col.p.wsName || '내 비즈니스'}</span>
+                </div>
+                <div className="group/col flex items-center gap-1.5 min-w-0">
+                  <button onClick={() => kbTogglePin(col)} title={col.pinned ? '우선 해제' : '우선 표시 (맨 앞으로)'} className="flex-shrink-0 transition-transform hover:scale-110">
+                    <svg className="w-4 h-4" viewBox="0 0 20 20" fill={col.pinned ? '#F0B429' : 'none'} stroke={col.pinned ? '#F0B429' : '#C7CEC7'} strokeWidth="1.5"><path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L2.2 7.7l5.4-.8L10 2z" strokeLinejoin="round" /></svg>
+                  </button>
+                  <span className="text-[14px] font-black truncate flex-1 min-w-0" style={{ color: '#16211E' }}>{col.area}</span>
+                  <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: '#9AA39D' }}>{col.subtasks.length}</span>
+                  <button onClick={() => kbDelCategory(col)} title="카테고리 삭제" className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-0 group-hover/col:opacity-100 transition-opacity" style={{ lineHeight: 1 }}>×</button>
+                </div>
+                {col.goalSub && <p className="text-[12px] font-bold break-words leading-snug mt-0.5 ml-3.5" style={{ color: '#5B6560' }}>{col.goalSub}</p>}
+                <div className="flex items-center gap-1.5 mt-1 ml-3.5">
+                  <input type="date" value={col.due} onChange={e => kbSetTodoDue(col, e.target.value)} title="산출물 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+                  <DdayBadge d={col.due} />
+                  {col.projectId && (() => { const meta = STATUS_META[col.status || 'planned'] ?? STATUS_META.planned; return (
+                    <select value={col.status || 'planned'} onChange={e => kbSetStatus(col, e.target.value)} title="프로젝트 상태" className="text-[10px] font-bold rounded-full pl-2 pr-1 py-0.5 border-0 outline-none cursor-pointer appearance-none flex-shrink-0 ml-auto" style={{ backgroundColor: meta.bg, color: meta.color }}>
+                      <option value="planned">예정</option><option value="active">진행중</option><option value="done">완료</option><option value="onhold">보류</option>
+                    </select>
+                  ); })()}
+                </div>
+              </div>
+              {/* 태스크 */}
+              <div className="flex-1 min-h-0 overflow-y-auto p-2">
+                    <div className="space-y-2">
+                      {col.subtasks.map((s, i) => (
+                        <div key={s.id}>
+                          {kbDrag && kbDrag !== s.id && kbDragOver?.todoId === col.todoId && kbDragOver.index === i && <div className="h-[3px] rounded-full mb-2" style={{ backgroundColor: '#7C3AED' }} />}
+                          {renderTaskCard(col, s)}
+                        </div>
+                      ))}
+                      {kbDrag && kbDragOver?.todoId === col.todoId && kbDragOver.index >= col.subtasks.length && <div className="h-[3px] rounded-full" style={{ backgroundColor: '#7C3AED' }} />}
+                      <div className="flex gap-1.5">
+                        <button onClick={() => kbAddTask(col)} className="flex-1 py-1.5 rounded-lg border-2 border-dashed text-[12px] font-semibold transition-colors hover:bg-white" style={{ borderColor: 'var(--spira-border)', color: '#9AA39D' }}>+ task</button>
+                        <button onClick={() => kbAiTasks(col)} data-teach="kb-ai" disabled={!!kbAiBusy} title="AI로 이 산출물의 task 생성" className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-colors flex-shrink-0 disabled:opacity-50" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}>
+                          {kbAiBusy === col.todoId
+                            ? <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                            : <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>}
+                          AI
+                        </button>
+                      </div>
+                    </div>
+              </div>
+            </div>
+          ))}
+            {/* 최근 완료: 완료 후 2주간 되살리기 가능, 이후 사라짐 */}
+            {recentDone.length > 0 && (
+              <div className="flex flex-col min-h-0 w-[280px] flex-shrink-0 rounded-xl border-2 border-dashed" style={{ borderColor: '#D8D8D0', backgroundColor: '#FAFAF7' }}>
+                <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                  <div className="text-[13px] font-black" style={{ color: '#5B6560' }}>최근 완료 · {recentDone.length}</div>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#9AA39D' }}>완료 후 {RETAIN_DAYS}일간 되살릴 수 있어요</p>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+                  {recentDone.map(({ p, dl, daysLeft }) => (
+                    <div key={dl.id} className="bg-white border rounded-lg p-2.5" style={{ borderColor: 'var(--spira-border-subtle)' }}>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: businessColor(p.wsId) }} />
+                        <span className="text-[12px] font-bold flex-1 min-w-0 line-clamp-2" style={{ color: '#16211E' }}>{dl.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-[10px] font-semibold" style={{ color: daysLeft <= 3 ? '#C0392B' : '#9AA39D' }}>{daysLeft}일 후 사라짐</span>
+                        <button onClick={() => kbRestoreDeadline(p, dl.id, dl.projectId)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#E4F5E0', color: '#3E6B1F' }}>되살리기</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          )}
+        </div>
+            {!kanban && <div onClick={() => setKanban(true)} data-teach="kb-toggle" className="absolute inset-0 z-40 cursor-pointer" title="task 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
+          </div>
+        </div>
       </div>
 
       {/* 우클릭: 막대 소요 일수 입력 */}
