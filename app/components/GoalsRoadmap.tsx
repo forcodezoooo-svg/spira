@@ -385,8 +385,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   useEffect(() => {
     if (!scrollTarget) return;
     const el = scrollRef.current; if (!el) return;
-    // 클릭한 항목을 라벨 열 바로 오른쪽(왼쪽 가까이)에 배치 — 중앙 정렬 대신 살짝 여백만
-    el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - 32), behavior: 'smooth' });
+    // 클릭한 항목을 라벨 열 바로 오른쪽(왼쪽 가까이)에 배치 — 중앙 정렬 대신 살짝 여백만.
+    // 단, 막대 스코프(barScope) 중엔 로드맵 박스가 -308px 밀려 라벨 열이 화면 밖으로 나가므로
+    // 그만큼(≈148px) 더 밀어, 막대가 보이는 영역(좌측) 안에 오게 한다.
+    const pad = barScope ? 148 : 32;
+    const doScroll = () => el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - pad), behavior: 'smooth' });
+    doScroll();
+    // 전체 task → 로드맵 전환처럼 박스가 막 슬라이드-인하는 경우 레이아웃 확정 후 한 번 더 보정
+    requestAnimationFrame(doScroll);
     updateVisLabel(el);
     setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
