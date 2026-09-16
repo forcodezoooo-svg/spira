@@ -112,6 +112,26 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const calDragRef = useRef(calDrag); calDragRef.current = calDrag;
   const movedRef = useRef(false); // 막대 드래그가 실제로 이동했는지(클릭과 구분)
   const dragPayloadRef = useRef<Payload | null>(null);
+  // 롱프레스(꾹 누르기)로도 기간 설정 팝업 열기 — 우클릭과 동일. 터치/마우스 공용(pointer 이벤트).
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStart = useRef<{ x: number; y: number } | null>(null);
+  const clearPress = () => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } pressStart.current = null; };
+  const startPress = (r: Row, e: React.PointerEvent) => {
+    if (!(r.level > 0 && r.start && r.end)) return;
+    pressStart.current = { x: e.clientX, y: e.clientY };
+    const z = htmlZoom(); const cx = e.clientX / z, cy = e.clientY / z; const rr = r;
+    clearPress();
+    pressStart.current = { x: e.clientX, y: e.clientY };
+    pressTimer.current = setTimeout(() => {
+      pressTimer.current = null;
+      movedRef.current = true; // 롱프레스 후의 클릭(하위 이동)을 억제
+      setCtxMenu({ r: rr, x: cx, y: cy, days: daysBetween(rr.start!, rr.end!) + 1, start: rr.start! });
+    }, 500);
+  };
+  const movePress = (e: React.PointerEvent) => {
+    if (!pressStart.current) return;
+    if (Math.abs(e.clientX - pressStart.current.x) > 6 || Math.abs(e.clientY - pressStart.current.y) > 6) clearPress();
+  };
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null); // 로드맵 본문(막대 영역) — 연결선 좌표 측정용
@@ -1485,7 +1505,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
                       <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } enterLevel(r); }}
-                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
+                        onPointerDown={e => startPress(r, e)} onPointerMove={movePress} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress}
+                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); clearPress(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
                         style={{
                           left, width: Math.max(width, bl === 1 ? 14 : 6), height: barH(bl),
