@@ -372,15 +372,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
   const centerDateRef = useRef(todayStr); // 현재 화면 중앙 날짜
   const leftDateRef = useRef(todayStr); // 현재 화면 왼쪽 끝 날짜 (줌 시 이 날짜를 왼쪽에 고정)
-  // 최초 진입 시: 제일 가까운(임박한) 프로젝트 시작일을 왼쪽에 배치 (없으면 오늘)
+  // 최초 진입 시: 오늘 날짜를 화면 중앙에 배치
   useEffect(() => {
     const el = scrollRef.current; if (!el) return;
-    const starts: string[] = [];
-    for (const p of programs) for (const dl of (p.deadlines ?? [])) { if (!dlVisible(p.wsId, dl)) continue; const s = dlPeriod(p, dl).start; if (s) starts.push(s); }
-    const upcoming = starts.filter(s => s >= todayStr).sort();
-    const anchor = upcoming[0] ?? (starts.length ? [...starts].sort().slice(-1)[0] : todayStr);
-    el.scrollLeft = Math.max(0, xOf(anchor) - 32);
-    centerDateRef.current = anchor;
+    el.scrollLeft = Math.max(0, xOf(todayStr) - el.clientWidth / 2);
+    centerDateRef.current = todayStr;
     updateVisLabel(el);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
