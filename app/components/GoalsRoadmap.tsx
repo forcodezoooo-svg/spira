@@ -1170,6 +1170,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         {sel.size > 0 && <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1 rounded-full px-3 py-2 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }}><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.73 5.27L19 10l-5.27 1.73L12 17l-1.73-5.27L5 10l5.27-1.73L12 3z" /></svg>수정 ({sel.size})</button>}
       </div>
 
+      {/* 로드맵 박스 · task 박스를 한 페이지에 가로로 나열: 활성 박스는 펼쳐지고, 비활성 박스는 옆에 걸쳐(peek) 있다가 누르면 펼쳐짐 */}
+      <div className="flex-1 min-h-0 flex gap-3">
+        {/* task 활성 시: 로드맵 박스가 왼쪽에 접혀 걸쳐 있다가 클릭하면 펼쳐짐 */}
+        {kanban && (
+          <button onClick={() => setKanban(false)} title="로드맵 열기" className="w-[52px] flex-shrink-0 rounded-[18px] border-2 flex items-center justify-center transition-colors hover:bg-neutral-50" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
+            <span className="text-[14px] font-black tracking-wide" style={{ writingMode: 'vertical-rl', color: '#5B6560' }}>로드맵</span>
+          </button>
+        )}
+        {/* 활성 패널 (로드맵 or task) — 헤더(위)+본문(아래)을 세로로 채움 */}
+        <div className="flex-1 min-w-0 flex flex-col">
       {!kanban ? (
         <>
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
@@ -1575,6 +1585,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         </div>
       </div>
       )}
+        </div>
+        {/* 로드맵 활성 시: task 박스가 오른쪽에 접혀 걸쳐 있다가 클릭하면 펼쳐짐 */}
+        {!kanban && (
+          <button onClick={() => setKanban(true)} title="task 열기" data-teach="kb-toggle" className="w-[52px] flex-shrink-0 rounded-[18px] border-2 flex items-center justify-center transition-colors hover:bg-neutral-50" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}>
+            <span className="text-[14px] font-black tracking-wide" style={{ writingMode: 'vertical-rl', color: '#5B6560' }}>task</span>
+          </button>
+        )}
+      </div>
 
       {/* 우클릭: 막대 소요 일수 입력 */}
       {ctxMenu && (
