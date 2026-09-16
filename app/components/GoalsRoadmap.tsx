@@ -1349,7 +1349,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
-                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } if (barScope === r.key) { setBarScope(null); setSelectedKey(null); } else { enterLevel(r); setBarScope(r.key); } }}
+                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={() => { if (movedRef.current) { movedRef.current = false; return; } if (r.kind !== 'todo') return; if (barScope === r.key) { setBarScope(null); setSelectedKey(null); } else { enterLevel(r); setBarScope(r.key); } }}
                         onPointerDown={e => startPress(r, e)} onPointerMove={movePress} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress}
                         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); clearPress(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
