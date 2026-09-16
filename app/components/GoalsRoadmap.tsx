@@ -385,14 +385,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   useEffect(() => {
     if (!scrollTarget) return;
     const el = scrollRef.current; if (!el) return;
-    // 클릭한 항목을 라벨 열 바로 오른쪽(왼쪽 가까이)에 배치 — 중앙 정렬 대신 살짝 여백만.
-    // 단, 막대 스코프(barScope) 중엔 로드맵 박스가 -308px 밀려 라벨 열이 화면 밖으로 나가므로
-    // 그만큼(≈148px) 더 밀어, 막대가 보이는 영역(좌측) 안에 오게 한다.
-    const pad = barScope ? 148 : 32;
-    const doScroll = () => el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - pad), behavior: 'smooth' });
-    doScroll();
-    // 전체 task → 로드맵 전환처럼 박스가 막 슬라이드-인하는 경우 레이아웃 확정 후 한 번 더 보정
-    requestAnimationFrame(doScroll);
+    // 클릭한 항목을 라벨 열 바로 오른쪽(왼쪽 가까이)에 배치 — 중앙 정렬 대신 살짝 여백만
+    el.scrollTo({ left: Math.max(0, xOf(scrollTarget) - 32), behavior: 'smooth' });
     updateVisLabel(el);
     setScrollTarget(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -903,14 +897,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
   const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, { date: due || undefined, deadline: due || undefined });
-  // 카테고리(산출물)의 날짜 칸 클릭 → 로드맵을 열고 그 산출물 막대로 스코프(위치 강조·스크롤) + task는 그 카테고리 하나만
+  // 카테고리(산출물)의 날짜 칸 클릭 → 로드맵을 열고 그 산출물 막대로 스코프 + task는 그 카테고리 하나만.
+  // 슬라이드-인/렌더가 끝난 뒤 실제 막대 DOM을 찾아 scrollIntoView로 가운데로 가져온다(좌표 계산 대신 확실하게).
   const locateOnRoadmap = (col: KbCol) => {
     const key = `t-${col.todoId}`;
-    const row = rowsDraw.find(r => r.todoId === col.todoId && r.kind === 'todo');
     setKanban(false);
     setSelectedKey(key);
     setBarScope(key);
-    setScrollTarget(row?.start ?? row?.end ?? col.due ?? col.start ?? null);
+    let tries = 0;
+    const tick = () => {
+      const bar = bodyRef.current?.querySelector(`[data-rm-bar="${key}"]`) as HTMLElement | null;
+      if (bar) bar.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      else if (tries++ < 40) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   };
   const kbTogglePin = (col: KbCol) => store.updateProgramTodo(col.p.wsId, col.p.id, col.dlId, col.todoId, { pinned: !col.pinned });
   // 카테고리(산출물=todo) 삭제 — 안의 task도 함께 삭제. 이 삭제로 데드라인/프로그램이 비면 함께 정리.
