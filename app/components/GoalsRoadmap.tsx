@@ -1159,7 +1159,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   };
 
   return (
-    <div className={`bg-white border rounded-[24px] p-5 flex flex-col ${cardClassName}`} style={{ boxShadow: 'var(--spira-shadow-lg)', borderColor: 'var(--spira-border-subtle)' }}>
+    <div className={`flex flex-col ${cardClassName}`}>
       {/* 다중 선택 편집 시에만 상단에 수정 버튼 노출 (뷰 전환은 좌우 슬라이드) */}
       {sel.size > 0 && (
         <div className="flex items-center justify-end mb-3">
@@ -1171,7 +1171,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : 'translateX(0px)' }}>
           {/* ── 로드맵 박스 ── */}
-          <div className="relative flex-shrink-0 flex flex-col min-w-0" style={{ width: 'calc(100% - 64px)' }}>
+          <div className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
           <div className="flex items-center justify-between mb-2.5 gap-2">
             <div className="flex items-center gap-1 min-w-0">
@@ -1413,7 +1413,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
           {/* ── task 박스 ── */}
-          <div className="relative flex-shrink-0 flex flex-col min-w-0" style={{ width: 'calc(100% - 64px)' }}>
+          <div className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
           <span className="text-[13px] font-bold" style={{ color: '#16211E' }}>업무 영역별 task</span>
           <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>
