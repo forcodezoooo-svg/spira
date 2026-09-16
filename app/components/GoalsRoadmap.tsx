@@ -477,6 +477,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }
   }
   const rowsDraw = rows.map(r => (calDrag && calDrag.key === r.key ? { ...r, start: calDrag.start, end: calDrag.end } : r));
+  // 같은 사업목표(프로그램) 행들을 왼쪽 세로 라인으로 묶고, 그 그룹의 첫 행에 사업목표 번호(사각형)를 얹기 위한 정보
+  const goalGroupNum = new Map<string, number>(); // pgKey -> 사업목표 번호(등장 순)
+  const groupFirstKey = new Set<string>(); // 각 그룹의 첫 행 key
+  { let gn = 0, prevPg: string | null = null;
+    for (const r of rowsDraw) {
+      if (!goalGroupNum.has(r.pgKey)) goalGroupNum.set(r.pgKey, ++gn);
+      if (r.pgKey !== prevPg) { groupFirstKey.add(r.key); prevPg = r.pgKey; }
+    }
+  }
 
   // ── 항목 추가 (스케일별 depth, 부모=선택 계보) ──
   const resolveChain = (key: string | null) => {
@@ -1410,7 +1419,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               const pgIdx0 = pgOrder.get(r.pgKey) ?? 0;
               if (r.isAdd) return (
                 <div key={r.key} className="flex" style={{ height: ROW_H - 6, backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : 'transparent' }}>
-                  <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 8 + (r.level - 1) * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
+                  <div className="sticky left-0 z-20 flex items-center gap-1 border-b" style={{ width: LABEL_W, paddingLeft: 22 + (r.level - 1) * 15 + 20, borderColor: '#F4F4F0', backgroundColor: pgIdx0 % 2 === 1 ? '#FBFBF9' : '#fff' }}>
+                    <span className="absolute top-0 bottom-0" style={{ left: 8, width: 2.5, backgroundColor: '#BFE3A0' }} />
                     <button onClick={() => (r.addKind === 'todo' ? addTodoInline(r) : addDeadlineInline(r))} className="flex items-center gap-1 text-[11px] font-semibold rounded-md px-1.5 py-0.5 transition-colors hover:bg-neutral-100 flex-shrink-0" style={{ color: '#3E7A2E' }} title={`여기서 ${r.addKind === 'todo' ? '산출물' : '프로젝트'} 바로 추가`}>
                       <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>여기서 추가
                     </button>
@@ -1434,11 +1444,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     onClick={() => (selMode ? toggleSel(rowSel(r)) : enterLevel(r))}
                     data-ask data-ask-label={`${r.kind === 'deadline' ? '프로젝트' : '산출물'} · ${r.name}`} data-ask-content={`[비즈니스: ${programs.find(p => p.id === r.programId)?.wsName || '내 비즈니스'}] ${r.kind === 'deadline' ? '프로젝트' : '산출물'}: ${r.name}${r.subName ? ` (${r.subName})` : ''}`}
                     className="group sticky left-0 z-20 flex items-center gap-1 pr-2 border-b cursor-pointer"
-                    style={{ width: LABEL_W, paddingLeft: 8 + (r.level - 1) * 15, borderColor: '#F4F4F0', backgroundColor: checked ? '#F3F0FF' : hl ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
+                    style={{ width: LABEL_W, paddingLeft: 22 + (r.level - 1) * 15, borderColor: '#F4F4F0', backgroundColor: checked ? '#F3F0FF' : hl ? '#EAF7DA' : pgIdx % 2 === 1 ? '#FBFBF9' : '#fff' }}
                     draggable={!selMode && r.level > 0 && !placed}
                     onDragStart={!selMode && r.level > 0 && !placed ? e => { e.stopPropagation(); startListDrag({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, e); } : undefined}
                     title={!placed && r.level > 0 ? '드래그해서 타임라인에 배치' : r.name}
                   >
+                    {/* 사업목표 그룹 세로 라인 + 그룹 첫 행에 사업목표 사각형 번호 */}
+                    <span className="absolute top-0 bottom-0" style={{ left: 8, width: 2.5, backgroundColor: '#BFE3A0' }} />
+                    {groupFirstKey.has(r.key) && <span className="absolute z-10" style={{ left: 1.5, top: '50%', transform: 'translateY(-50%)' }} title={`사업목표 ${goalGroupNum.get(r.pgKey) ?? 1}`}><LevelBadge shape="square" n={goalGroupNum.get(r.pgKey) ?? 1} color="#16211E" size={16} /></span>}
                     {selMode && <SelCheck on={checked} />}
                     {r.hasChildren ? (
                       <button onClick={e => { e.stopPropagation(); toggleOpen(r.key, r.level); }} className="w-4 h-4 flex items-center justify-center flex-shrink-0" title={isCollapsed ? '하위 펼치기' : '하위 접기'}><svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} viewBox="0 0 12 12" fill="none" style={{ color: '#9AA39D' }}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
