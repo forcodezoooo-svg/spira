@@ -1419,15 +1419,25 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               {connLines.length > 0 && (
                 <svg className="absolute top-0 left-0 pointer-events-none" width={contentWidth} height="100%" style={{ overflow: 'visible', zIndex: 0 }}>
                   {connLines.map((l, i) => {
-                    const mx = (l.x1 + l.x2) / 2;
-                    const dy = l.y2 - l.y1; const dir = dy >= 0 ? 1 : -1;
-                    // 90도 엘보(수평→수직→수평) + 모서리 라운드
-                    const r = Math.max(0, Math.min(7, Math.abs(dy) / 2, Math.abs(mx - l.x1), Math.abs(l.x2 - mx)));
+                    const dy = l.y2 - l.y1;
+                    // 각 꼭지에서 고정 길이(stub)만큼 수평으로 빠져나온 '핸들' + 그 끝을 90도로 잇는 Z형 엘보(모서리 라운드)
+                    const stub = 16;
+                    const hx1 = l.x1 + stub;         // 선행 핸들 끝(오른쪽으로 빠짐)
+                    const hx2 = l.x2 - stub;         // 후행 핸들 끝(왼쪽으로 빠짐)
+                    const ym = (l.y1 + l.y2) / 2;
+                    const vdir = dy >= 0 ? 1 : -1;
+                    const hdir = hx2 >= hx1 ? 1 : -1;
+                    const rv = Math.min(5, Math.abs(ym - l.y1), Math.abs(l.y2 - ym));
+                    const rh = Math.min(5, stub, Math.abs(hx2 - hx1) / 2);
                     const d = Math.abs(dy) < 1
                       ? `M ${l.x1} ${l.y1} H ${l.x2}`
-                      : `M ${l.x1} ${l.y1} H ${mx - r} Q ${mx} ${l.y1} ${mx} ${l.y1 + dir * r} V ${l.y2 - dir * r} Q ${mx} ${l.y2} ${mx + r} ${l.y2} H ${l.x2}`;
+                      : `M ${l.x1} ${l.y1} H ${hx1 - rh} Q ${hx1} ${l.y1} ${hx1} ${l.y1 + vdir * rv}`
+                        + ` V ${ym - vdir * rv} Q ${hx1} ${ym} ${hx1 + hdir * rh} ${ym}`
+                        + ` H ${hx2 - hdir * rh} Q ${hx2} ${ym} ${hx2} ${ym + vdir * rv}`
+                        + ` V ${l.y2 - vdir * rv} Q ${hx2} ${l.y2} ${hx2 + rh} ${l.y2} H ${l.x2}`;
                     return (
                       <g key={i}>
+                        <circle cx={l.x1} cy={l.y1} r={2.5} fill="#2B62C4" opacity={0.7} />
                         <path d={d} fill="none" stroke="#2B62C4" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} strokeLinecap="round" strokeLinejoin="round" />
                         <circle cx={l.x2} cy={l.y2} r={2.5} fill="#2B62C4" opacity={0.7} />
                       </g>
