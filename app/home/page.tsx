@@ -403,15 +403,20 @@ export default function Home() {
   });
 
   // ── 업커밍 데드라인 (전체 워크스페이스) ──────────────────────────────────────
-  type Upcoming = { key: string; name: string; date: string; color: string; kind: '데드라인'; wsName: string };
+  type Upcoming = { key: string; name: string; date: string; color: string; kind: '산출물'; wsName: string };
   const upcoming: Upcoming[] = [];
   for (const entry of store.allWorkspacesEntries) {
-    // Plan에서 가져온(=새로 만들어지는) 목표의 프로젝트 마감을 D-day로 표시 (로드맵/캘린더와 동일 소스)
+    // 업무 영역 산출물(todo)의 기한을 D-day로 표시 (프로젝트 데드라인 대신)
     for (const p of entry.programs) {
       if (!p.fromPlan) continue;
       for (const dl of p.deadlines ?? []) {
-        if (dl.enabled === false || dl.done || !dl.date || dl.date < dateStr) continue;
-        upcoming.push({ key: `d-${dl.id}`, name: dl.name, date: dl.date, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '데드라인', wsName: entry.workspace.name });
+        if (dl.enabled === false || dl.done) continue;
+        for (const t of dl.todos ?? []) {
+          if (t.done) continue;
+          const due = t.deadline || t.date;
+          if (!due || due < dateStr) continue;
+          upcoming.push({ key: `t-${t.id}`, name: t.name, date: due, color: workspaceColor(store.allWorkspacesEntries, entry.workspace.id), kind: '산출물', wsName: entry.workspace.name });
+        }
       }
     }
   }
