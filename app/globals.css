@@ -137,3 +137,13 @@ body.spira-teach-unitadd [data-teach="kb-addunit"] { opacity: 1 !important; }
   100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
 }
 .spira-sparkle { animation: spira-sparkle 0.9s ease-out 0.5s both; }
+
+/* 터치 기기(아이패드 등 hover 불가)에서는 hover로만 나타나던 액션 버튼(삭제·수정·연결 등)을 상시 표시 */
+@media (hover: none) {
+  .group-hover\/bar\:opacity-100,
+  .group-hover\/col\:opacity-100,
+  .group-hover\/u\:opacity-100,
+  .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+}
