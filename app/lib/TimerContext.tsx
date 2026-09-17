@@ -1,5 +1,13 @@
 'use client';
 import { createContext, useContext, useState, useRef, useEffect, useCallback, ReactNode } from 'react';
+import { getGlobalStoreData, pushTimerTimes, subscribeStore } from './useStore';
+
+// 날짜별·task별 누적 초를 max-merge (두 기기에서 각각 쌓인 시간을 잃지 않게)
+function mergeTimes(a: Record<string, Record<string, number>>, b: Record<string, Record<string, number>>) {
+  const out: Record<string, Record<string, number>> = {};
+  for (const src of [a, b]) for (const date in src) { out[date] = out[date] ?? {}; for (const task in src[date]) out[date][task] = Math.max(out[date][task] ?? 0, src[date][task]); }
+  return out;
+}
 
 const STORAGE_KEY = 'spira_task_times';
 const SESSIONS_KEY = 'spira_active_sessions';
@@ -109,7 +117,20 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  useEffect(() => { if (ready) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allTimes)); } catch { /* empty */ } } }, [allTimes, ready]);
+  const allTimesRef = useRef<AllTimes>({});
+  allTimesRef.current = allTimes;
+  useEffect(() => { if (ready) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allTimes)); } catch { /* empty */ } pushTimerTimes(allTimes); } }, [allTimes, ready]);
+  // 서버 동기화로 들어오는 다른 기기의 누적시간을 로컬에 병합 + 로컬(하이드레이션 이전 누적 포함)을 스토어에 반영
+  useEffect(() => {
+    const apply = () => {
+      const remote = getGlobalStoreData().timerTimes ?? {};
+      const m = mergeTimes(allTimesRef.current, remote);
+      pushTimerTimes(m); // 하이드레이션 후에만 실제 저장, 변화 없으면 생략
+      if (JSON.stringify(m) !== JSON.stringify(allTimesRef.current)) setAllTimes(m);
+    };
+    apply();
+    return subscribeStore(apply);
+  }, []);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(activeSessions)); } catch { /* empty */ } } }, [activeSessions, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FOCUS_TIMES_KEY, JSON.stringify(focusTimes)); } catch { /* empty */ } } }, [focusTimes, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSION_LOG_KEY, JSON.stringify(sessionLog)); } catch { /* empty */ } } }, [sessionLog, ready]);
