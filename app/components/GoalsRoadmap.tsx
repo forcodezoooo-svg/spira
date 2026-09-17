@@ -915,8 +915,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       if (el && bar) {
         const br = bar.getBoundingClientRect();
         const er = el.getBoundingClientRect();
-        // 가로: 막대 시작점을 보이는 영역 좌측(≈40px)에 — barScope는 박스가 -308 밀리고 라벨열(240)이 화면 밖이라 xOf-92
-        const left = startD ? Math.max(0, xOf(startD) - 92) : el.scrollLeft;
+        // 가로: 막대 시작점을 라벨 열 바로 오른쪽에 배치(스코프 중엔 박스를 밀지 않고 폭만 줄이므로 라벨 열이 그대로 보임)
+        const left = startD ? Math.max(0, xOf(startD) - 40) : el.scrollLeft;
         // 세로: 헤더 아래 100px 지점에 오게(맨 아래 걸림 방지). transform은 가로만이라 rect의 top은 유효.
         const top = Math.max(0, el.scrollTop + (br.top - (er.top + 100)));
         el.scrollTo({ left, top, behavior: 'smooth' });
@@ -1202,11 +1202,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
 
       {/* 로드맵 박스 · task 박스를 한 페이지에 가로로 나열하고, 좌우로 슬라이드하며 전환 (비활성 박스는 옆에 걸쳐 보임) */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : barScope ? 'translateX(-308px)' : 'translateX(0px)' }}>
-          {/* ── 로드맵 박스 ── */}
-          <div onClick={e => { if (kanban) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; if (barScope) { setBarScope(null); setSelectedKey(null); } else setKanban(true); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+        <div className="flex gap-3 h-full transition-transform duration-300 ease-out" style={{ transform: kanban ? 'translateX(calc(116px - 100%))' : 'translateX(0px)' }}>
+          {/* ── 로드맵 박스 ── (막대 스코프 시 밀지 않고 폭만 줄여 왼쪽이 잘리지 않게, task는 오른쪽에 삐져나옴) */}
+          <div onClick={e => { if (kanban) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; if (barScope) { setBarScope(null); setSelectedKey(null); } else setKanban(true); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: barScope ? 'calc(100% - 372px)' : 'calc(100% - 64px)', transition: 'width 300ms ease-out', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
           {/* 막대 스코프 중엔 상단 컨트롤을 오른쪽 여백만큼 밀어, 겹쳐 뜨는 task 패널에 가리지 않고 뷰를 계속 조작할 수 있게 */}
-          <div className="flex-shrink-0 relative" style={{ transform: barScope ? 'translateX(308px)' : undefined, paddingRight: barScope ? 304 : undefined, transition: 'transform 300ms ease-out, padding 300ms ease-out' }}>
+          <div className="flex-shrink-0">
           {/* 로드맵: 이동/현재위치 + 스케일(연/월/주) + 추가 */}
           <div className="flex items-center justify-between mb-2.5 gap-2">
             <div className="flex items-center gap-1 min-w-0">
