@@ -192,6 +192,12 @@ export function useStore() {
       if (Object.keys(day).length === 0) delete att[date]; else att[date] = day;
       return { ...d, attendance: att };
     });
+  // 정기 계획 검토 알림: 마지막 검토일 + 알림 주기(일). appData에 저장 → 기기 간 동기화.
+  const planReview = appData.planReview ?? {};
+  const setPlanReviewed = (date: string) =>
+    update(d => ({ ...d, planReview: { ...(d.planReview ?? {}), lastAt: date } }));
+  const setPlanReviewInterval = (days: number) =>
+    update(d => ({ ...d, planReview: { ...(d.planReview ?? {}), intervalDays: Math.max(1, Math.round(days)) } }));
   const setBufferPercent = (p: number) =>
     update(d => ({ ...d, capacity: { ...(d.capacity ?? {}), bufferPercent: Math.min(0.5, Math.max(0, p)) } }));
   const setDateCapacityOverride = (date: string, hours: number | null) =>
@@ -883,6 +889,7 @@ export function useStore() {
     workSchedule, setWorkDay,
     capacity, setBufferPercent, setDateCapacityOverride, setOffPeriod, setWeekWorkDay, resetWeekSchedule,
     attendance, setClock, autoDelay, setAutoDelay,
+    planReview, setPlanReviewed, setPlanReviewInterval,
     boardTemplates, addBoardTemplate, deleteBoardTemplate,
     setOperatingMode, setWeeklyCapacityHours,
     areaOrder, moveArea, setAreaOrder,
