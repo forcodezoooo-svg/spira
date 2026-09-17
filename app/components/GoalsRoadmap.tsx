@@ -1490,31 +1490,54 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ) : kbFlat ? (
           /* 날짜순 목록 뷰: 모든 task를 기한 날짜 순으로 나열(날짜별 그룹) */
           (() => {
+            // 날짜순 = 캘린더 뷰: 주(week)를 행으로, 7일을 열로 세로 스크롤. 각 날짜 칸에 그 날 기한인 할일 카드.
             const flat = kbColsView.flatMap(col => col.subtasks.map(s => ({ col, s })));
             const keyOf = (x: { s: Sub }) => x.s.deadline || x.s.date || '';
-            flat.sort((a, b) => (keyOf(a) || '9999-99-99').localeCompare(keyOf(b) || '9999-99-99'));
-            const groups: { key: string; items: { col: KbCol; s: Sub }[] }[] = [];
-            for (const it of flat) { const k = keyOf(it) || '__none__'; const last = groups[groups.length - 1]; if (last && last.key === k) last.items.push(it); else groups.push({ key: k, items: [it] }); }
-            const fmtHead = (k: string) => k === '__none__' ? '기한 없음' : (() => { const d = new Date(k + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]})`; })();
+            const undated = flat.filter(x => !keyOf(x));
+            const byDate = new Map<string, { col: KbCol; s: Sub }[]>();
+            for (const it of flat) { const k = keyOf(it); if (!k) continue; if (!byDate.has(k)) byDate.set(k, []); byDate.get(k)!.push(it); }
+            const keys = [...byDate.keys()].sort();
+            const startAnchor = keys.length ? (keys[0] < todayStr ? keys[0] : todayStr) : todayStr;
+            const endAnchor = keys.length ? (keys[keys.length - 1] > todayStr ? keys[keys.length - 1] : todayStr) : todayStr;
+            const s0 = new Date(startAnchor + 'T00:00:00'); s0.setDate(s0.getDate() - s0.getDay()); // 그 주 일요일로
+            const e0 = new Date(endAnchor + 'T00:00:00'); e0.setDate(e0.getDate() + (6 - e0.getDay())); // 그 주 토요일로
+            const maxEnd = new Date(s0); maxEnd.setDate(maxEnd.getDate() + 7 * 30 - 1); // 최대 30주
+            if (e0 > maxEnd) e0.setTime(maxEnd.getTime());
+            const fmtYmd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const weeks: { ymd: string; date: Date }[][] = [];
+            for (const d = new Date(s0); d <= e0;) { const wk: { ymd: string; date: Date }[] = []; for (let i = 0; i < 7; i++) { wk.push({ ymd: fmtYmd(d), date: new Date(d) }); d.setDate(d.getDate() + 1); } weeks.push(wk); }
+            const dow = ['일', '월', '화', '수', '목', '금', '토'];
             return (
-              <div className="flex-1 min-h-0">
-                {flat.length === 0 ? (
-                  <div className="h-full flex items-center justify-center"><p className="text-[13px] text-center" style={{ color: '#9AA39D' }}>표시할 task가 없어요.</p></div>
-                ) : (
-                  <div className="h-full flex gap-3 overflow-x-auto pb-1">
-                    {groups.map(g => (
-                      <div key={g.key} className="flex flex-col min-h-0 w-[300px] flex-shrink-0 rounded-xl border-2" style={{ borderColor: kbDrag ? '#C9B8F5' : 'var(--spira-border-subtle)', backgroundColor: '#FBFBF9' }}
-                        onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) kbMoveTaskToDate(kbDrag, g.key); setKbDrag(null); }}>
-                        <div className="px-3 py-2 border-b flex items-center gap-2 flex-shrink-0" style={{ borderColor: 'var(--spira-border-subtle)' }}>
-                          <span className="text-[14px] font-black" style={{ color: g.key === '__none__' ? '#9AA39D' : '#16211E' }}>{fmtHead(g.key)}</span>
-                          {g.key !== '__none__' && <DdayBadge d={g.key} />}
-                          <span className="text-[11px] tabular-nums ml-auto" style={{ color: '#9AA39D' }}>{g.items.length}</span>
-                        </div>
-                        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
-                          {g.items.map(({ col, s }) => renderTaskCard(col, s, true))}
-                        </div>
-                      </div>
-                    ))}
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="grid grid-cols-7 flex-shrink-0">
+                  {dow.map((w, i) => <div key={w} className="text-center py-1.5 text-[11px] font-bold" style={{ color: i === 0 ? '#C0392B' : i === 6 ? '#2B62C4' : '#8D9A8D' }}>{w}</div>)}
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto border-t" style={{ borderColor: '#EEEEE8' }}>
+                  {weeks.map((wk, wi) => (
+                    <div key={wi} className="grid grid-cols-7">
+                      {wk.map(day => {
+                        const items = byDate.get(day.ymd) ?? [];
+                        const isToday = day.ymd === todayStr;
+                        const dn = day.date.getDate(); const dowN = day.date.getDay();
+                        return (
+                          <div key={day.ymd} onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { kbMoveTaskToDate(kbDrag, day.ymd); setKbDrag(null); } }}
+                            className="border-b border-r p-1 min-h-[116px] flex flex-col gap-1 min-w-0" style={{ borderColor: '#EEEEE8', backgroundColor: isToday ? '#F5FBEC' : (dowN === 0 || dowN === 6) ? '#FBFBF9' : '#fff' }}>
+                            <div className="flex items-center gap-1 px-0.5 flex-shrink-0">
+                              <span className="text-[11px] font-bold tabular-nums" style={{ color: isToday ? '#3E6B1F' : dowN === 0 ? '#C0392B' : dowN === 6 ? '#2B62C4' : '#5B6560' }}>{dn === 1 ? `${day.date.getMonth() + 1}/${dn}` : dn}</span>
+                              {isToday && <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>오늘</span>}
+                              {items.length > 0 && <span className="text-[9px] tabular-nums ml-auto" style={{ color: '#C4CCC4' }}>{items.length}</span>}
+                            </div>
+                            {items.map(({ col, s }) => renderTaskCard(col, s, true))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+                {undated.length > 0 && (
+                  <div className="flex-shrink-0 border-t pt-2 mt-2" style={{ borderColor: '#EEEEE8' }}>
+                    <div className="text-[11px] font-bold mb-1.5" style={{ color: '#9AA39D' }}>기한 없음 · {undated.length}</div>
+                    <div className="flex flex-wrap gap-2 max-h-[150px] overflow-y-auto">{undated.map(({ col, s }) => <div key={s.id} className="w-[200px]">{renderTaskCard(col, s, true)}</div>)}</div>
                   </div>
                 )}
               </div>
