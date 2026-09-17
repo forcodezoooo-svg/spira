@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
+import { uid } from '../lib/store';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { EmptyState, SuccessState } from '../components/EmptyState';
 import { useUI } from '../lib/UIContext';
@@ -52,6 +53,8 @@ export default function Home() {
   const [editDurKey, setEditDurKey] = useState<string | null>(null); // 소요시간 편집 중인 task
   const [editDurVal, setEditDurVal] = useState('');
   const [actualTarget, setActualTarget] = useState<SubtaskTask | null>(null); // 완료 시 실제시간 입력 대상
+  const [addUnitKey, setAddUnitKey] = useState<string | null>(null); // 상세업무 추가 입력 중인 task key
+  const [addUnitText, setAddUnitText] = useState('');
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -206,6 +209,13 @@ export default function Home() {
     }) });
   // 세부작업 오늘 완료 여부 (반복이면 날짜별, 아니면 영구 done)
   const unitDoneToday = (t: SubtaskTask, u: { done: boolean; doneDates?: string[] }) => (t.days?.length ? (u.doneDates ?? []).includes(dateStr) : u.done);
+  // task에 상세업무(세부작업/unit) 추가 — Home에서 바로 지정
+  const addSubtaskUnit = (t: SubtaskTask, name: string) => {
+    const n = name.trim(); if (!n) return;
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: [...(t.units ?? []), { id: uid(), name: n, done: false }] });
+  };
+  const delSubtaskUnit = (t: SubtaskTask, unitId: string) =>
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: (t.units ?? []).filter(u => u.id !== unitId) });
   const fmtDur = (min?: number) => (!min ? '' : min >= 60 ? (min % 60 ? `${Math.floor(min / 60)}시간 ${min % 60}분` : `${min / 60}시간`) : `${min}분`);
 
   // ── 주간 집중 지표 — 한 주(월~일)에 배치된 업무를 업무 영역별로 점수화(임박도×2 + 업무 수) ──
@@ -651,10 +661,24 @@ export default function Home() {
                 </button>
                 <span className="flex-1 min-w-0 truncate" style={{ fontSize: 14, color: ud ? '#9AA39D' : '#5B6560', textDecoration: ud ? 'line-through' : 'none' }}>{u.name}</span>
                 {u.durationMin ? <span className="text-[10px] flex-shrink-0" style={{ color: '#9AA39D' }}>{fmtDur(u.durationMin)}</span> : null}
+                <button onClick={() => delSubtaskUnit(t, u.id)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="상세업무 삭제">×</button>
               </li>
             ); })}
           </ul>
         )}
+        {/* 상세업무(세부작업) 추가 — Home에서 바로 지정 */}
+        <div className="w-full ml-7 mt-1">
+          {addUnitKey === t.key ? (
+            <input autoFocus value={addUnitText} onChange={e => setAddUnitText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { addSubtaskUnit(t, addUnitText); setAddUnitText(''); } else if (e.key === 'Escape') { setAddUnitKey(null); setAddUnitText(''); } }}
+              onBlur={() => { if (addUnitText.trim()) addSubtaskUnit(t, addUnitText); setAddUnitKey(null); setAddUnitText(''); }}
+              placeholder="상세업무 입력 후 Enter" className="text-[13px] px-2 py-1 rounded-md border outline-none focus:border-violet-400 w-full max-w-[240px]" style={{ borderColor: 'var(--spira-border)' }} />
+          ) : (
+            <button onClick={() => { setAddUnitKey(t.key); setAddUnitText(''); }} className="flex items-center gap-1 text-[12px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: '#7A9463' }} title="이 task에 상세업무(세부작업) 추가">
+              <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>상세업무 추가
+            </button>
+          )}
+        </div>
       </li>
     );
   };
