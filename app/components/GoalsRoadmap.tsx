@@ -1540,7 +1540,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                               {isToday && <span className="text-[9px] font-bold rounded-full px-1.5 py-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>오늘</span>}
                               {items.length > 0 && <span className="text-[9px] tabular-nums ml-auto" style={{ color: '#C4CCC4' }}>{items.length}</span>}
                             </div>
-                            {items.map(({ col, s }) => renderTaskCard(col, s, true))}
+                            {items.map(({ col, s }) => (s.days?.length ?? 0) > 0 ? (
+                              <button key={s.id} onClick={e => { e.stopPropagation(); kbEditTask(col, s); }} title={`${s.name} · 매주 반복${s.durationMin ? ' · ' + fmtDur(s.durationMin) : ''} — 클릭해 수정`}
+                                className="flex items-center gap-1 rounded-md pl-1.5 pr-1 py-1 min-w-0 text-left cursor-pointer transition-transform hover:-translate-y-px"
+                                style={{ backgroundColor: `${businessColor(col.p.wsId)}24`, borderLeft: `3px solid ${businessColor(col.p.wsId)}` }}>
+                                <span className="text-[10px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{s.name}</span>
+                                {s.durationMin ? <span className="text-[9px] font-semibold flex-shrink-0 ml-auto" style={{ color: '#7C3AED' }}>{fmtDur(s.durationMin)}</span> : null}
+                              </button>
+                            ) : renderTaskCard(col, s, true))}
                           </div>
                         );
                       })}
