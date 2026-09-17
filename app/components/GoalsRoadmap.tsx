@@ -99,6 +99,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [kbBiz, setKbBiz] = useState<string | null>(null); // Task 보드 비즈니스 필터 (null=전체)
   const [kbFlat, setKbFlat] = useState(false); // Task 보드 뷰: false=업무영역별, true=날짜순 목록
+  const [flagTodo, setFlagTodo] = useState<string | null>(null); // Home에서 넘어와 강조·스크롤할 카테고리(todoId)
   const [groupSaveOpen, setGroupSaveOpen] = useState(false); // 그룹 저장: 이름 설정 팝업
   const [groupSelMode, setGroupSelMode] = useState(false); // 그룹 저장: 보드에서 카테고리 직접 선택하는 모드
   const [groupSelIds, setGroupSelIds] = useState<Set<string>>(new Set()); // 선택된 카테고리 todoId
@@ -331,7 +332,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }, [calDrag?.key, calDrag?.mode]);
   useEffect(() => { if (!notPlaced) return; const t = setTimeout(() => setNotPlaced(null), 2800); return () => clearTimeout(t); }, [notPlaced]);
   // Plan의 'task N개'에서 넘어온 경우 마운트 시 Task 보드로 바로 전환
-  useEffect(() => { try { if (localStorage.getItem('spira_open_task_board')) { localStorage.removeItem('spira_open_task_board'); setKanban(true); } } catch { /* empty */ } }, []);
+  useEffect(() => { try {
+    if (localStorage.getItem('spira_open_task_board')) { localStorage.removeItem('spira_open_task_board'); setKanban(true); }
+    const todo = localStorage.getItem('spira_open_task_todo');
+    if (todo) { localStorage.removeItem('spira_open_task_todo'); setKanban(true); setKbFlat(false); setFlagTodo(todo); }
+  } catch { /* empty */ } }, []);
+  // Home에서 특정 카테고리로 넘어오면 그 카테고리 칼럼으로 스크롤 + 잠시 강조
+  useEffect(() => {
+    if (!flagTodo || !kanban) return;
+    let tries = 0;
+    const tick = () => { const el = boardRef.current?.querySelector(`[data-col-todo="${flagTodo}"]`) as HTMLElement | null; if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); else if (tries++ < 40) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    const t = setTimeout(() => setFlagTodo(null), 2600);
+    return () => clearTimeout(t);
+  }, [flagTodo, kanban]);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
   useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); setBarScope(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
@@ -908,6 +922,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     setKanban(false);
     setSelectedKey(key);
     setBarScope(key);
+    setKbFlat(false);
     let tries = 0;
     const tick = () => {
       const el = scrollRef.current;
@@ -1384,7 +1399,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   </div>
                   <div className="relative" style={{ width: contentWidth }}>
                     {placed && (
-                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={e => { e.stopPropagation(); if (movedRef.current) { movedRef.current = false; return; } if (r.kind !== 'todo') return; if (barScope === r.key) { setBarScope(null); setSelectedKey(null); } else { enterLevel(r); setBarScope(r.key); } }}
+                      <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={e => { e.stopPropagation(); if (movedRef.current) { movedRef.current = false; return; } if (r.kind !== 'todo') return; if (barScope === r.key) { setBarScope(null); setSelectedKey(null); } else { enterLevel(r); setBarScope(r.key); setKbFlat(false); } }}
                         onPointerDown={e => startPress(r, e)} onPointerMove={movePress} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress}
                         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); clearPress(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
@@ -1525,7 +1540,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 <div className="grid grid-cols-7 flex-shrink-0">
                   {dow.map((w, i) => <div key={w} className="text-center py-1.5 text-[11px] font-bold" style={{ color: i === 0 ? '#C0392B' : i === 6 ? '#2B62C4' : '#8D9A8D' }}>{w}</div>)}
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto border-t" style={{ borderColor: '#EEEEE8' }}>
+                <div className="flex-1 min-h-0 overflow-y-auto border-t" style={{ borderColor: '#EEEEE8', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
                   {weeks.map((wk, wi) => (
                     <div key={wi} className="grid grid-cols-7">
                       {wk.map(day => {
@@ -1566,9 +1581,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ) : (
           <div ref={boardRef} onClick={e => { if (barScope && e.target === e.currentTarget) setKanban(true); }} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbColsView.map(col => (
-            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="relative flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={(groupSelMode && groupSelIds.has(col.todoId))
+            <div key={col.todoId} data-col-todo={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="relative flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2 transition-shadow" style={(groupSelMode && groupSelIds.has(col.todoId))
               ? { borderColor: '#7C3AED', boxShadow: '0 0 0 3px #E6DBFB', backgroundColor: '#FAF8FF' }
-              : highlightIds?.has(col.todoId)
+              : (flagTodo === col.todoId || highlightIds?.has(col.todoId))
               ? { borderColor: '#5EA63A', boxShadow: '0 0 0 3px #D6EFC2', backgroundColor: '#F6FCEF' }
               : { borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) { e.preventDefault(); const end = col.subtasks.length; setKbDragOver(prev => (prev && prev.todoId === col.todoId && prev.index === end) ? prev : { todoId: col.todoId, index: end }); } }}

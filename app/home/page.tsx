@@ -620,9 +620,9 @@ export default function Home() {
           <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0" style={{ color: '#7C3AED', backgroundColor: '#F3F0FF' }}>매주</span>
         )}
         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-        <span className="font-bold flex-shrink-0 transition-colors" style={{ fontSize: 14, color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
+        <button onClick={() => { try { localStorage.setItem('spira_open_task_todo', t.todoId); } catch { /* empty */ } router.push('/programs'); }} title="Process에서 이 카테고리 열기" className="font-bold flex-shrink-0 transition-colors text-left cursor-pointer hover:underline" style={{ fontSize: 14, color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>
           {t.name}
-        </span>
+        </button>
         <span className="text-[13px] truncate min-w-0" style={{ color: '#9AA39D' }}>{t.deliverableName}</span>
         <span className="flex-1" />
         {editDurKey === t.key ? (
