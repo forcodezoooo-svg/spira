@@ -1533,7 +1533,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         const dn = day.date.getDate(); const dowN = day.date.getDay();
                         const items = [...(byDate.get(day.ymd) ?? []), ...recurring.filter(x => (x.s.days ?? []).includes(dowN))];
                         return (
-                          <div key={day.ymd} onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { kbMoveTaskToDate(kbDrag, day.ymd); setKbDrag(null); } }}
+                          <div key={day.ymd} data-cal-day={day.ymd} onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const ymd = day.ymd; kbMoveTaskToDate(kbDrag, ymd); setKbDrag(null); requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-cal-day="${ymd}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }))); } }}
                             className="border-b border-r p-1 min-h-[116px] flex flex-col gap-1 min-w-0" style={{ borderColor: '#EEEEE8', backgroundColor: isToday ? '#F5FBEC' : (dowN === 0 || dowN === 6) ? '#FBFBF9' : '#fff' }}>
                             <div className="flex items-center gap-1 px-0.5 flex-shrink-0">
                               <span className="text-[11px] font-bold tabular-nums" style={{ color: isToday ? '#3E6B1F' : dowN === 0 ? '#C0392B' : dowN === 6 ? '#2B62C4' : '#5B6560' }}>{dn === 1 ? `${day.date.getMonth() + 1}/${dn}` : dn}</span>
