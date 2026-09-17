@@ -9,7 +9,7 @@ export default function LevelBadge({ shape, n, color = '#5EA63A', size = 20 }: {
 }) {
   // 숫자는 SVG <text> + dominant-baseline로 정확히 중앙에 배치(HTML 텍스트의 line-height 쏠림 방지).
   // 삼각형은 무게중심이 아래쪽이라 y를 살짝 내려 시각적 중앙을 맞춘다.
-  const cy = shape === 'triangle' ? 12.6 : 10;
+  const cy = shape === 'triangle' ? 11.2 : 10;
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" className="inline-block flex-shrink-0 align-middle" aria-hidden>
       {shape === 'square' && <rect x="1.2" y="1.2" width="17.6" height="17.6" rx="4.5" fill={color} />}
