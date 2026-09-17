@@ -58,7 +58,7 @@ export default function Home() {
   const REVIEW_INTERVAL_DAYS = 14; // 주기적 계획 검토 알림 간격
   const [reviewDaysAgo, setReviewDaysAgo] = useState<number | null>(null); // 마지막 검토 후 경과일
   const [reviewDismissed, setReviewDismissed] = useState(false); // 이번 세션에서 '나중에'로 닫음
-  const [needClockIn, setNeedClockIn] = useState(false); // 오늘 아직 출근 안 함 → 출근 모달 노출
+  const [clockDismissed, setClockDismissed] = useState(false); // '나중에'로 이번 세션 출근 모달 닫음
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -149,13 +149,11 @@ export default function Home() {
   }, [dateStr]);
   const markReviewed = () => { try { localStorage.setItem('spira_last_plan_review', dateStr); } catch { /* empty */ } setReviewDaysAgo(0); };
   const reviewDue = reviewDaysAgo != null && reviewDaysAgo >= REVIEW_INTERVAL_DAYS && !reviewDismissed;
-  // 출근 체크: 오늘 첫 접속이면 출근 모달을 띄운다(당일 1회)
-  useEffect(() => {
-    try { setNeedClockIn(localStorage.getItem('spira_clock_in_date') !== dateStr); } catch { setNeedClockIn(false); }
-  }, [dateStr]);
+  // 출근 체크: 오늘 아직 출근(attendance.in) 안 했으면 모달 노출. attendance는 appData에 저장돼 기기 간 동기화 + 저장 실패에 견고.
+  const clockedInToday = !!store.attendance[dateStr]?.in;
+  const needClockIn = store.ready && !clockedInToday && !clockDismissed;
   const clockIn = () => {
-    try { localStorage.setItem('spira_clock_in_date', dateStr); localStorage.setItem('spira_clock_in_at', new Date().toISOString()); } catch { /* empty */ }
-    setNeedClockIn(false);
+    store.setClock(dateStr, 'in', Date.now());
     const h = new Date().getHours();
     toast(`${h < 12 ? '좋은 아침이에요' : h < 18 ? '좋은 오후예요' : '늦은 시간까지 고생이 많아요'} · 출근 완료! 오늘도 화이팅 💪`, 'success');
   };
@@ -1058,13 +1056,13 @@ export default function Home() {
 
       {/* 당일 첫 접속: 출근 알림 */}
       {needClockIn && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.45)' }} onClick={() => setNeedClockIn(false)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.45)' }} onClick={() => setClockDismissed(true)}>
           <div className="bg-white rounded-3xl w-full max-w-[360px] p-6 text-center" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
             <div className="text-4xl mb-2" aria-hidden>{new Date().getHours() < 18 ? '☀️' : '🌙'}</div>
             <h3 className="text-[18px] font-black mb-1" style={{ color: '#16211E' }}>출근하셨나요?</h3>
             <p className="text-[13px] mb-5 leading-relaxed" style={{ color: '#7A8A7A' }}>오늘 하루를 시작해볼까요? 아래 <b>출근</b> 버튼을 눌러 오늘 업무를 시작하세요.</p>
             <button onClick={clockIn} className="w-full py-3 rounded-2xl text-[15px] font-black transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>출근 💪</button>
-            <button onClick={() => setNeedClockIn(false)} className="mt-2 w-full py-2 rounded-2xl text-[13px] font-semibold" style={{ color: '#9AA39D' }}>나중에</button>
+            <button onClick={() => setClockDismissed(true)} className="mt-2 w-full py-2 rounded-2xl text-[13px] font-semibold" style={{ color: '#9AA39D' }}>나중에</button>
           </div>
         </div>
       )}
