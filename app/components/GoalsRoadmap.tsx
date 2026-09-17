@@ -1134,6 +1134,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ? { borderColor: '#5EA63A', boxShadow: '0 0 0 2px #B8E29A, 0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }
           : recurring
           ? { borderColor: `${businessColor(col.p.wsId)}59`, backgroundColor: `${businessColor(col.p.wsId)}14`, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }
+          : (!s.deadline && !s.date)
+          ? { borderColor: '#DADAD3', backgroundColor: '#EFEFEB', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }
           : { borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }}>
         {showCat && (
           <div className="flex items-center gap-1 mb-1 min-w-0">
@@ -1145,7 +1147,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           {selMode && <button onClick={() => toggleSel(subSel(col, s))} className="mt-0.5 flex-shrink-0"><SelCheck on={sel.has(`s-${s.id}`)} /></button>}
           <button onClick={() => kbToggleDone(col, s)} className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 mt-0.5" style={{ borderColor: showDone ? '#5EA63A' : '#C7CEC7', backgroundColor: showDone ? '#5EA63A' : 'transparent' }}>{showDone && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</button>
           <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="font-semibold flex-1 min-w-0 break-words text-left" style={{ fontSize: 13, color: showDone ? '#9AA39D' : '#16211E', textDecoration: showDone ? 'line-through' : 'none' }}>{s.name}</button>
-          {(s.days?.length ?? 0) > 0 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="매주 반복 업무">매주</span>}
+          {(s.days?.length ?? 0) > 0 && <button onClick={() => kbEditTask(col, s)} className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0 transition-transform hover:-translate-y-px cursor-pointer" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="매주 반복 — 클릭해 반복 요일을 설정하세요">매주</button>}
           {isBlocked(s) && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FBF3E0', color: '#96631A' }} title="선행 작업이 아직 안 끝났어요">선행 대기</span>}
           {(s.priority ?? 0) >= 4 && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: '#FFE1E1', color: '#C0392B' }}>긴급</span>}
           {s.schedulingType && s.schedulingType !== 'flexible' && <span className="text-[9px] font-bold rounded px-1 py-0.5 flex-shrink-0" style={{ backgroundColor: s.schedulingType === 'fixed' ? '#E7F0FF' : '#FBF3E0', color: s.schedulingType === 'fixed' ? '#2B62C4' : '#96631A' }}>{s.schedulingType === 'fixed' ? '고정' : '기한'}</span>}
