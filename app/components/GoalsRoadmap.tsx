@@ -99,7 +99,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [kbBiz, setKbBiz] = useState<string | null>(null); // Task 보드 비즈니스 필터 (null=전체)
   const [kbFlat, setKbFlat] = useState(false); // Task 보드 뷰: false=업무영역별, true=날짜순 목록
-  const [groupSaveOpen, setGroupSaveOpen] = useState(false); // 그룹 저장: 카테고리 선택 모달
+  const [groupSaveOpen, setGroupSaveOpen] = useState(false); // 그룹 저장: 이름 설정 팝업
+  const [groupSelMode, setGroupSelMode] = useState(false); // 그룹 저장: 보드에서 카테고리 직접 선택하는 모드
   const [groupSelIds, setGroupSelIds] = useState<Set<string>>(new Set()); // 선택된 카테고리 todoId
   const [groupSaveName, setGroupSaveName] = useState('');
   const [catName, setCatName] = useState('');
@@ -698,7 +699,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (cols.length === 0) return;
     store.addBoardTemplate({ name: groupSaveName.trim() || `카테고리 ${cols.length}개 세트`, tasks: [], columns: cols });
     toast(`카테고리 ${cols.length}개를 그룹 템플릿으로 저장했어요.`, 'success');
-    setGroupSaveOpen(false); setGroupSelIds(new Set()); setGroupSaveName('');
+    setGroupSaveOpen(false); setGroupSelMode(false); setGroupSelIds(new Set()); setGroupSaveName('');
   };
   // 병행 배치: 여러 프로젝트의 미완료 task를 라운드로빈 교차 후 오늘부터 가용시간에 채움
   // → 시작일이 같은 프로젝트들이 같은 날의 용량을 나눠 써 동시에 진행됨
@@ -1439,7 +1440,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
           {/* ── task 박스 ── (막대 스코프 중엔 로드맵을 그대로 두고 왼쪽으로 슬라이드해 오른쪽 위에 겹침 / 배경 클릭 시 전체 확장) */}
-          <div onClick={e => { if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; setKanban(!kanban ? true : false); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+          <div onClick={e => { if (groupSelMode) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; setKanban(!kanban ? true : false); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
           <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{barScope ? (kbScopeName || '선택 항목') : '업무 영역별 task'}</span>
           {!barScope && <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>}
@@ -1465,12 +1466,18 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
               </div>
             )}
             <div className="flex-1" />
-            {kbColsView.length > 0 && (
-              <button onClick={() => { setGroupSelIds(new Set(kbColsView.map(c => c.todoId))); setGroupSaveName(''); setGroupSaveOpen(true); }} data-teach="kb-template" className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="저장할 카테고리를 골라 템플릿으로 저장">
+            {kbColsView.length > 0 && (groupSelMode ? (
+              <>
+                <span className="text-[11px] font-bold flex-shrink-0" style={{ color: '#7C3AED' }}>저장할 카테고리를 클릭하세요 · {groupSelIds.size}개</span>
+                <button onClick={() => { if (groupSelIds.size) { setGroupSaveName(''); setGroupSaveOpen(true); } }} disabled={groupSelIds.size === 0} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5 disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="선택한 카테고리를 그룹 템플릿으로 저장">저장{groupSelIds.size > 0 ? ` (${groupSelIds.size})` : ''}</button>
+                <button onClick={() => { setGroupSelMode(false); setGroupSelIds(new Set()); }} className="rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>취소</button>
+              </>
+            ) : (
+              <button onClick={() => { setKbFlat(false); setGroupSelMode(true); setGroupSelIds(new Set()); }} data-teach="kb-template" className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-colors" style={{ backgroundColor: '#F3F0FF', color: '#7C3AED' }} title="보드에서 저장할 카테고리를 직접 골라 템플릿으로 저장">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.4" /></svg>
                 그룹 저장
               </button>
-            )}
+            ))}
             {catTarget && (
               <button onClick={() => setCatPanel(true)} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-bold flex-shrink-0 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }} title="새 카테고리 추가 / 저장된 템플릿 불러오기">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
@@ -1516,11 +1523,20 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           ) : (
           <div ref={boardRef} onClick={e => { if (barScope && e.target === e.currentTarget) setKanban(true); }} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbColsView.map(col => (
-            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={highlightIds?.has(col.todoId)
+            <div key={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="relative flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2" style={(groupSelMode && groupSelIds.has(col.todoId))
+              ? { borderColor: '#7C3AED', boxShadow: '0 0 0 3px #E6DBFB', backgroundColor: '#FAF8FF' }
+              : highlightIds?.has(col.todoId)
               ? { borderColor: '#5EA63A', boxShadow: '0 0 0 3px #D6EFC2', backgroundColor: '#F6FCEF' }
               : { borderColor: col.pinned ? '#F0B429' : 'var(--spira-border-subtle)', backgroundColor: col.pinned ? '#FFFBEF' : '#FBFBF9' }}
               onDragOver={e => { if (kbDrag) { e.preventDefault(); const end = col.subtasks.length; setKbDragOver(prev => (prev && prev.todoId === col.todoId && prev.index === end) ? prev : { todoId: col.todoId, index: end }); } }}
               onDrop={() => { if (kbDrag) { const at = (kbDragOver && kbDragOver.todoId === col.todoId) ? kbDragOver.index : col.subtasks.length; kbInsertAt(col, kbDrag, at); setKbDrag(null); } }}>
+              {groupSelMode && (() => { const gSel = groupSelIds.has(col.todoId); return (
+                <div onClick={e => { e.stopPropagation(); setGroupSelIds(prev => { const n = new Set(prev); if (n.has(col.todoId)) n.delete(col.todoId); else n.add(col.todoId); return n; }); }} className="absolute inset-0 z-30 cursor-pointer rounded-xl" title="클릭해서 저장 선택/해제" style={{ backgroundColor: gSel ? 'rgba(124,58,237,0.06)' : 'transparent' }}>
+                  <span className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: gSel ? '#7C3AED' : 'rgba(255,255,255,0.92)', border: `2px solid ${gSel ? '#7C3AED' : '#C7CEC7'}` }}>
+                    {gSel && <svg className="w-3.5 h-3.5" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5L10 3" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                  </span>
+                </div>
+              ); })()}
               {/* 헤더: 업무영역(큰) + 산출물(작은) + 기한 */}
               <div className="px-3 py-2 border-b" style={{ borderColor: col.pinned ? '#F5DFA0' : 'var(--spira-border-subtle)' }}>
                 {/* 어떤 비즈니스의 카테고리인지 */}
@@ -1677,34 +1693,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       )}
 
 
-      {/* 그룹 저장: 저장할 카테고리 선택 모달 */}
+      {/* 그룹 저장: 이름 설정 팝업 (카테고리는 보드에서 이미 선택했음) */}
       {groupSaveOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.4)' }} onClick={() => setGroupSaveOpen(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-[440px] p-5 max-h-[85vh] flex flex-col" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-full max-w-[380px] p-5" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
-              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>템플릿으로 저장</h3>
+              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>템플릿 이름</h3>
               <button onClick={() => setGroupSaveOpen(false)} className="text-neutral-300 hover:text-neutral-700 text-lg leading-none">×</button>
             </div>
-            <p className="text-[11px] mb-3" style={{ color: '#9AA39D' }}>저장할 카테고리를 고르세요. 1개만 고르면 그 카테고리가, 여러 개를 고르면 묶음(그룹)으로 저장돼요.</p>
-            <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setGroupSelIds(new Set(kbColsView.map(c => c.todoId)))} className="text-[11px] font-bold rounded-full px-2.5 py-1" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>전체 선택</button>
-              <button onClick={() => setGroupSelIds(new Set())} className="text-[11px] font-bold rounded-full px-2.5 py-1" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>전체 해제</button>
-              <span className="text-[11px] ml-auto tabular-nums" style={{ color: '#9AA39D' }}>{groupSelIds.size}개 선택</span>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 mb-3">
-              {kbColsView.map(c => { const on = groupSelIds.has(c.todoId); return (
-                <button key={c.todoId} onClick={() => setGroupSelIds(prev => { const n = new Set(prev); if (n.has(c.todoId)) n.delete(c.todoId); else n.add(c.todoId); return n; })} className="w-full flex items-center gap-2 border rounded-xl px-3 py-2 text-left transition-colors" style={{ borderColor: on ? '#C9B8F5' : 'var(--spira-border-subtle)', backgroundColor: on ? '#FAF8FF' : '#fff' }}>
-                  <span className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0" style={{ borderColor: on ? '#7C3AED' : '#C7CEC7', backgroundColor: on ? '#7C3AED' : '#fff' }}>{on && <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold truncate" style={{ color: '#16211E' }}>{c.p.wsName ? `${c.p.wsName} · ` : ''}{c.area}</p>
-                    <p className="text-[11px]" style={{ color: '#9AA39D' }}>task {c.subtasks.length}개</p>
-                  </div>
-                </button>
-              ); })}
-            </div>
-            <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>템플릿 이름 <span style={{ color: '#C4CCC4' }}>· 비우면 자동으로 지어져요</span></label>
-            <div className="flex gap-1.5 mt-1">
-              <input value={groupSaveName} onChange={e => setGroupSaveName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && groupSelIds.size > 0) saveSelectedAsGroup(); }} placeholder={groupSelIds.size === 1 ? (kbColsView.find(c => groupSelIds.has(c.todoId))?.area || '카테고리') : `카테고리 ${groupSelIds.size}개 세트`} className="flex-1 bg-neutral-50 border rounded-xl px-3 py-2 text-[13px] outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+            <p className="text-[11px] mb-3" style={{ color: '#9AA39D' }}>선택한 카테고리 {groupSelIds.size}개를 {groupSelIds.size > 1 ? '묶음(그룹)으로 ' : ''}저장해요. 이름은 비우면 자동으로 지어져요.</p>
+            <div className="flex gap-1.5">
+              <input autoFocus value={groupSaveName} onChange={e => setGroupSaveName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && groupSelIds.size > 0) saveSelectedAsGroup(); }} placeholder={groupSelIds.size === 1 ? (kbColsView.find(c => groupSelIds.has(c.todoId))?.area || '카테고리') : `카테고리 ${groupSelIds.size}개 세트`} className="flex-1 bg-neutral-50 border rounded-xl px-3 py-2 text-[13px] outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
               <button onClick={saveSelectedAsGroup} disabled={groupSelIds.size === 0} className="px-3.5 py-2 rounded-xl text-[13px] font-bold disabled:opacity-40" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>저장</button>
             </div>
           </div>
