@@ -58,6 +58,7 @@ export default function Home() {
   const REVIEW_INTERVAL_DAYS = 14; // 주기적 계획 검토 알림 간격
   const [reviewDaysAgo, setReviewDaysAgo] = useState<number | null>(null); // 마지막 검토 후 경과일
   const [reviewDismissed, setReviewDismissed] = useState(false); // 이번 세션에서 '나중에'로 닫음
+  const [needClockIn, setNeedClockIn] = useState(false); // 오늘 아직 출근 안 함 → 출근 모달 노출
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -74,34 +75,8 @@ export default function Home() {
     return () => { closeChat(); };
   }, [closeChat]);
 
-  // 지난 날짜에 수행하지 못한(완료 안 된) 일회성 업무를 오늘로 자동 이월 — 반복 업무·완료 업무는 제외
-  useEffect(() => {
-    if (!store.ready) return;
-    const t = new Date(); t.setHours(0, 0, 0, 0);
-    const todayS = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
-    // 오늘이 휴무면 다음 근무일로 이월(휴무일에 업무가 몰리지 않도록)
-    const rollTo = nextWorkingDay(store.workSchedule, store.capacity, todayS);
-    for (const e of store.allWorkspacesEntries) {
-      for (const p of e.programs) {
-        if (!p.fromPlan) continue;
-        let changed = false;
-        const deadlines = (p.deadlines ?? []).map(dl => {
-          if (dl.done) return dl;
-          return { ...dl, todos: dl.todos.map(todo => ({ ...todo, subtasks: (todo.subtasks ?? []).map(s => {
-            if ((s.days?.length ?? 0) > 0 || s.done) return s; // 반복·완료는 이월 안 함
-            const d = s.date || s.deadline;
-            if (!d) return s;
-            // 지난 미완료 → 다음 근무일로 이월 / 미래인데 휴무일에 있으면 → 다음 근무일로 이동
-            const target = d < todayS ? rollTo : (!isWorkingDay(store.workSchedule, store.capacity, d) ? nextWorkingDay(store.workSchedule, store.capacity, d) : null);
-            if (target && target !== d) { changed = true; return { ...s, date: target, deadline: target }; }
-            return s;
-          }) })) };
-        });
-        if (changed) store.updateProgramInWs(e.workspace.id, { ...p, deadlines });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.ready]);
+  // (A안) 지난 미완료 업무의 '자동 이월 저장'은 제거 — 기기 간 동기화 시점 차이로 날짜가 갈라지던 문제 방지.
+  //  대신 표시 단계에서만 오늘 리스트로 당겨 보여준다(원본 날짜 보존). getSubtaskTasksForDate의 carryOverdue 옵션 참고.
 
   // 다가오는 목표: 컨테이너 폭에 맞춰 열 개수 측정 (콜백 ref로 조기 return보다 앞에서 hook 선언 — 순서 고정)
   const [journeyCols, setJourneyCols] = useState(5);
@@ -174,6 +149,16 @@ export default function Home() {
   }, [dateStr]);
   const markReviewed = () => { try { localStorage.setItem('spira_last_plan_review', dateStr); } catch { /* empty */ } setReviewDaysAgo(0); };
   const reviewDue = reviewDaysAgo != null && reviewDaysAgo >= REVIEW_INTERVAL_DAYS && !reviewDismissed;
+  // 출근 체크: 오늘 첫 접속이면 출근 모달을 띄운다(당일 1회)
+  useEffect(() => {
+    try { setNeedClockIn(localStorage.getItem('spira_clock_in_date') !== dateStr); } catch { setNeedClockIn(false); }
+  }, [dateStr]);
+  const clockIn = () => {
+    try { localStorage.setItem('spira_clock_in_date', dateStr); localStorage.setItem('spira_clock_in_at', new Date().toISOString()); } catch { /* empty */ }
+    setNeedClockIn(false);
+    const h = new Date().getHours();
+    toast(`${h < 12 ? '좋은 아침이에요' : h < 18 ? '좋은 오후예요' : '늦은 시간까지 고생이 많아요'} · 출근 완료! 오늘도 화이팅 💪`, 'success');
+  };
   // 오늘 작업하던 업무를 내일로 이어서 옮기기
   const moveGoalToTomorrow = (t: GoalTask) => {
     const patch: Partial<ProgramTodo> = { date: tomorrowStr };
@@ -190,7 +175,7 @@ export default function Home() {
   const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow)
     .filter(t => !store.homeHiddenToday.includes(t.key));
   // 캘린더(Plan에서 가져온 목표)에 오늘 날짜로 배치된 task(세부 산출물 하위 task)
-  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true, carryUnits: true });
+  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true, carryUnits: true, carryOverdue: true });
   // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
   const toggleSubtaskDone = (t: SubtaskTask) => {
     if (t.days?.length) {
@@ -1069,6 +1054,19 @@ export default function Home() {
           onSave={patch => store.updateProgramTodo(editTodoTarget.wsId, editTodoTarget.programId, editTodoTarget.deadlineId, editTodoTarget.todoId, patch)}
           onClose={() => setEditTodoTarget(null)}
         />
+      )}
+
+      {/* 당일 첫 접속: 출근 알림 */}
+      {needClockIn && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.45)' }} onClick={() => setNeedClockIn(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-[360px] p-6 text-center" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+            <div className="text-4xl mb-2" aria-hidden>{new Date().getHours() < 18 ? '☀️' : '🌙'}</div>
+            <h3 className="text-[18px] font-black mb-1" style={{ color: '#16211E' }}>출근하셨나요?</h3>
+            <p className="text-[13px] mb-5 leading-relaxed" style={{ color: '#7A8A7A' }}>오늘 하루를 시작해볼까요? 아래 <b>출근</b> 버튼을 눌러 오늘 업무를 시작하세요.</p>
+            <button onClick={clockIn} className="w-full py-3 rounded-2xl text-[15px] font-black transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#9DFE3B', color: '#16211E' }}>출근 💪</button>
+            <button onClick={() => setNeedClockIn(false)} className="mt-2 w-full py-2 rounded-2xl text-[13px] font-semibold" style={{ color: '#9AA39D' }}>나중에</button>
+          </div>
+        </div>
       )}
 
       {actualTarget && (

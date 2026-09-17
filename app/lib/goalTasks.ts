@@ -171,7 +171,7 @@ export interface SubtaskTask {
 
 // 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
 // [시작~완수기한] 구간에 dateStr가 포함되면 그 날짜의 업무로 표시
-export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: string, opts?: { onlyFromPlan?: boolean; carryUnits?: boolean }): SubtaskTask[] {
+export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: string, opts?: { onlyFromPlan?: boolean; carryUnits?: boolean; carryOverdue?: boolean }): SubtaskTask[] {
   const out: SubtaskTask[] = [];
   const nowD = new Date();
   const todayS = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
@@ -200,6 +200,8 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               let hi = a && b ? (a <= b ? b : a) : (b || a)!;
               // 세부 할일 있는 미완료 업무: 시작일부터 (기한/오늘 중 늦은 날)까지 이어서 표시 (다른 날 리스트에도 노출)
               if (opts?.carryUnits && (s.units?.length ?? 0) > 0 && !s.done) hi = hi > todayS ? hi : todayS;
+              // (A안) 지난 미완료 일회성 업무는 '오늘 리스트'에서만 오늘로 당겨 표시 — 원본 날짜는 그대로(저장 이월 없음)
+              if (opts?.carryOverdue && !s.done && dateStr === todayS) hi = hi > todayS ? hi : todayS;
               if (dateStr < lo || dateStr > hi) continue;
             }
             out.push({
