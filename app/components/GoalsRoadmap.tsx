@@ -898,17 +898,28 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
   const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, { date: due || undefined, deadline: due || undefined });
   // 카테고리(산출물)의 날짜 칸 클릭 → 로드맵을 열고 그 산출물 막대로 스코프 + task는 그 카테고리 하나만.
-  // 슬라이드-인/렌더가 끝난 뒤 실제 막대 DOM을 찾아 scrollIntoView로 가운데로 가져온다(좌표 계산 대신 확실하게).
+  // 렌더/슬라이드-인 후 막대 DOM을 찾아: 가로는 막대 '시작점'이 보이는 영역 좌측에 오게(슬라이드 -308·라벨열 240 감안한 레이아웃 계산),
+  // 세로는 상단에서 여유를 두어 맨 아래에 걸리지 않게 스크롤한다.
   const locateOnRoadmap = (col: KbCol) => {
     const key = `t-${col.todoId}`;
+    const row = rowsDraw.find(r => r.todoId === col.todoId && r.kind === 'todo');
+    const startD = row?.start ?? row?.end ?? col.due ?? col.start;
     setKanban(false);
     setSelectedKey(key);
     setBarScope(key);
     let tries = 0;
     const tick = () => {
+      const el = scrollRef.current;
       const bar = bodyRef.current?.querySelector(`[data-rm-bar="${key}"]`) as HTMLElement | null;
-      if (bar) bar.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-      else if (tries++ < 40) requestAnimationFrame(tick);
+      if (el && bar) {
+        const br = bar.getBoundingClientRect();
+        const er = el.getBoundingClientRect();
+        // 가로: 막대 시작점을 보이는 영역 좌측(≈40px)에 — barScope는 박스가 -308 밀리고 라벨열(240)이 화면 밖이라 xOf-92
+        const left = startD ? Math.max(0, xOf(startD) - 92) : el.scrollLeft;
+        // 세로: 헤더 아래 100px 지점에 오게(맨 아래 걸림 방지). transform은 가로만이라 rect의 top은 유효.
+        const top = Math.max(0, el.scrollTop + (br.top - (er.top + 100)));
+        el.scrollTo({ left, top, behavior: 'smooth' });
+      } else if (tries++ < 40) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
   };
