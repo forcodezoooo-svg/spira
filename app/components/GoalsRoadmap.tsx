@@ -1409,7 +1409,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         {r.kind === 'todo' && r.todoId && (
                           <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onBarLinkClick(r.todoId); }}
                             title={linkFrom ? (linkFrom === r.todoId ? '연결 취소' : '이 막대를 뒤에 연결') : (dependentIds.has(r.todoId) ? '연결됨 (클릭: 선행으로 지정) · 아래 × 로 해제' : '연결 시작(선행 막대로 지정)')}
-                            className={`absolute -top-2.5 -right-2.5 w-6 h-6 rounded-full flex items-center justify-center z-30 shadow-sm transition-opacity ${linkFrom || dependentIds.has(r.todoId) ? '' : 'opacity-0 group-hover/bar:opacity-100'}`}
+                            className={`absolute -top-2.5 w-6 h-6 rounded-full flex items-center justify-center z-30 shadow-sm transition-opacity ${linkFrom && linkFrom !== r.todoId ? '-left-2.5' : '-right-2.5'} ${linkFrom || dependentIds.has(r.todoId) ? '' : 'opacity-0 group-hover/bar:opacity-100'}`}
                             style={{ backgroundColor: linkFrom === r.todoId ? '#2B62C4' : dependentIds.has(r.todoId) ? '#E7F0FF' : '#fff', border: '1.5px solid #2B62C4' }}>
                             <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke={linkFrom === r.todoId ? '#fff' : '#2B62C4'} strokeWidth="1.8"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-1 1M9.5 6.5a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l1-1" strokeLinecap="round" /></svg>
                           </button>
