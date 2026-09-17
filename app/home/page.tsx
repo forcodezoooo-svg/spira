@@ -55,7 +55,6 @@ export default function Home() {
   const [actualTarget, setActualTarget] = useState<SubtaskTask | null>(null); // 완료 시 실제시간 입력 대상
   const [addUnitKey, setAddUnitKey] = useState<string | null>(null); // 상세업무 추가 입력 중인 task key
   const [addUnitText, setAddUnitText] = useState('');
-  const [reviewDismissed, setReviewDismissed] = useState(false); // 이번 세션에서 '나중에'로 닫음
   const [clockDismissed, setClockDismissed] = useState(false); // '나중에'로 이번 세션 출근 모달 닫음
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
@@ -136,12 +135,7 @@ export default function Home() {
   const dateStr = localDateStr(today);
   const tomorrowDate = new Date(today); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   const tomorrowStr = localDateStr(tomorrowDate);
-  // 주기적 계획 검토 알림 — 마지막 검토일·주기(일)를 appData(store)에 저장해 기기 간 동기화. 첫 사용 시 오늘로 seed(바로 안 조름).
-  const reviewInterval = store.planReview.intervalDays ?? 14;
-  useEffect(() => { if (store.ready && !store.planReview.lastAt) store.setPlanReviewed(dateStr); }, [store.ready, store.planReview.lastAt, dateStr]);
-  const reviewDaysAgo = store.planReview.lastAt ? Math.floor((new Date(dateStr + 'T00:00:00').getTime() - new Date(store.planReview.lastAt + 'T00:00:00').getTime()) / 86400000) : 0;
-  const markReviewed = () => store.setPlanReviewed(dateStr);
-  const reviewDue = store.ready && !!store.planReview.lastAt && reviewDaysAgo >= reviewInterval && !reviewDismissed;
+  // (계획 검토 알림은 Process 페이지로 이동)
   // 출근 체크: 오늘 아직 출근(attendance.in) 안 했으면 모달 노출. attendance는 appData에 저장돼 기기 간 동기화 + 저장 실패에 견고.
   const clockedInToday = !!store.attendance[dateStr]?.in;
   const needClockIn = store.ready && !clockedInToday && !clockDismissed;
@@ -677,28 +671,6 @@ export default function Home() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
       {/* ── 왼쪽: 메인 ── */}
       <div className="min-w-0">
-        {/* 주기적 계획 검토 알림 */}
-        {reviewDue && (
-          <div className="mb-6 rounded-2xl border p-4 flex items-start gap-3" style={{ borderColor: '#C9BCF0', backgroundColor: '#F6F3FF' }}>
-            <span className="text-xl flex-shrink-0" aria-hidden>🧭</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-black" style={{ color: '#5B3FBF' }}>전체 계획을 점검할 때예요</p>
-              <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: '#7A6BB0' }}>마지막 검토 후 <b>{reviewDaysAgo}일</b> 지났어요. 목표·프로젝트·일정이 지금 상황에 맞는지 살펴보고 다듬어 보세요.</p>
-              <div className="flex flex-wrap gap-2 mt-2.5">
-                <button onClick={() => { markReviewed(); router.push('/plan'); }} className="text-[12px] font-bold rounded-full px-3 py-1.5 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#7C3AED', color: '#fff' }}>지금 검토하기</button>
-                <button onClick={markReviewed} className="text-[12px] font-bold rounded-full px-3 py-1.5" style={{ backgroundColor: '#EDE9FB', color: '#5B3FBF' }}>검토 완료로 표시</button>
-                <button onClick={() => setReviewDismissed(true)} className="text-[12px] font-semibold rounded-full px-3 py-1.5" style={{ color: '#9AA39D' }}>나중에</button>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2.5 border-t" style={{ borderColor: '#E4DCFA' }}>
-                <span className="text-[11px] font-semibold" style={{ color: '#9184B8' }}>알림 주기</span>
-                {([[7, '1주'], [14, '2주'], [30, '1달'], [90, '3달']] as [number, string][]).map(([d, l]) => (
-                  <button key={d} onClick={() => store.setPlanReviewInterval(d)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={reviewInterval === d ? { backgroundColor: '#7C3AED', color: '#fff' } : { backgroundColor: '#EDE9FB', color: '#5B3FBF' }}>{l}</button>
-                ))}
-                <span className="text-[11px]" style={{ color: '#B7ACD6' }}>· 현재 {reviewInterval}일마다</span>
-              </div>
-            </div>
-          </div>
-        )}
         {/* D-day 타임라인 */}
         {journey.length > 0 && (
           <div className="bg-white rounded-[22px] border mb-8" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)', padding: '24px 24px' }}>
@@ -946,21 +918,6 @@ export default function Home() {
         <div className="grid grid-cols-2 gap-4 items-stretch">
           <WorkHoursPanel tile />
           <MusicTimer tile />
-        </div>
-
-        {/* 정기 계획 검토 알림 설정 (주기 조절 + 지금 검토 완료) */}
-        <div className="rounded-2xl border p-3.5" style={{ borderColor: 'var(--spira-border-subtle)', backgroundColor: '#fff' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[12.5px] font-black" style={{ color: '#16211E' }}>🧭 계획 검토 알림</span>
-            <span className="text-[11px]" style={{ color: '#9AA39D' }}>{store.planReview.lastAt ? `마지막 검토 ${reviewDaysAgo}일 전` : '기록 없음'}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9184B8' }}>주기</span>
-            {([[7, '1주'], [14, '2주'], [30, '1달'], [90, '3달']] as [number, string][]).map(([d, l]) => (
-              <button key={d} onClick={() => store.setPlanReviewInterval(d)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={reviewInterval === d ? { backgroundColor: '#7C3AED', color: '#fff' } : { backgroundColor: '#F0EDFB', color: '#5B3FBF' }}>{l}</button>
-            ))}
-          </div>
-          <button onClick={markReviewed} className="mt-2.5 w-full py-1.5 rounded-xl text-[12px] font-bold transition-colors" style={{ backgroundColor: '#EDE9FB', color: '#5B3FBF' }}>지금 검토 완료로 표시</button>
         </div>
 
         {/* 예상 vs 실제 (학습) */}

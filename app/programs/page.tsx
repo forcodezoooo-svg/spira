@@ -57,6 +57,13 @@ export default function ProgramsPage() {
   const store = useStore();
   const router = useRouter();
   const chat = useChatContext();
+  // 정기 계획 검토 알림 (Process 상단 작은 버튼 → 팝업). 마지막 검토일·주기는 appData에 저장(기기 동기화).
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const reviewToday = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  useEffect(() => { if (store.ready && !store.planReview.lastAt) store.setPlanReviewed(reviewToday); }, [store.ready, store.planReview.lastAt, reviewToday]);
+  const reviewInterval = store.planReview.intervalDays ?? 14;
+  const reviewDaysAgo = store.planReview.lastAt ? Math.floor((new Date(reviewToday + 'T00:00:00').getTime() - new Date(store.planReview.lastAt + 'T00:00:00').getTime()) / 86400000) : 0;
+  const reviewDue = store.ready && !!store.planReview.lastAt && reviewDaysAgo >= reviewInterval;
   const { toast } = useToast();
 
   // AI 분기 계획 핸들러는 항상 최신 클로저를 가리키도록 ref 사용
@@ -1772,6 +1779,35 @@ export default function ProgramsPage() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-4rem)] min-h-0">
+      {/* 정기 계획 검토: 작은 버튼(기한 지나면 강조) → 팝업 */}
+      <div className="flex-shrink-0 flex justify-end -mb-1">
+        <button onClick={() => setReviewOpen(true)} title="정기 계획 검토 알림" className="relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-bold transition-colors" style={reviewDue ? { backgroundColor: '#7C3AED', color: '#fff' } : { backgroundColor: '#F0EDFB', color: '#5B3FBF' }}>
+          🧭 계획 검토{reviewDue ? ` · ${reviewDaysAgo}일째` : ''}
+          {reviewDue && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#9DFE3B', boxShadow: '0 0 0 2px #fff' }} />}
+        </button>
+      </div>
+      {reviewOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(22,33,30,0.45)' }} onClick={() => setReviewOpen(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-[380px] p-5" style={{ boxShadow: 'var(--spira-shadow-lg)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-[15px] font-black" style={{ color: '#16211E' }}>🧭 계획 검토 알림</h3>
+              <button onClick={() => setReviewOpen(false)} className="text-neutral-300 hover:text-neutral-700 text-lg leading-none">×</button>
+            </div>
+            <p className="text-[12px] mb-3 leading-relaxed" style={{ color: '#7A8A7A' }}>{store.planReview.lastAt ? <>마지막 검토 후 <b style={{ color: reviewDue ? '#7C3AED' : '#5B6560' }}>{reviewDaysAgo}일</b> 지났어요.</> : '아직 검토 기록이 없어요.'} 설정한 주기마다 이 버튼이 강조돼 알려드려요.</p>
+            <div className="flex flex-wrap items-center gap-1.5 mb-4">
+              <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9184B8' }}>알림 주기</span>
+              {([[7, '1주'], [14, '2주'], [30, '1달'], [90, '3달']] as [number, string][]).map(([d, l]) => (
+                <button key={d} onClick={() => store.setPlanReviewInterval(d)} className="text-[11px] font-bold rounded-full px-2.5 py-1 transition-colors" style={reviewInterval === d ? { backgroundColor: '#7C3AED', color: '#fff' } : { backgroundColor: '#F0EDFB', color: '#5B3FBF' }}>{l}</button>
+              ))}
+              <span className="text-[11px]" style={{ color: '#B7ACD6' }}>· 현재 {reviewInterval}일마다</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { store.setPlanReviewed(reviewToday); setReviewOpen(false); router.push('/plan'); }} className="flex-1 py-2.5 rounded-2xl text-[13px] font-bold transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#7C3AED', color: '#fff' }}>Plan에서 검토하기</button>
+              <button onClick={() => { store.setPlanReviewed(reviewToday); setReviewOpen(false); }} className="py-2.5 px-3.5 rounded-2xl text-[13px] font-bold" style={{ backgroundColor: '#EDE9FB', color: '#5B3FBF' }}>검토 완료</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex-1 min-h-0">
         {visiblePrograms.length === 0 && recommendGoals.length > 0 ? (
           /* 비어 있을 때: Plan 사업목표 가져오기 추천 */
