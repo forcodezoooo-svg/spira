@@ -1132,6 +1132,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
         data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}task · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'} / 카테고리: ${col.area}] task: ${s.name}`}
         className="group bg-white border rounded-lg p-2.5 cursor-grab active:cursor-grabbing" style={highlightIds?.has(s.id)
           ? { borderColor: '#5EA63A', boxShadow: '0 0 0 2px #B8E29A, 0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }
+          : recurring
+          ? { borderColor: `${businessColor(col.p.wsId)}59`, backgroundColor: `${businessColor(col.p.wsId)}14`, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }
           : { borderColor: 'var(--spira-border-subtle)', boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: kbDrag === s.id ? 0.4 : 1 }}>
         {showCat && (
           <div className="flex items-center gap-1 mb-1 min-w-0">
@@ -1492,15 +1494,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           (() => {
             // 날짜순 = 캘린더 뷰: 주(week)를 행으로, 7일을 열로 세로 스크롤. 각 날짜 칸에 그 날 기한인 할일 카드.
             const flat = kbColsView.flatMap(col => col.subtasks.map(s => ({ col, s })));
+            const isRec = (x: { s: Sub }) => (x.s.days?.length ?? 0) > 0;
+            const recurring = flat.filter(isRec);            // 반복 할일 → 반복 요일마다 배치
+            const single = flat.filter(x => !isRec(x));       // 일반 할일 → 기한 날짜에 배치
             const keyOf = (x: { s: Sub }) => x.s.deadline || x.s.date || '';
-            const undated = flat.filter(x => !keyOf(x));
+            const undated = single.filter(x => !keyOf(x));
             const byDate = new Map<string, { col: KbCol; s: Sub }[]>();
-            for (const it of flat) { const k = keyOf(it); if (!k) continue; if (!byDate.has(k)) byDate.set(k, []); byDate.get(k)!.push(it); }
+            for (const it of single) { const k = keyOf(it); if (!k) continue; if (!byDate.has(k)) byDate.set(k, []); byDate.get(k)!.push(it); }
             const keys = [...byDate.keys()].sort();
             const startAnchor = keys.length ? (keys[0] < todayStr ? keys[0] : todayStr) : todayStr;
             const endAnchor = keys.length ? (keys[keys.length - 1] > todayStr ? keys[keys.length - 1] : todayStr) : todayStr;
             const s0 = new Date(startAnchor + 'T00:00:00'); s0.setDate(s0.getDate() - s0.getDay()); // 그 주 일요일로
             const e0 = new Date(endAnchor + 'T00:00:00'); e0.setDate(e0.getDate() + (6 - e0.getDay())); // 그 주 토요일로
+            if (recurring.length) { const minE = new Date(s0); minE.setDate(minE.getDate() + 7 * 4 - 1); if (e0 < minE) e0.setTime(minE.getTime()); } // 반복 할일이 있으면 최소 4주는 보이게
             const maxEnd = new Date(s0); maxEnd.setDate(maxEnd.getDate() + 7 * 30 - 1); // 최대 30주
             if (e0 > maxEnd) e0.setTime(maxEnd.getTime());
             const fmtYmd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1516,9 +1522,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   {weeks.map((wk, wi) => (
                     <div key={wi} className="grid grid-cols-7">
                       {wk.map(day => {
-                        const items = byDate.get(day.ymd) ?? [];
                         const isToday = day.ymd === todayStr;
                         const dn = day.date.getDate(); const dowN = day.date.getDay();
+                        const items = [...(byDate.get(day.ymd) ?? []), ...recurring.filter(x => (x.s.days ?? []).includes(dowN))];
                         return (
                           <div key={day.ymd} onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { kbMoveTaskToDate(kbDrag, day.ymd); setKbDrag(null); } }}
                             className="border-b border-r p-1 min-h-[116px] flex flex-col gap-1 min-w-0" style={{ borderColor: '#EEEEE8', backgroundColor: isToday ? '#F5FBEC' : (dowN === 0 || dowN === 6) ? '#FBFBF9' : '#fff' }}>
