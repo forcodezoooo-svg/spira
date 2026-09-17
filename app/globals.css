@@ -143,7 +143,8 @@ body.spira-teach-unitadd [data-teach="kb-addunit"] { opacity: 1 !important; }
   .group-hover\/bar\:opacity-100,
   .group-hover\/col\:opacity-100,
   .group-hover\/u\:opacity-100,
-  .group-hover\:opacity-100 {
+  .group-hover\:opacity-100,
+  .lg\:opacity-0 {
     opacity: 1 !important;
   }
 }
