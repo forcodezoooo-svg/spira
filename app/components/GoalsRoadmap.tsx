@@ -1440,7 +1440,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
           {/* ── task 박스 ── (막대 스코프 중엔 로드맵을 그대로 두고 왼쪽으로 슬라이드해 오른쪽 위에 겹침 / 배경 클릭 시 전체 확장) */}
-          <div onClick={e => { if (groupSelMode) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; setKanban(!kanban ? true : false); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+          <div onClick={e => { if (groupSelMode || kanban) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; setKanban(true); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
           <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{barScope ? (kbScopeName || '선택 항목') : '업무 영역별 task'}</span>
           {!barScope && <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>}
