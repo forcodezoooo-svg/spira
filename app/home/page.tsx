@@ -55,6 +55,9 @@ export default function Home() {
   const [actualTarget, setActualTarget] = useState<SubtaskTask | null>(null); // 완료 시 실제시간 입력 대상
   const [addUnitKey, setAddUnitKey] = useState<string | null>(null); // 상세업무 추가 입력 중인 task key
   const [addUnitText, setAddUnitText] = useState('');
+  const REVIEW_INTERVAL_DAYS = 14; // 주기적 계획 검토 알림 간격
+  const [reviewDaysAgo, setReviewDaysAgo] = useState<number | null>(null); // 마지막 검토 후 경과일
+  const [reviewDismissed, setReviewDismissed] = useState(false); // 이번 세션에서 '나중에'로 닫음
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -160,6 +163,17 @@ export default function Home() {
   const dateStr = localDateStr(today);
   const tomorrowDate = new Date(today); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   const tomorrowStr = localDateStr(tomorrowDate);
+  // 주기적 계획 검토 알림: 마지막 검토일로부터 경과일 계산(첫 방문이면 오늘로 seed → 바로 조르지 않음)
+  useEffect(() => {
+    try {
+      let last = localStorage.getItem('spira_last_plan_review');
+      if (!last) { last = dateStr; localStorage.setItem('spira_last_plan_review', last); }
+      const diff = Math.floor((new Date(dateStr + 'T00:00:00').getTime() - new Date(last + 'T00:00:00').getTime()) / 86400000);
+      setReviewDaysAgo(Number.isFinite(diff) ? diff : 0);
+    } catch { setReviewDaysAgo(null); }
+  }, [dateStr]);
+  const markReviewed = () => { try { localStorage.setItem('spira_last_plan_review', dateStr); } catch { /* empty */ } setReviewDaysAgo(0); };
+  const reviewDue = reviewDaysAgo != null && reviewDaysAgo >= REVIEW_INTERVAL_DAYS && !reviewDismissed;
   // 오늘 작업하던 업무를 내일로 이어서 옮기기
   const moveGoalToTomorrow = (t: GoalTask) => {
     const patch: Partial<ProgramTodo> = { date: tomorrowStr };
@@ -687,6 +701,21 @@ export default function Home() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
       {/* ── 왼쪽: 메인 ── */}
       <div className="min-w-0">
+        {/* 주기적 계획 검토 알림 */}
+        {reviewDue && (
+          <div className="mb-6 rounded-2xl border p-4 flex items-start gap-3" style={{ borderColor: '#C9BCF0', backgroundColor: '#F6F3FF' }}>
+            <span className="text-xl flex-shrink-0" aria-hidden>🧭</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-black" style={{ color: '#5B3FBF' }}>전체 계획을 점검할 때예요</p>
+              <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: '#7A6BB0' }}>마지막 검토 후 <b>{reviewDaysAgo}일</b> 지났어요. 목표·프로젝트·일정이 지금 상황에 맞는지 살펴보고 다듬어 보세요. (약 {REVIEW_INTERVAL_DAYS}일마다 알려드려요)</p>
+              <div className="flex flex-wrap gap-2 mt-2.5">
+                <button onClick={() => { markReviewed(); router.push('/plan'); }} className="text-[12px] font-bold rounded-full px-3 py-1.5 transition-transform hover:-translate-y-0.5" style={{ backgroundColor: '#7C3AED', color: '#fff' }}>지금 검토하기</button>
+                <button onClick={markReviewed} className="text-[12px] font-bold rounded-full px-3 py-1.5" style={{ backgroundColor: '#EDE9FB', color: '#5B3FBF' }}>검토 완료로 표시</button>
+                <button onClick={() => setReviewDismissed(true)} className="text-[12px] font-semibold rounded-full px-3 py-1.5" style={{ color: '#9AA39D' }}>나중에</button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* D-day 타임라인 */}
         {journey.length > 0 && (
           <div className="bg-white rounded-[22px] border mb-8" style={{ boxShadow: 'var(--spira-shadow)', borderColor: 'var(--spira-border-subtle)', padding: '24px 24px' }}>
