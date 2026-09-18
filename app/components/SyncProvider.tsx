@@ -21,10 +21,15 @@ function contentScore(d: AppData): number {
   }, 0);
 }
 
-// 타이머 누적시간(날짜·task별 초)은 기기별로 각각 쌓이므로 로컬↔서버를 무조건 max-merge (한쪽 덮어쓰기 방지 → 기기 간 동기화)
+// 타이머 누적시간(날짜·task별 초 + 하루 총 초)은 기기별로 각각 쌓이므로 로컬↔서버를 무조건 max-merge (한쪽 덮어쓰기 방지 → 기기 간 동기화)
 function mergeTimerTimes(a?: AppData | null, b?: AppData | null): Record<string, Record<string, number>> {
   const out: Record<string, Record<string, number>> = {};
   for (const src of [a?.timerTimes ?? {}, b?.timerTimes ?? {}]) for (const date in src) { out[date] = out[date] ?? {}; for (const tk in src[date]) out[date][tk] = Math.max(out[date][tk] ?? 0, src[date][tk]); }
+  return out;
+}
+function mergeTimerFocus(a?: AppData | null, b?: AppData | null): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const src of [a?.timerFocus ?? {}, b?.timerFocus ?? {}]) for (const date in src) out[date] = Math.max(out[date] ?? 0, src[date]);
   return out;
 }
 
@@ -70,14 +75,15 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
         const localNewer = sameUser && localHas
           && ((local.updatedAt ?? 0) >= (server.updatedAt ?? 0) || contentScore(local) > contentScore(server));
         const mergedTimer = mergeTimerTimes(local, server); // 타이머 시간은 로컬·서버 합산(max) 보존
+        const mergedFocus = mergeTimerFocus(local, server);
         if (localNewer) {
-          const chosen = { ...local, timerTimes: mergedTimer };
+          const chosen = { ...local, timerTimes: mergedTimer, timerFocus: mergedFocus };
           try { await upsertAppData(supabase, uid, chosen); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);
           try { writeLocalRaw(chosen); } catch { /* ignore */ }
           setGlobalStoreData(chosen);
         } else {
-          const chosen = { ...server, timerTimes: mergedTimer };
+          const chosen = { ...server, timerTimes: mergedTimer, timerFocus: mergedFocus };
           try { writeLocalRaw(chosen); } catch { /* 용량 초과여도 서버 데이터 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);
           setGlobalStoreData(load());

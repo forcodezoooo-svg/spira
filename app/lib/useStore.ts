@@ -21,21 +21,23 @@ export function getGlobalStoreData() { return globalData; }
 
 // ── 타이머 누적시간 동기화 ────────────────────────────────────────────────────
 // 날짜별·task별 누적 초를 전역 appData(서버 동기화)에 max-merge 후 저장. 변화 없으면 저장 생략(루프·과다 저장 방지).
-export function pushTimerTimes(times: Record<string, Record<string, number>>) {
-  if (!hydrated) return times; // 스토어 하이드레이션 전엔 저장 금지(빈 appData로 덮어쓰기 방지)
-  const cur = globalData.timerTimes ?? {};
-  const merged: Record<string, Record<string, number>> = {};
-  for (const src of [cur, times]) {
+export function pushTimerTimes(times: Record<string, Record<string, number>>, focus?: Record<string, number>) {
+  if (!hydrated) return; // 스토어 하이드레이션 전엔 저장 금지(빈 appData로 덮어쓰기 방지)
+  const curT = globalData.timerTimes ?? {};
+  const mergedT: Record<string, Record<string, number>> = {};
+  for (const src of [curT, times]) {
     for (const date in src) {
-      merged[date] = merged[date] ?? {};
-      for (const task in src[date]) merged[date][task] = Math.max(merged[date][task] ?? 0, src[date][task]);
+      mergedT[date] = mergedT[date] ?? {};
+      for (const task in src[date]) mergedT[date][task] = Math.max(mergedT[date][task] ?? 0, src[date][task]);
     }
   }
-  if (JSON.stringify(cur) === JSON.stringify(merged)) return merged; // 변화 없음
-  globalData = { ...globalData, timerTimes: merged, updatedAt: Date.now() };
+  const curF = globalData.timerFocus ?? {};
+  const mergedF: Record<string, number> = { ...curF };
+  for (const date in (focus ?? {})) mergedF[date] = Math.max(mergedF[date] ?? 0, focus![date]);
+  if (JSON.stringify(curT) === JSON.stringify(mergedT) && JSON.stringify(curF) === JSON.stringify(mergedF)) return; // 변화 없음
+  globalData = { ...globalData, timerTimes: mergedT, timerFocus: mergedF, updatedAt: Date.now() };
   try { save(globalData); } catch { /* empty */ }
   emitStore();
-  return merged;
 }
 
 // ── 되돌리기(직전 반영 스냅샷) ────────────────────────────────────────────────

@@ -119,20 +119,25 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   const allTimesRef = useRef<AllTimes>({});
   allTimesRef.current = allTimes;
-  useEffect(() => { if (ready) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allTimes)); } catch { /* empty */ } pushTimerTimes(allTimes); } }, [allTimes, ready]);
-  // 서버 동기화로 들어오는 다른 기기의 누적시간을 로컬에 병합 + 로컬(하이드레이션 이전 누적 포함)을 스토어에 반영
+  const focusTimesRef = useRef<Record<string, number>>({});
+  focusTimesRef.current = focusTimes;
+  useEffect(() => { if (ready) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(allTimes)); } catch { /* empty */ } pushTimerTimes(allTimes, focusTimesRef.current); } }, [allTimes, ready]);
+  // 서버 동기화로 들어오는 다른 기기의 누적시간(개별+하루 총)을 로컬에 병합 + 로컬(하이드레이션 이전 누적 포함)을 스토어에 반영
   useEffect(() => {
     const apply = () => {
-      const remote = getGlobalStoreData().timerTimes ?? {};
-      const m = mergeTimes(allTimesRef.current, remote);
-      pushTimerTimes(m); // 하이드레이션 후에만 실제 저장, 변화 없으면 생략
-      if (JSON.stringify(m) !== JSON.stringify(allTimesRef.current)) setAllTimes(m);
+      const g = getGlobalStoreData();
+      const mT = mergeTimes(allTimesRef.current, g.timerTimes ?? {});
+      const mF: Record<string, number> = { ...focusTimesRef.current };
+      for (const d in (g.timerFocus ?? {})) mF[d] = Math.max(mF[d] ?? 0, g.timerFocus![d]);
+      pushTimerTimes(mT, mF); // 하이드레이션 후에만 실제 저장, 변화 없으면 생략
+      if (JSON.stringify(mT) !== JSON.stringify(allTimesRef.current)) setAllTimes(mT);
+      if (JSON.stringify(mF) !== JSON.stringify(focusTimesRef.current)) setFocusTimes(mF);
     };
     apply();
     return subscribeStore(apply);
   }, []);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(activeSessions)); } catch { /* empty */ } } }, [activeSessions, ready]);
-  useEffect(() => { if (ready) { try { localStorage.setItem(FOCUS_TIMES_KEY, JSON.stringify(focusTimes)); } catch { /* empty */ } } }, [focusTimes, ready]);
+  useEffect(() => { if (ready) { try { localStorage.setItem(FOCUS_TIMES_KEY, JSON.stringify(focusTimes)); } catch { /* empty */ } pushTimerTimes(allTimesRef.current, focusTimes); } }, [focusTimes, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSION_LOG_KEY, JSON.stringify(sessionLog)); } catch { /* empty */ } } }, [sessionLog, ready]);
 
   const anyActive = Object.keys(activeSessions).length > 0;
