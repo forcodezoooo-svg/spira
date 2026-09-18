@@ -140,7 +140,29 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(activeSessions)); } catch { /* empty */ } } }, [activeSessions, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FOCUS_TIMES_KEY, JSON.stringify(focusTimes)); } catch { /* empty */ } pushTimerTimes(allTimesRef.current, focusTimes); } }, [focusTimes, ready]);
-  // 리셋 복구: 하루 총합(focus)이 비었지만 개별 업무 시간(allTimes)은 남아있는 날 → 그 합으로 총합 복원. 정상값 있는 날은 안 건드림.
+  // 리셋 복구 ①: 업무에 기록된 실제 소요시간(actualMin)을 타이머(allTimes)에 반영 — 타이머 기록이 사라져도 업무별 시간을 되살림. (비어있는 슬롯만 채움)
+  useEffect(() => {
+    const recover = () => {
+      const g = getGlobalStoreData();
+      const add: AllTimes = {};
+      for (const e of g.workspaces ?? []) for (const p of e.programs ?? []) for (const dl of p.deadlines ?? []) for (const t of dl.todos ?? []) for (const s of t.subtasks ?? []) {
+        const secs = Math.round((s.actualMin ?? 0) * 60);
+        if (secs <= 0) continue;
+        const day = s.doneDate || s.date || s.deadline;
+        if (!day) continue;
+        const key = `s:${e.workspace.id}:${p.id}:${dl.id}:${t.id}:${s.id}`;
+        (add[day] = add[day] ?? {})[key] = Math.max(add[day][key] ?? 0, secs);
+      }
+      setAllTimes(prev => {
+        let changed = false; const next = { ...prev };
+        for (const day in add) { const cur = { ...(next[day] ?? {}) }; let dayChanged = false; for (const key in add[day]) { if (!cur[key]) { cur[key] = add[day][key]; dayChanged = true; } } if (dayChanged) { next[day] = cur; changed = true; } }
+        return changed ? next : prev;
+      });
+    };
+    recover();
+    return subscribeStore(recover);
+  }, []);
+  // 리셋 복구 ②: 하루 총합(focus)이 비었지만 개별 업무 시간(allTimes)은 남아있는 날 → 그 합으로 총합 복원. 정상값 있는 날은 안 건드림.
   useEffect(() => {
     if (!ready) return;
     setFocusTimes(prev => {
