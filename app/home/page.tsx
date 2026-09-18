@@ -768,7 +768,7 @@ export default function Home() {
                         <span className="text-[11px] font-bold rounded-full px-2 py-0.5 tabular-nums" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }} title="퇴근 시각 (눌러서 취소)"
                           onClick={() => window.confirm('퇴근 기록을 취소할까요?') && store.setClock(dateStr, 'out', null)} role="button">퇴근 {hhmm(att.out)}</span>
                       ) : (
-                        <button onClick={() => store.setClock(dateStr, 'out', Date.now())} disabled={!att.in} className="text-[11px] font-bold rounded-full px-2.5 py-0.5 transition-transform hover:-translate-y-0.5 disabled:opacity-30" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>퇴근</button>
+                        <button onClick={() => { const now = Date.now(); store.setClock(dateStr, 'out', now); if (att.in) toast(`오늘 ${((now - att.in) / 3600000).toFixed(1)}시간 근무 · 퇴근 완료! 수고하셨어요 🌙`, 'success'); }} disabled={!att.in} className="text-[11px] font-bold rounded-full px-2.5 py-0.5 transition-transform hover:-translate-y-0.5 disabled:opacity-30" style={{ backgroundColor: '#F0F0EA', color: '#5B6560' }}>퇴근</button>
                       )}
                     </div>
                   );

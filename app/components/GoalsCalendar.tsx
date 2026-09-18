@@ -436,7 +436,7 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                         data-cal-date={ds ?? undefined}
                         onClick={ds && onSelectDate ? () => onSelectDate(ds) : undefined}
                         onDragOver={ds ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverDateRef.current = ds; if (dragOverDate !== ds) setDragOverDate(ds); }) : undefined}
-                        className={`flex flex-col items-center rounded-lg transition-colors ${ds && onSelectDate ? 'cursor-pointer' : ''} ${isOver ? 'bg-violet-100 ring-2 ring-violet-400' : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300' : isSelected ? 'bg-[#F3F0FF] ring-1 ring-violet-300' : isOff ? 'bg-[#FCF3E4]' : ''}`}
+                        className={`relative flex flex-col items-center rounded-lg transition-colors ${ds && onSelectDate ? 'cursor-pointer' : ''} ${isOver ? 'bg-violet-100 ring-2 ring-violet-400' : allowedOn ? 'bg-emerald-100 ring-1 ring-emerald-300' : isSelected ? 'bg-[#F3F0FF] ring-1 ring-violet-300' : isOff ? 'bg-[#FCF3E4]' : ''}`}
                         style={{ minHeight: cellMinH }}
                       >
                         {ds && (
@@ -444,6 +444,9 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                             {Number(ds.slice(8))}
                           </div>
                         )}
+                        {ds && (() => { const att = store.attendance[ds]; const ms = att?.in && att?.out ? att.out - att.in : 0; return ms > 0 ? (
+                          <span className="absolute top-0.5 right-0.5 z-10 text-[8px] font-bold leading-none px-1 py-0.5 rounded-full tabular-nums" style={{ backgroundColor: '#E4F5E0', color: '#3E6B1F' }} title="그날 총 업무시간 (출근~퇴근)">{(ms / 3600000).toFixed(1)}h</span>
+                        ) : null; })()}
                         {isOff && <span className="text-[8px] font-bold leading-none px-1 rounded-full -mt-0.5" style={{ backgroundColor: '#FBE7C6', color: '#96631A' }}>off</span>}
                       </div>
                     );
