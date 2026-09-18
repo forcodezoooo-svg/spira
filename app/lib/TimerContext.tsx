@@ -162,12 +162,18 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     recover();
     return subscribeStore(recover);
   }, []);
-  // 리셋 복구 ②: 하루 총합(focus)이 비었지만 개별 업무 시간(allTimes)은 남아있는 날 → 그 합으로 총합 복원. 정상값 있는 날은 안 건드림.
+  // 리셋 복구 ②: 하루 총합(focus)이 '개별 업무 최대 시간'보다 작으면(= 깨진 값) 개별 업무 시간 합으로 복원.
+  //  (정상 추적된 날은 focus ≥ 최대 단일 업무 시간이라 안 건드림 → 중복 카운트 방지)
   useEffect(() => {
     if (!ready) return;
     setFocusTimes(prev => {
       let changed = false; const next = { ...prev };
-      for (const d in allTimes) { if (!next[d]) { const sum = Object.values(allTimes[d]).reduce((a, b) => a + b, 0); if (sum > 0) { next[d] = sum; changed = true; } } }
+      for (const d in allTimes) {
+        const vals = Object.values(allTimes[d]);
+        if (vals.length === 0) continue;
+        const maxTask = Math.max(...vals);
+        if ((next[d] ?? 0) < maxTask) { next[d] = vals.reduce((a, b) => a + b, 0); changed = true; }
+      }
       return changed ? next : prev;
     });
   }, [allTimes, ready]);
