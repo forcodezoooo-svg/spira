@@ -204,9 +204,8 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               const lo = a && b ? (a <= b ? a : b) : (a || b)!;
               let hi = a && b ? (a <= b ? b : a) : (b || a)!;
               if (effDone) {
-                // 완료된 단발 task는 '완료한 날'에만 표시 (완료 후 오늘 목록에 남지 않게). doneDate 없으면(레거시) 시작일/기한 기준.
-                const anchor = s.doneDate || s.date || s.deadline!;
-                if (dateStr !== anchor) continue;
+                // 완료된 단발 task는 '완료한 날(doneDate)'에만 표시. 완료일 기록이 없는(과거 완료) 건 오늘 목록에서 숨김.
+                if (s.doneDate !== dateStr) continue;
               } else {
                 // 세부 할일 있는 미완료 업무: 시작일부터 (기한/오늘 중 늦은 날)까지 이어서 표시 (다른 날 리스트에도 노출)
                 if (opts?.carryUnits && (s.units?.length ?? 0) > 0) hi = hi > todayS ? hi : todayS;

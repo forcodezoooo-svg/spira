@@ -140,6 +140,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, []);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(activeSessions)); } catch { /* empty */ } } }, [activeSessions, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(FOCUS_TIMES_KEY, JSON.stringify(focusTimes)); } catch { /* empty */ } pushTimerTimes(allTimesRef.current, focusTimes); } }, [focusTimes, ready]);
+  // 리셋 복구: 하루 총합(focus)이 비었지만 개별 업무 시간(allTimes)은 남아있는 날 → 그 합으로 총합 복원. 정상값 있는 날은 안 건드림.
+  useEffect(() => {
+    if (!ready) return;
+    setFocusTimes(prev => {
+      let changed = false; const next = { ...prev };
+      for (const d in allTimes) { if (!next[d]) { const sum = Object.values(allTimes[d]).reduce((a, b) => a + b, 0); if (sum > 0) { next[d] = sum; changed = true; } } }
+      return changed ? next : prev;
+    });
+  }, [allTimes, ready]);
   useEffect(() => { if (ready) { try { localStorage.setItem(SESSION_LOG_KEY, JSON.stringify(sessionLog)); } catch { /* empty */ } } }, [sessionLog, ready]);
 
   const anyActive = Object.keys(activeSessions).length > 0;
