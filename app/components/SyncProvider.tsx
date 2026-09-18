@@ -21,6 +21,13 @@ function contentScore(d: AppData): number {
   }, 0);
 }
 
+// 타이머 누적시간(날짜·task별 초)은 기기별로 각각 쌓이므로 로컬↔서버를 무조건 max-merge (한쪽 덮어쓰기 방지 → 기기 간 동기화)
+function mergeTimerTimes(a?: AppData | null, b?: AppData | null): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const src of [a?.timerTimes ?? {}, b?.timerTimes ?? {}]) for (const date in src) { out[date] = out[date] ?? {}; for (const tk in src[date]) out[date][tk] = Math.max(out[date][tk] ?? 0, src[date][tk]); }
+  return out;
+}
+
 // 로그인 후 서버(app_data)와 로컬(localStorage)을 동기화한다.
 // - 서버에 데이터 있으면 → 로컬을 서버 데이터로 교체
 // - 서버가 비어 있고 로컬에 (로그인 전) 데이터가 있으면 → 서버로 이전(1회 마이그레이션)
@@ -62,12 +69,16 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
         const localHas = (local.workspaces?.length ?? 0) > 0;
         const localNewer = sameUser && localHas
           && ((local.updatedAt ?? 0) >= (server.updatedAt ?? 0) || contentScore(local) > contentScore(server));
+        const mergedTimer = mergeTimerTimes(local, server); // 타이머 시간은 로컬·서버 합산(max) 보존
         if (localNewer) {
-          try { await upsertAppData(supabase, uid, local); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
+          const chosen = { ...local, timerTimes: mergedTimer };
+          try { await upsertAppData(supabase, uid, chosen); } catch { /* 서버 저장 실패해도 로컬 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);
-          setGlobalStoreData(local);
+          try { writeLocalRaw(chosen); } catch { /* ignore */ }
+          setGlobalStoreData(chosen);
         } else {
-          try { writeLocalRaw(server); } catch { /* 용량 초과여도 서버 데이터 기준으로 진행 */ }
+          const chosen = { ...server, timerTimes: mergedTimer };
+          try { writeLocalRaw(chosen); } catch { /* 용량 초과여도 서버 데이터 기준으로 진행 */ }
           localStorage.setItem(UID_KEY, uid);
           setGlobalStoreData(load());
         }

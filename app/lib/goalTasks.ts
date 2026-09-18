@@ -184,7 +184,9 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
         for (const t of dl.todos ?? []) {
           for (const s of t.subtasks ?? []) {
             const hasDays = (s.days?.length ?? 0) > 0;
-            let done = !!s.done;
+            // 세부작업(units)을 모두 완료했으면 task 자체(s.done)가 안 찍혀도 '완료'로 간주 (완료한 업무가 이월되던 문제 방지)
+            const effDone = !!s.done || ((s.units?.length ?? 0) > 0 && s.units!.every(u => u.done));
+            let done = effDone;
             if (hasDays) {
               // 매주 반복: 시작일 이후 & (기한 없거나 이전) & 해당 요일에 표시. 완료는 날짜별(doneDates)
               const dow = new Date(dateStr + 'T00:00:00').getDay();
@@ -199,9 +201,9 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               const lo = a && b ? (a <= b ? a : b) : (a || b)!;
               let hi = a && b ? (a <= b ? b : a) : (b || a)!;
               // 세부 할일 있는 미완료 업무: 시작일부터 (기한/오늘 중 늦은 날)까지 이어서 표시 (다른 날 리스트에도 노출)
-              if (opts?.carryUnits && (s.units?.length ?? 0) > 0 && !s.done) hi = hi > todayS ? hi : todayS;
+              if (opts?.carryUnits && (s.units?.length ?? 0) > 0 && !effDone) hi = hi > todayS ? hi : todayS;
               // (A안) 지난 미완료 일회성 업무는 '오늘 리스트'에서만 오늘로 당겨 표시 — 원본 날짜는 그대로(저장 이월 없음)
-              if (opts?.carryOverdue && !s.done && dateStr === todayS) hi = hi > todayS ? hi : todayS;
+              if (opts?.carryOverdue && !effDone && dateStr === todayS) hi = hi > todayS ? hi : todayS;
               if (dateStr < lo || dateStr > hi) continue;
             }
             out.push({
