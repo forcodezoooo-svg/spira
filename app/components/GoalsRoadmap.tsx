@@ -1036,7 +1036,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const kbToggleDone = (col: KbCol, s: Sub) => {
     if ((s.days?.length ?? 0) > 0) return; // 반복 업무는 카테고리보드에서 완료 체크하지 않음(요일별로 Home에서 관리)
     const nowDone = !s.done;
-    updateSub(col, s.id, { done: nowDone, status: nowDone ? 'done' : 'todo' });
+    updateSub(col, s.id, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? todayStr : undefined });
     if (nowDone && s.actualMin === undefined && !(s.days?.length)) setActualTarget({ col, s }); // 실제 소요시간 물어보기 (§14, 반복 제외)
   };
   const kbAddUnit = (col: KbCol, s: Sub) => { setKbForm({ mode: 'subtask', col, s }); setFormName(''); setFormDur(''); };

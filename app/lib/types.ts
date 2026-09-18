@@ -198,6 +198,7 @@ export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위
   id: string;
   name: string;
   done: boolean;
+  doneDate?: string; // 단발성 task를 완료한 날짜 "YYYY-MM-DD" (완료일 이후 오늘 목록에서 숨김)
   status?: 'todo' | 'doing' | 'done'; // 칸반 컬럼 (없으면 done 기준)
   durationMin?: number; // 예상 소요 시간(분) — Time Management의 Estimated Duration으로 재사용
   durationBase?: number; // 실측 반영 전 원래 예상시간(분). 실측 반영 시 durationMin=round(durationBase×배율). 재적용해도 누적 안 되게 원본 보존

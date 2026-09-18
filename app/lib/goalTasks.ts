@@ -203,11 +203,17 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               if (!a && !b) continue;
               const lo = a && b ? (a <= b ? a : b) : (a || b)!;
               let hi = a && b ? (a <= b ? b : a) : (b || a)!;
-              // 세부 할일 있는 미완료 업무: 시작일부터 (기한/오늘 중 늦은 날)까지 이어서 표시 (다른 날 리스트에도 노출)
-              if (opts?.carryUnits && (s.units?.length ?? 0) > 0 && !effDone) hi = hi > todayS ? hi : todayS;
-              // (A안) 지난 미완료 일회성 업무는 '오늘 리스트'에서만 오늘로 당겨 표시 — 원본 날짜는 그대로(저장 이월 없음)
-              if (opts?.carryOverdue && !effDone && dateStr === todayS) hi = hi > todayS ? hi : todayS;
-              if (dateStr < lo || dateStr > hi) continue;
+              if (effDone) {
+                // 완료된 단발 task는 '완료한 날'에만 표시 (완료 후 오늘 목록에 남지 않게). doneDate 없으면(레거시) 시작일/기한 기준.
+                const anchor = s.doneDate || s.date || s.deadline!;
+                if (dateStr !== anchor) continue;
+              } else {
+                // 세부 할일 있는 미완료 업무: 시작일부터 (기한/오늘 중 늦은 날)까지 이어서 표시 (다른 날 리스트에도 노출)
+                if (opts?.carryUnits && (s.units?.length ?? 0) > 0) hi = hi > todayS ? hi : todayS;
+                // (A안) 지난 미완료 일회성 업무는 '오늘 리스트'에서만 오늘로 당겨 표시 — 원본 날짜는 그대로(저장 이월 없음)
+                if (opts?.carryOverdue && dateStr === todayS) hi = hi > todayS ? hi : todayS;
+                if (dateStr < lo || dateStr > hi) continue;
+              }
             }
             out.push({
               key: `s:${e.workspace.id}:${p.id}:${dl.id}:${t.id}:${s.id}`,

@@ -129,6 +129,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       const mT = mergeTimes(allTimesRef.current, g.timerTimes ?? {});
       const mF: Record<string, number> = { ...focusTimesRef.current };
       for (const d in (g.timerFocus ?? {})) mF[d] = Math.max(mF[d] ?? 0, g.timerFocus![d]);
+      // 하루 총합이 비었지만 개별 업무 시간은 남아있는 날 → 개별 시간 합으로 복구(리셋 복구). 정상값이 있는 날은 안 건드림.
+      for (const d in mT) { if (!mF[d]) { const sum = Object.values(mT[d]).reduce((a, b) => a + b, 0); if (sum > 0) mF[d] = sum; } }
       pushTimerTimes(mT, mF); // 하이드레이션 후에만 실제 저장, 변화 없으면 생략
       if (JSON.stringify(mT) !== JSON.stringify(allTimesRef.current)) setAllTimes(mT);
       if (JSON.stringify(mF) !== JSON.stringify(focusTimesRef.current)) setFocusTimes(mF);

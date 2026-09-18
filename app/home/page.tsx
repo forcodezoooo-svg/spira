@@ -171,7 +171,7 @@ export default function Home() {
       return;
     }
     const nowDone = !t.done;
-    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo' });
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? dateStr : undefined });
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
     if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };
