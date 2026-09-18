@@ -6,7 +6,7 @@ import { ERR } from '../lib/copy';
 import BrandLoader from './BrandLoader';
 import { createClient } from '../lib/supabase/client';
 import { load, writeLocalRaw, setServerPusher, empty } from '../lib/store';
-import { setGlobalStoreData } from '../lib/useStore';
+import { setGlobalStoreData, getGlobalStoreData } from '../lib/useStore';
 import { pullAppData, upsertAppData } from '../lib/appDataSync';
 import type { AppData } from '../lib/types';
 
@@ -45,6 +45,7 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<AppData | null>(null); // 아직 서버로 못 올린 최신 데이터(디바운스 대기 중)
+  const lastResyncRef = useRef(0); // 재동기화 쓰로틀
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -135,11 +136,33 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
         if (pushTimer.current) clearTimeout(pushTimer.current);
         try { void upsertAppData(supabase, uid, d); } catch { /* best-effort */ }
       };
-      const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+      // 창을 다시 볼 때/포커스 시 서버에서 재동기화 → 다른 기기 변경(타이머·완료 등)이 반영됨. (타이머 시간은 항상 max-merge로 보존)
+      const resync = async () => {
+        if (cancelled || document.visibilityState === 'hidden') return;
+        if (Date.now() - lastResyncRef.current < 3000) return;
+        lastResyncRef.current = Date.now();
+        flush(); // 대기 중 로컬 변경 먼저 서버로
+        let srv: AppData | null = null;
+        try { srv = await pullAppData(supabase, uid); } catch { return; }
+        if (!srv || cancelled) return;
+        const cur = getGlobalStoreData();
+        const mergedTimer = mergeTimerTimes(cur, srv);
+        const mergedFocus = mergeTimerFocus(cur, srv);
+        const serverNewer = (srv.updatedAt ?? 0) > (cur.updatedAt ?? 0) && (srv.workspaces?.length ?? 0) > 0;
+        const base = serverNewer ? srv : cur;
+        const chosen = { ...base, timerTimes: mergedTimer, timerFocus: mergedFocus } as AppData;
+        if (JSON.stringify(chosen) === JSON.stringify(cur)) return; // 변화 없음
+        try { writeLocalRaw(chosen); } catch { /* ignore */ }
+        setGlobalStoreData(chosen);
+      };
+      const onHide = () => { if (document.visibilityState === 'hidden') flush(); else void resync(); };
+      const onFocus = () => void resync();
       window.addEventListener('pagehide', flush);
+      window.addEventListener('focus', onFocus);
       document.addEventListener('visibilitychange', onHide);
       flushCleanup = () => {
         window.removeEventListener('pagehide', flush);
+        window.removeEventListener('focus', onFocus);
         document.removeEventListener('visibilitychange', onHide);
       };
 

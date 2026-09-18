@@ -102,9 +102,12 @@ export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, 
             const a = ownStart || ownEnd!;
             const b = ownEnd || ownStart!;
             const lo = a <= b ? a : b, hi = a <= b ? b : a;
-            const overdue = dateStr === todayStr && hi < todayStr && quarterOf(hi) === quarterOf(todayStr);
+            // 세부작업(subtasks)이 모두 완료면 산출물도 완료로 간주 → 오늘로 이월하지 않음(완료한 업무가 오늘 다시 뜨던 문제 방지)
+            const subs = t.subtasks ?? [];
+            const allSubsDone = subs.length > 0 && subs.every(x => !!x.done);
+            const overdue = dateStr === todayStr && hi < todayStr && quarterOf(hi) === quarterOf(todayStr) && !allSubsDone;
             show = (dateStr >= lo && dateStr <= hi) || overdue;
-            done = false;
+            done = allSubsDone;
           }
           if (show) {
             out.push({
