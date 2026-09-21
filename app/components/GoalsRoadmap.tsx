@@ -208,7 +208,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     const deadlines = (prog.deadlines ?? []).map(dl => {
       if (dl.id !== t.deadlineId) return dl;
       if (t.level === 'deadline') {
-        return { ...dl, startDate: newStart, date: newEnd, todos: dl.todos.map(td => ({ ...td, date: mapDate(td.date), deadline: mapDate(td.deadline), subtasks: (td.subtasks ?? []).map(s => ({ ...s, date: mapDate(s.date), deadline: mapDate(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: mapDate(u.date), deadline: mapDate(u.deadline) })) })) })) };
+        // 반복(매주) 업무는 요일 기준으로 자기 시작일(s.date)부터 표시되므로, 상위 프로젝트 막대를 옮겨도
+        // 날짜를 재배치(rescale)하면 안 된다. 재배치하면 시작일이 미래로 밀려 오늘 목록에서 영구히 사라진다. → 반복 subtask는 원본 유지.
+        return { ...dl, startDate: newStart, date: newEnd, todos: dl.todos.map(td => ({ ...td, date: mapDate(td.date), deadline: mapDate(td.deadline), subtasks: (td.subtasks ?? []).map(s => (s.days?.length ?? 0) > 0 ? s : ({ ...s, date: mapDate(s.date), deadline: mapDate(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: mapDate(u.date), deadline: mapDate(u.deadline) })) })) })) };
       }
       const newTodos = dl.todos.map(td => {
         if (td.id !== t.todoId) return td;
