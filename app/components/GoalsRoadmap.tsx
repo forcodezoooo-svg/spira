@@ -67,7 +67,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const gran: Scale = pxPerDay < 8 ? 'year' : pxPerDay < 40 ? 'month' : 'week'; // 줌 정도에 따라 눈금/라벨 밀도만 결정
   const [kanban, setKanban] = useState(false); // 칸반 탭 여부
   const [sortMode, setSortMode] = useState<'dday' | 'business'>('business'); // 로드맵 정렬: 디데이순 / 비즈니스별
-  const [ctxMenu, setCtxMenu] = useState<{ r: Row; x: number; y: number; days: number; start: string } | null>(null); // 우클릭 시작일·소요일 입력
+  const [ctxMenu, setCtxMenu] = useState<{ r: Row; x: number; y: number; start: string; end: string } | null>(null); // 우클릭 시작·끝 날짜 입력
   const [linkFrom, setLinkFrom] = useState<string | null>(null); // 막대 연결: 선행 산출물(todo) id 선택 중
   const [editingKey, setEditingKey] = useState<string | null>(null); // 리스트 이름 인라인 편집 중인 행
   // 펼침 오버라이드: 없으면 스케일 기본(depth<maxDepth 펼침), 있으면 사용자가 화살표로 지정한 값
@@ -99,6 +99,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [actualTarget, setActualTarget] = useState<{ col: KbCol; s: Sub } | null>(null); // 완료 시 실제시간 입력
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [kbBiz, setKbBiz] = useState<string | null>(null); // Task 보드 비즈니스 필터 (null=전체)
+  const [dateEditFor, setDateEditFor] = useState<string | null>(null); // 카테고리 날짜 편집 중인 todoId (달력 아이콘)
   const [kbFlat, setKbFlat] = useState(false); // Task 보드 뷰: false=업무영역별, true=날짜순 목록
   const [flagTodo, setFlagTodo] = useState<string | null>(null); // Home에서 넘어와 강조·스크롤할 카테고리(todoId)
   const [groupSaveOpen, setGroupSaveOpen] = useState(false); // 그룹 저장: 이름 설정 팝업
@@ -129,7 +130,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     pressTimer.current = setTimeout(() => {
       pressTimer.current = null;
       movedRef.current = true; // 롱프레스 후의 클릭(하위 이동)을 억제
-      setCtxMenu({ r: rr, x: cx, y: cy, days: daysBetween(rr.start!, rr.end!) + 1, start: rr.start! });
+      setCtxMenu({ r: rr, x: cx, y: cy, start: rr.start!, end: rr.end! });
     }, 500);
   };
   const movePress = (e: React.PointerEvent) => {
@@ -224,6 +225,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (!start) return;
     const newEnd = addDaysStr(start, Math.max(0, Math.round(days) - 1));
     applyBarRange({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, start, newEnd, r.start ?? start, r.end ?? start);
+  };
+  // 우클릭 → 시작·끝 날짜 직접 지정
+  const setBarDates = (r: Row, start: string, end: string) => {
+    if (!start || !end) return;
+    const s = start <= end ? start : end, e = start <= end ? end : start;
+    applyBarRange({ level: r.kind, wsId: r.wsId, programId: r.programId, deadlineId: r.deadlineId, todoId: r.todoId, subtaskId: r.subtaskId, unitId: r.unitId }, s, e, r.start ?? s, r.end ?? e);
   };
 
   // 리스트에서 프로젝트(데드라인)·산출물(todo) 이름 변경
@@ -953,6 +960,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     else store.updateProgramInWs(col.p.wsId, { ...prog, deadlines });
   };
   // 프로젝트 상태(예정/진행중/완료/보류) 변경 — Plan의 setProjectStatus와 동일하게 데드라인 done도 동기화
+  // 카테고리(산출물)의 시작/마감 날짜 직접 편집 (달력 아이콘)
+  const kbSetTodoDates = (col: KbCol, patch: { date?: string; deadline?: string }) => {
+    const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}) }) }) });
+  };
   const kbSetStatus = (col: KbCol, status: string) => {
     if (!col.projectId) return;
     store.updateProject(col.p.wsId, col.projectId, { status: status as ProjectStatus });
@@ -1402,7 +1414,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     {placed && (
                       <div data-rm-bar={r.key} data-teach={r.kind === 'deadline' ? 'roadmap-bar' : undefined} onMouseDown={e => startCalDrag(r, 'move', e)} onClick={e => { e.stopPropagation(); if (movedRef.current) { movedRef.current = false; return; } if (r.kind !== 'todo') return; if (barScope === r.key) { setBarScope(null); setSelectedKey(null); } else { enterLevel(r); setBarScope(r.key); setKbFlat(false); } }}
                         onPointerDown={e => startPress(r, e)} onPointerMove={movePress} onPointerUp={clearPress} onPointerLeave={clearPress} onPointerCancel={clearPress}
-                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); clearPress(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, days: daysBetween(r.start, r.end) + 1, start: r.start }); } }}
+                        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); clearPress(); if (r.level > 0 && r.start && r.end) { const z = htmlZoom(); setCtxMenu({ r, x: e.clientX / z, y: e.clientY / z, start: r.start, end: r.end }); } }}
                         className="group/bar absolute top-1/2 -translate-y-1/2 flex items-center cursor-pointer"
                         style={{
                           left, width: Math.max(width, bl === 1 ? 14 : 6), height: barH(bl),
@@ -1418,8 +1430,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                         {bl >= 2 && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: r.color }} />}
                         <span className="truncate px-2 pointer-events-none" style={{ fontSize: bl === 1 ? 12 : 12, fontWeight: bl === 1 ? 800 : 600, color: bl === 1 ? '#fff' : '#16211E', textShadow: bl === 1 ? '0 1px 1.5px rgba(0,0,0,0.3)' : undefined }}>{r.name}</span>
                         {r.level > 0 && <>
-                          <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="시작일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
-                          <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2 flex items-center justify-center cursor-ew-resize z-20" title="완료일 조절"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
+                          <div onMouseDown={e => startCalDrag(r, 'resize-start', e)} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} className="absolute left-0 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-40" title="시작일 조절 (드래그)"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
+                          <div onMouseDown={e => startCalDrag(r, 'resize-end', e)} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} className="absolute right-0 top-0 bottom-0 w-2.5 flex items-center justify-center cursor-ew-resize z-40" title="완료일 조절 (드래그)"><span className="w-1 h-3 rounded-full" style={{ backgroundColor: r.color }} /></div>
                         </>}
                         {/* 막대 연결(의존성) */}
                         {r.kind === 'todo' && r.todoId && (
@@ -1620,12 +1632,27 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                     </span>
                     <DdayBadge d={col.due} />
                   </button>
+                  <button onClick={() => setDateEditFor(dateEditFor === col.todoId ? null : col.todoId)} title="날짜 직접 수정 (로드맵 안 열림)" className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors" style={dateEditFor === col.todoId ? { backgroundColor: '#EDE9FB', color: '#5B3FBF' } : { backgroundColor: '#F0F0EA', color: '#8D9A8D' }}>
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="3" width="12" height="11" rx="2" /><path d="M2 6h12M5.5 1.5v3M10.5 1.5v3" strokeLinecap="round" /></svg>
+                  </button>
                   {col.projectId && (() => { const meta = STATUS_META[col.status || 'planned'] ?? STATUS_META.planned; return (
                     <select value={col.status || 'planned'} onChange={e => kbSetStatus(col, e.target.value)} title="프로젝트 상태" className="text-[10px] font-bold rounded-full pl-2 pr-1 py-0.5 border-0 outline-none cursor-pointer appearance-none flex-shrink-0 ml-auto" style={{ backgroundColor: meta.bg, color: meta.color }}>
                       <option value="planned">예정</option><option value="active">진행중</option><option value="done">완료</option><option value="onhold">보류</option>
                     </select>
                   ); })()}
                 </div>
+                {dateEditFor === col.todoId && (
+                  <div className="mt-1.5 ml-3.5 p-2 rounded-lg border flex flex-col gap-1.5" style={{ borderColor: '#E3DEF7', backgroundColor: '#FAF8FF' }} onClick={e => e.stopPropagation()}>
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold" style={{ color: '#5B6560' }}>
+                      <span>시작 날짜</span>
+                      <input type="date" value={col.start || ''} onChange={e => kbSetTodoDates(col, { date: e.target.value })} className="text-[11px] tabular-nums bg-white border rounded px-1.5 py-0.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#16211E' }} />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold" style={{ color: '#5B6560' }}>
+                      <span>끝나는 날짜</span>
+                      <input type="date" value={col.due || ''} onChange={e => kbSetTodoDates(col, { deadline: e.target.value })} className="text-[11px] tabular-nums bg-white border rounded px-1.5 py-0.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#16211E' }} />
+                    </label>
+                  </div>
+                )}
               </div>
               {/* 태스크 */}
               <div className="flex-1 min-h-0 overflow-y-auto p-2">
@@ -1691,18 +1718,15 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>시작 날짜</div>
             <input type="date" value={ctxMenu.start}
               onChange={e => setCtxMenu(c => c ? { ...c, start: e.target.value } : c)}
-              onKeyDown={e => { if (e.key === 'Enter') { setBarRange(ctxMenu.r, ctxMenu.start, ctxMenu.days); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
+              onKeyDown={e => { if (e.key === 'Enter') { setBarDates(ctxMenu.r, ctxMenu.start, ctxMenu.end); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
               className="w-full text-[13px] px-2 py-1.5 rounded-lg outline-none tabular-nums mb-2.5" style={{ border: '1.5px solid #C9D6C2' }} />
-            <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>소요 일수</div>
-            <div className="flex items-center gap-1.5">
-              <input type="number" min={1} value={ctxMenu.days}
-                onChange={e => setCtxMenu(c => c ? { ...c, days: Math.max(1, Number(e.target.value) || 1) } : c)}
-                onKeyDown={e => { if (e.key === 'Enter') { setBarRange(ctxMenu.r, ctxMenu.start, ctxMenu.days); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
-                className="w-16 text-[13px] px-2 py-1.5 rounded-lg outline-none tabular-nums text-center" style={{ border: '1.5px solid #C9D6C2' }} />
-              <span className="text-[12px]" style={{ color: '#5B6560' }}>일</span>
-              <button onClick={() => { setBarRange(ctxMenu.r, ctxMenu.start, ctxMenu.days); setCtxMenu(null); }} className="ml-auto text-[12px] font-bold rounded-lg px-3 py-1.5 text-white" style={{ backgroundColor: '#3E6B1F' }}>적용</button>
-            </div>
-            {ctxMenu.r.kind === 'deadline' && <div className="text-[10px] mt-2 leading-snug" style={{ color: '#9AA39D' }}>시작일부터 소요 일수만큼 배치 · 하위 산출물도 함께 조정돼요.</div>}
+            <div className="text-[10px] font-semibold mb-1" style={{ color: '#5B6560' }}>끝나는 날짜</div>
+            <input type="date" value={ctxMenu.end} min={ctxMenu.start || undefined}
+              onChange={e => setCtxMenu(c => c ? { ...c, end: e.target.value } : c)}
+              onKeyDown={e => { if (e.key === 'Enter') { setBarDates(ctxMenu.r, ctxMenu.start, ctxMenu.end); setCtxMenu(null); } else if (e.key === 'Escape') setCtxMenu(null); }}
+              className="w-full text-[13px] px-2 py-1.5 rounded-lg outline-none tabular-nums mb-2.5" style={{ border: '1.5px solid #C9D6C2' }} />
+            <button onClick={() => { setBarDates(ctxMenu.r, ctxMenu.start, ctxMenu.end); setCtxMenu(null); }} className="w-full text-[12px] font-bold rounded-lg px-3 py-1.5 text-white" style={{ backgroundColor: '#3E6B1F' }}>적용</button>
+            {ctxMenu.r.kind === 'deadline' && <div className="text-[10px] mt-2 leading-snug" style={{ color: '#9AA39D' }}>시작~끝 기간으로 배치 · 하위 산출물도 함께 조정돼요.</div>}
           </div>
         </>
       )}
