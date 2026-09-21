@@ -104,6 +104,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const scrollToTodoRef = useRef<string | null>(null); // 날짜 변경으로 보드가 재정렬된 뒤 이 카테고리로 스크롤
   useEffect(() => {
     const id = scrollToTodoRef.current; if (!id) return;
+    if (selectedKey) return; // 스코프 필터 중이면 kanban 열림 처리(아래 effect)가 담당
     const el = boardRef.current?.querySelector(`[data-col-todo="${id}"]`);
     if (el) { el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); scrollToTodoRef.current = null; }
   });
@@ -363,7 +364,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   }, [flagTodo, kanban]);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
-  useEffect(() => { if (kanban) { if (boardRef.current) boardRef.current.scrollLeft = 0; setSelectedKey(null); setBarScope(null); } setSel(new Map()); setSelMode(false); }, [kanban]);
+  useEffect(() => {
+    if (kanban) {
+      const tid = scrollToTodoRef.current; scrollToTodoRef.current = null;
+      setSelectedKey(null); setBarScope(null);
+      // 스코프 해제로 전체 보드가 다시 그려진 뒤, 보던 카테고리 위치로 스크롤 (없으면 맨 왼쪽)
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const el = tid ? boardRef.current?.querySelector(`[data-col-todo="${tid}"]`) : null;
+        if (el) el.scrollIntoView({ inline: 'center', block: 'nearest' });
+        else if (boardRef.current) boardRef.current.scrollLeft = 0;
+      }));
+    }
+    setSel(new Map()); setSelMode(false);
+  }, [kanban]);
 
   // Goals 티칭 투어: 카테고리 보드 뷰 전환 / 우클릭 팝업 닫기 요청
   useEffect(() => {
@@ -1484,7 +1497,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             {kanban && <div onClick={() => setKanban(false)} className="absolute inset-0 z-40 cursor-pointer" title="로드맵 열기" style={{ backgroundColor: 'rgba(250,250,248,0.35)' }} />}
           </div>
           {/* ── task 박스 ── (막대 스코프 중엔 로드맵을 그대로 두고 왼쪽으로 슬라이드해 오른쪽 위에 겹침 / 배경 클릭 시 전체 확장) */}
-          <div onClick={e => { if (groupSelMode || kanban) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; setKanban(true); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
+          <div onClick={e => { if (groupSelMode || kanban) return; if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return; if (barScope && kbScope.todoId) scrollToTodoRef.current = kbScope.todoId; setKanban(true); }} className="relative flex-shrink-0 flex flex-col min-w-0 rounded-[22px] border bg-white p-4" style={{ width: 'calc(100% - 64px)', borderColor: 'var(--spira-border-subtle)', boxShadow: 'var(--spira-shadow-lg)' }}>
         <div className="flex items-center gap-1.5 mb-3 min-w-0">
           <span className="text-[13px] font-bold truncate min-w-0" style={{ color: '#16211E' }}>{barScope ? (kbScopeName || '선택 항목') : '업무 영역별 task'}</span>
           {!barScope && <span className="text-[12px] truncate" style={{ color: '#9AA39D' }}>· {kbScopeName}</span>}
@@ -1599,7 +1612,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
             );
           })()
           ) : (
-          <div ref={boardRef} onClick={e => { if (barScope && e.target === e.currentTarget) setKanban(true); }} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
+          <div ref={boardRef} onClick={e => { if (barScope && e.target === e.currentTarget) { if (kbScope.todoId) scrollToTodoRef.current = kbScope.todoId; setKanban(true); } }} className="flex-1 min-h-0 flex gap-3 overflow-x-auto pb-1">
             {kbColsView.map(col => (
             <div key={col.todoId} data-col-todo={col.todoId} data-ask data-ask-label={`${col.p.wsName ? col.p.wsName + ' · ' : ''}카테고리 · ${col.area}`} data-ask-content={`[비즈니스: ${col.p.wsName || '내 비즈니스'}] 카테고리 '${col.area}'${col.goalSub ? `: ${col.goalSub}` : ''}`} className="relative flex flex-col min-h-0 w-[317px] flex-shrink-0 rounded-xl border-2 transition-shadow" style={(groupSelMode && groupSelIds.has(col.todoId))
               ? { borderColor: '#7C3AED', boxShadow: '0 0 0 3px #E6DBFB', backgroundColor: '#FAF8FF' }
