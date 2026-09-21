@@ -980,7 +980,9 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     else store.updateProgramInWs(col.p.wsId, { ...prog, deadlines });
   };
   // 프로젝트 상태(예정/진행중/완료/보류) 변경 — Plan의 setProjectStatus와 동일하게 데드라인 done도 동기화
-  // 카테고리(산출물)의 시작/마감 날짜 직접 편집 (달력 아이콘)
+  // 카테고리(산출물)의 저장된 원본 날짜(date/deadline) — 편집 시드/변경 감지용. col.due는 deadline||date로 파생돼 편집엔 부적합.
+  const rawTodo = (col: KbCol) => findProg(col.p.wsId, col.p.id)?.deadlines?.find(dl => dl.id === col.dlId)?.todos?.find(t => t.id === col.todoId);
+  // 카테고리(산출물)의 시작/마감 날짜 직접 편집 (달력 아이콘). patch에 담긴 필드만 변경 — 나머지(마감 등)는 절대 건드리지 않음.
   const kbSetTodoDates = (col: KbCol, patch: { date?: string; deadline?: string }) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}) }) }) });
@@ -1651,7 +1653,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       {col.due ? (() => { const d = new Date(col.due + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일`; })() : '기한 없음'}
                     </span>
                   </button>
-                  <button onClick={() => { if (dateEditFor === col.todoId) setDateEditFor(null); else { setDateDraft({ start: col.start || '', end: col.due || '' }); setDateEditFor(col.todoId); } }} title="날짜 직접 수정 (로드맵 안 열림)" className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors" style={dateEditFor === col.todoId ? { backgroundColor: '#EDE9FB', color: '#5B3FBF' } : { backgroundColor: '#F0F0EA', color: '#8D9A8D' }}>
+                  <button onClick={() => { if (dateEditFor === col.todoId) setDateEditFor(null); else { const rt = rawTodo(col); setDateDraft({ start: rt?.date || '', end: rt?.deadline || '' }); setDateEditFor(col.todoId); } }} title="날짜 직접 수정 (로드맵 안 열림)" className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors" style={dateEditFor === col.todoId ? { backgroundColor: '#EDE9FB', color: '#5B3FBF' } : { backgroundColor: '#F0F0EA', color: '#8D9A8D' }}>
                     <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="3" width="12" height="11" rx="2" /><path d="M2 6h12M5.5 1.5v3M10.5 1.5v3" strokeLinecap="round" /></svg>
                   </button>
                   <DdayBadge d={col.due} />
@@ -1663,7 +1665,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                 </div>
                 {dateEditFor === col.todoId && (() => {
                   const commit = () => {
-                    kbSetTodoDates(col, { date: dateDraft.start, deadline: dateDraft.end });
+                    // 사용자가 실제로 바꾼 필드만 반영 — 시작만 바꿨는데 마감(끝나는 날짜)이 시작값으로 덮여
+                    // 반복 업무 표시 구간이 과거로 붕괴되던 문제 방지
+                    const rt = rawTodo(col);
+                    const patch: { date?: string; deadline?: string } = {};
+                    if ((rt?.date || '') !== dateDraft.start) patch.date = dateDraft.start;
+                    if ((rt?.deadline || '') !== dateDraft.end) patch.deadline = dateDraft.end;
+                    if (patch.date !== undefined || patch.deadline !== undefined) kbSetTodoDates(col, patch);
                     scrollToTodoRef.current = col.todoId; // 재정렬 후 이 보드로 스크롤 따라가기
                     setDateEditFor(null);
                   };
