@@ -61,6 +61,7 @@ export function restoreUndoSnapshot(): boolean {
 }
 export function hasUndoSnapshot() { try { return undoAvailable || !!localStorage.getItem(UNDO_KEY); } catch { return undoAvailable; } }
 import { workspaceColor } from './goalTasks';
+import { isWorkingDay } from './capacity';
 import { useToast } from './ToastContext';
 import { ERR } from './copy';
 
@@ -181,6 +182,8 @@ export function useStore() {
 
   // Time Management — 가용시간(Capacity) 설정 (Buffer 비율 + 날짜별 예외)
   const capacity = appData.capacity ?? {};
+  // 휴무일 여부: 업무시간 설정의 요일 off / 날짜 override 0 / 수동 오프데이(offDays) 중 하나면 휴무
+  const isNonWorkingDay = (dateStr: string) => !isWorkingDay(workSchedule, capacity, dateStr) || offDays.includes(dateStr);
   // 로드맵 딜레이 자동 반영
   const autoDelay = appData.autoDelay ?? false;
   const setAutoDelay = (on: boolean) => update(d => ({ ...d, autoDelay: on }));
@@ -887,7 +890,7 @@ export function useStore() {
     setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, toggleDeadlineDone, shiftAllSchedulesAfter,
     journeyFlags: appData.journeyFlags ?? [],
     setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask,
-    offDays, isOffDay, toggleOffDay,
+    offDays, isOffDay, toggleOffDay, isNonWorkingDay,
     workSchedule, setWorkDay,
     capacity, setBufferPercent, setDateCapacityOverride, setOffPeriod, setWeekWorkDay, resetWeekSchedule,
     attendance, setClock, autoDelay, setAutoDelay,

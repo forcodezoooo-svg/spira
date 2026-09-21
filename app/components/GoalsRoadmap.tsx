@@ -1602,7 +1602,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       {wk.map(day => {
                         const isToday = day.ymd === todayStr;
                         const dn = day.date.getDate(); const dowN = day.date.getDay();
-                        const items = [...(byDate.get(day.ymd) ?? []), ...recurring.filter(x => (x.s.days ?? []).includes(dowN) && (!x.s.date || x.s.date <= day.ymd) && (!x.s.deadline || x.s.deadline >= day.ymd))];
+                        const off = store.isNonWorkingDay(day.ymd); // 휴무일이면 정기 반복 숨김(단 '내일하기' extraDates는 표시)
+                        const items = [...(byDate.get(day.ymd) ?? []), ...recurring.filter(x => { const rec = !off && (x.s.days ?? []).includes(dowN) && (!x.s.date || x.s.date <= day.ymd) && (!x.s.deadline || x.s.deadline >= day.ymd); return (rec || (x.s.extraDates ?? []).includes(day.ymd)) && !(x.s.skipDates ?? []).includes(day.ymd); })];
                         return (
                           <div key={day.ymd} data-cal-day={day.ymd} onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const ymd = day.ymd; kbMoveTaskToDate(kbDrag, ymd); setKbDrag(null); requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-cal-day="${ymd}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }))); } }}
                             className="border-b border-r p-1 min-h-[116px] flex flex-col gap-1 min-w-0" style={{ borderColor: '#EEEEE8', backgroundColor: isToday ? '#F5FBEC' : (dowN === 0 || dowN === 6) ? '#FBFBF9' : '#fff' }}>

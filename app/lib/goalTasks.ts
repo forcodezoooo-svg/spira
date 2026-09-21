@@ -64,7 +64,8 @@ function quarterOf(ds: string): string {
   return `${y}-${Math.ceil(m / 3)}`;
 }
 
-export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, dow: number): GoalTask[] {
+// isOff: 그 날짜가 휴무일이면 반복(매주) 정기 표시는 숨기고, '내일하기'로 옮겨온 것(extraDates)만 표시
+export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, dow: number, isOff = false): GoalTask[] {
   const out: GoalTask[] = [];
   // 오늘(로컬) — 기한 지난 미완료 업무를 오늘로 자동 이월하기 위해 사용
   const nowD = new Date();
@@ -91,7 +92,8 @@ export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, 
             // 매주 반복: 구간 내 해당 요일에 표시(+extraDates 1회, −skipDates 건너뜀), 완료는 날짜별(doneDates)
             const afterStart = !ownStart || ownStart <= dateStr;
             const beforeDeadline = !effDeadline || effDeadline >= dateStr;
-            const recMatch = afterStart && beforeDeadline && t.days!.includes(dow);
+            // 휴무일(isOff)이면 정기 반복은 숨김 — '내일하기'로 옮겨온 날(extraDates)만 아래에서 표시
+            const recMatch = !isOff && afterStart && beforeDeadline && t.days!.includes(dow);
             show = (recMatch || (t.extraDates ?? []).includes(dateStr)) && !(t.skipDates ?? []).includes(dateStr);
             done = (t.doneDates ?? []).includes(dateStr);
           } else if (t.done) {
@@ -181,7 +183,8 @@ export interface SubtaskTask {
 
 // 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
 // [시작~완수기한] 구간에 dateStr가 포함되면 그 날짜의 업무로 표시
-export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: string, opts?: { onlyFromPlan?: boolean; carryUnits?: boolean; carryOverdue?: boolean }): SubtaskTask[] {
+// opts.isOff: 그 날짜가 휴무일이면 반복(매주) 정기 표시는 숨기고, '내일하기'로 옮겨온 것(extraDates)만 표시
+export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: string, opts?: { onlyFromPlan?: boolean; carryUnits?: boolean; carryOverdue?: boolean; isOff?: boolean }): SubtaskTask[] {
   const out: SubtaskTask[] = [];
   const nowD = new Date();
   const todayS = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}-${String(nowD.getDate()).padStart(2, '0')}`;
@@ -203,7 +206,8 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               // 반복(매주)은 시작일이 미래여도 오늘 이후의 해당 요일엔 표시 (과거 날짜만 시작일 기준으로 가림)
               const afterStart = !s.date || s.date <= dateStr; // 시작 날짜부터 표시 (지정한 시작일 존중)
               const beforeEnd = !s.deadline || s.deadline >= dateStr;
-              const recMatch = afterStart && beforeEnd && s.days!.includes(dow);
+              // 휴무일(isOff)이면 정기 반복은 숨김 — 단, '내일하기'로 옮겨온 날(extraDates)은 그대로 표시
+              const recMatch = !opts?.isOff && afterStart && beforeEnd && s.days!.includes(dow);
               // extraDates: 반복 요일 아니어도 1회 추가 / skipDates: 그 날 occurrence 건너뜀 ('내일로' 이동)
               if (!((recMatch || (s.extraDates ?? []).includes(dateStr)) && !(s.skipDates ?? []).includes(dateStr))) continue;
               done = (s.doneDates ?? []).includes(dateStr);

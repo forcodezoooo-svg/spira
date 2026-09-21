@@ -317,7 +317,8 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
                 const dow = new Date(ds + 'T00:00:00').getDay();
                 const afterStart = !s.date || s.date <= ds; // 지정한 시작 날짜부터 표시
                 const beforeEnd = !s.deadline || s.deadline >= ds;
-                const recMatch = afterStart && beforeEnd && s.days!.includes(dow);
+                // 휴무일이면 정기 반복은 숨김 — '내일하기'로 옮겨온 날(extraDates)만 표시
+                const recMatch = !store.isNonWorkingDay(ds) && afterStart && beforeEnd && s.days!.includes(dow);
                 if (!((recMatch || (s.extraDates ?? []).includes(ds)) && !(s.skipDates ?? []).includes(ds))) continue;
                 const dOne = (s.doneDates ?? []).includes(ds);
                 real.push({ key: `s-${s.id}-${ds}`, level: 'subtask', start: ds, end: ds, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: dOne ? '#C7CEC7' : pColor, done: dOne, readOnly: true, recurring: true });

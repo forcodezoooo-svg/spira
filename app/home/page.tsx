@@ -169,24 +169,25 @@ export default function Home() {
 
 
   // ── 오늘의 업무 (현재 분기 프로그램만) ────────────────────────────────────────
-  const isOffToday = store.isOffDay(dateStr);
+  const isOffToday = store.isNonWorkingDay(dateStr);
   const quickTasks = store.getQuickTasksForDate(dateStr);
   // Goals(프로그램→데드라인→할일)에서 오늘 표시할 할일 (Home에서 숨긴 항목 제외)
-  const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow)
+  const goalTasks = getGoalTasksForDate(store.allWorkspacesEntries, dateStr, dow, isOffToday)
     .filter(t => !store.homeHiddenToday.includes(t.key));
   // 캘린더(Plan에서 가져온 목표)에 오늘 날짜로 배치된 task(세부 산출물 하위 task)
-  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true, carryUnits: true, carryOverdue: true });
+  const subtaskTasks = getSubtaskTasksForDate(store.allWorkspacesEntries, dateStr, { onlyFromPlan: true, carryUnits: true, carryOverdue: true, isOff: isOffToday });
   // task(subtask) 완료 토글 — 캘린더/카테고리 보드와 동일 저장 경로
-  const toggleSubtaskDone = (t: SubtaskTask) => {
+  // forDate: 완료 처리할 '그 날짜'(캘린더에서 과거 날짜를 볼 땐 그 날짜). 기본은 오늘.
+  const toggleSubtaskDone = (t: SubtaskTask, forDate: string = dateStr) => {
     if (t.days?.length) {
-      // 반복 task: 오늘 날짜만 완료 토글 (doneDates)
-      const has = (t.doneDates ?? []).includes(dateStr);
-      const next = has ? (t.doneDates ?? []).filter(d => d !== dateStr) : [...(t.doneDates ?? []), dateStr];
+      // 반복 task: 해당 날짜만 완료 토글 (doneDates)
+      const has = (t.doneDates ?? []).includes(forDate);
+      const next = has ? (t.doneDates ?? []).filter(d => d !== forDate) : [...(t.doneDates ?? []), forDate];
       store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { doneDates: next });
       return;
     }
     const nowDone = !t.done;
-    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? dateStr : undefined });
+    store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? forDate : undefined });
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
     if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };
@@ -203,13 +204,13 @@ export default function Home() {
     }
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: tomorrowStr, deadline: tomorrowStr });
   };
-  // task의 세부작업(unit) 완료 토글
-  const toggleSubtaskUnit = (t: SubtaskTask, unitId: string) =>
+  // task의 세부작업(unit) 완료 토글 (forDate: 캘린더 과거 날짜 볼 땐 그 날짜, 기본 오늘)
+  const toggleSubtaskUnit = (t: SubtaskTask, unitId: string, forDate: string = dateStr) =>
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: (t.units ?? []).map(u => {
       if (u.id !== unitId) return u;
-      if (t.days?.length) { // 반복 task의 세부작업 — 오늘 날짜만 토글(doneDates), 영구 done은 건드리지 않음
-        const has = (u.doneDates ?? []).includes(dateStr);
-        return { ...u, doneDates: has ? (u.doneDates ?? []).filter(d => d !== dateStr) : [...(u.doneDates ?? []), dateStr] };
+      if (t.days?.length) { // 반복 task의 세부작업 — 해당 날짜만 토글(doneDates), 영구 done은 건드리지 않음
+        const has = (u.doneDates ?? []).includes(forDate);
+        return { ...u, doneDates: has ? (u.doneDates ?? []).filter(d => d !== forDate) : [...(u.doneDates ?? []), forDate] };
       }
       return { ...u, done: !u.done };
     }) });
@@ -234,7 +235,8 @@ export default function Home() {
     const map = new Map<string, WeekArea & { seen: Set<string> }>();
     for (let i = 0; i < 7; i++) {
       const day = addDaysD(weekStart, i);
-      for (const t of getGoalTasksForDate(store.allWorkspacesEntries, localDateStr(day), day.getDay())) {
+      const dayStr = localDateStr(day);
+      for (const t of getGoalTasksForDate(store.allWorkspacesEntries, dayStr, day.getDay(), store.isNonWorkingDay(dayStr))) {
         if (t.done) continue;
         // 업무 영역명 기준으로 묶어 모든 비즈니스의 같은 영역을 통합 (Goals와 동일)
         const key = t.programName ?? 'area';
@@ -339,7 +341,7 @@ export default function Home() {
   const yDow = yDate.getDay();
   // 오늘 목록에 이미 있는(자동 이월 등) 업무는 제외 → 중복 없음. 반복 업무는 '오늘로'가 의미 없어 제외.
   const todayKeys = new Set([...goalTasks.map(t => t.key), ...quickTasks.map(t => `quick:${t.id}`)]);
-  const yGoalUndone = getGoalTasksForDate(store.allWorkspacesEntries, yStr, yDow)
+  const yGoalUndone = getGoalTasksForDate(store.allWorkspacesEntries, yStr, yDow, store.isNonWorkingDay(yStr))
     .filter(t => !t.done && !t.recurring && !todayKeys.has(t.key));
   const yQuickUndone = store.getQuickTasksForDate(yStr).filter(t => !t.completed && !todayKeys.has(`quick:${t.id}`));
   const yesterdayUndoneCount = yGoalUndone.length + yQuickUndone.length;
@@ -993,7 +995,7 @@ export default function Home() {
 
         {/* 선택한 날짜의 업무 목록 (캘린더에서 다른 날짜를 클릭하면 표시) */}
         {selectedCalDate && (() => {
-          const list = getSubtaskTasksForDate(store.allWorkspacesEntries, selectedCalDate, { onlyFromPlan: true, carryUnits: true });
+          const list = getSubtaskTasksForDate(store.allWorkspacesEntries, selectedCalDate, { onlyFromPlan: true, carryUnits: true, isOff: store.isNonWorkingDay(selectedCalDate) });
           const d = new Date(selectedCalDate + 'T00:00:00');
           const label = `${d.getMonth() + 1}월 ${d.getDate()}일 ${DOW[d.getDay()]}요일`;
           return (
@@ -1015,7 +1017,7 @@ export default function Home() {
                     return (
                       <li key={t.key} className="flex items-center gap-2.5 border rounded-2xl px-3.5 py-2.5" style={{ borderColor: '#E7EFDD', backgroundColor: t.done ? '#F8FBF3' : '#fff' }}>
                         <button
-                          onClick={() => toggleSubtaskDone(t)}
+                          onClick={() => toggleSubtaskDone(t, selectedCalDate)}
                           style={{ borderColor: t.done ? '#9DFE3B' : '#C7CEC7', backgroundColor: t.done ? '#9DFE3B' : 'transparent' }}
                           className="w-[16px] h-[16px] rounded-full flex-shrink-0 border-2 transition-colors flex items-center justify-center"
                         >
