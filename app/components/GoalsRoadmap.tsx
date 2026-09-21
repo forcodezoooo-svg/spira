@@ -983,9 +983,14 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // 카테고리(산출물)의 저장된 원본 날짜(date/deadline) — 편집 시드/변경 감지용. col.due는 deadline||date로 파생돼 편집엔 부적합.
   const rawTodo = (col: KbCol) => findProg(col.p.wsId, col.p.id)?.deadlines?.find(dl => dl.id === col.dlId)?.todos?.find(t => t.id === col.todoId);
   // 카테고리(산출물)의 시작/마감 날짜 직접 편집 (달력 아이콘). patch에 담긴 필드만 변경 — 나머지(마감 등)는 절대 건드리지 않음.
+  // 반복(매주) 업무는 자기 시작일(s.date)로 표시되므로, 카테고리 시작/마감을 바꾸면 이 카테고리의 반복 업무에도 함께 반영해
+  // '시작일을 옮겼는데 반복업무가 여전히 오늘 뜨는' 문제를 없앤다. (해당 카테고리 안에서만 — 다른 카테고리는 절대 건드리지 않음)
   const kbSetTodoDates = (col: KbCol, patch: { date?: string; deadline?: string }) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}) }) }) });
+    const patchRecurringSub = (s: import('../lib/types').ProgramSubtask) => (s.days?.length ?? 0) > 0
+      ? { ...s, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}) }
+      : s;
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}), subtasks: (t.subtasks ?? []).map(patchRecurringSub) }) }) });
   };
   const kbSetStatus = (col: KbCol, status: string) => {
     if (!col.projectId) return;
