@@ -257,7 +257,7 @@ export default function Home() {
 
   // ── Time Management: 오늘 가용시간(Capacity) ──
   const entries = store.allWorkspacesEntries;
-  const dayCap = computeDayCapacity(entries, store.workSchedule, store.capacity, dateStr);
+  const dayCap = computeDayCapacity(entries, store.workSchedule, store.capacity, dateStr, isOffToday);
   const capPct = dayCap.availableProjectMin > 0 ? Math.min(1, dayCap.plannedProjectMin / dayCap.availableProjectMin) : (dayCap.plannedProjectMin > 0 ? 1 : 0);
   // 재배치 제안 (초과일 때만 계산). 규칙 기반이 기본, AI 제안이 있으면 그걸 표시
   const ruleReplan: ReplanProposal | null = dayCap.overMin > 0 ? proposeReplan(entries, store.workSchedule, store.capacity, dateStr) : null;
@@ -273,7 +273,7 @@ export default function Home() {
   };
   // 앞당기기 제안 — 가용시간이 남고(초과 아님) 여유가 있을 때만 계산
   const dayFreeMin = Math.max(0, dayCap.availableProjectMin - dayCap.plannedProjectMin);
-  const pullProposal: PullProposal | null = (dayCap.baseMin > 0 && dayCap.overMin === 0 && dayFreeMin > 0)
+  const pullProposal: PullProposal | null = (!isOffToday && dayCap.baseMin > 0 && dayCap.overMin === 0 && dayFreeMin > 0)
     ? proposePullForward(entries, store.workSchedule, store.capacity, dateStr) : null;
   const applyPull = (p: PullProposal) => {
     for (const m of p.pull) {

@@ -72,9 +72,10 @@ export function fixedMinForDate(entries: WorkspaceEntry[], date: string): number
 }
 
 // 그 날짜에 배치된 '프로젝트 작업(비-fixed)'의 예상 소요시간(분) 합 = Planned
-export function plannedProjectMinForDate(entries: WorkspaceEntry[], date: string): number {
+export function plannedProjectMinForDate(entries: WorkspaceEntry[], date: string, isOff = false): number {
   let sum = 0;
-  for (const t of getSubtaskTasksForDate(entries, date, { onlyFromPlan: true })) {
+  // 휴무일이면 표시(오늘 목록)와 동일하게 정기 반복은 제외 — 안 뜨는 업무를 '계획량'에 넣어 초과로 보이던 문제 방지
+  for (const t of getSubtaskTasksForDate(entries, date, { onlyFromPlan: true, isOff })) {
     if (t.done) continue;
     if (t.schedulingType === 'fixed') continue; // fixed는 별도 차감
     sum += t.durationMin ?? 0;
@@ -99,15 +100,17 @@ export interface DayCapacity {
 }
 
 export function computeDayCapacity(
-  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string,
+  entries: WorkspaceEntry[], schedule: WorkSchedule, capacity: CapacitySettings | undefined, date: string, isOff?: boolean,
 ): DayCapacity {
   const baseMin = baseMinForDate(schedule, capacity, date);
+  // isOff 미지정 시 요일 off/날짜 override 0(baseMin===0)로 판단. 지정되면(오프데이 등) 그 값 사용.
+  const off = isOff ?? (baseMin === 0);
   const routineMin = routineMinForDate(entries, date);
   const fixedMin = fixedMinForDate(entries, date);
   const bufferPct = capacity?.bufferPercent ?? DEFAULT_BUFFER_PERCENT;
   const bufferMin = Math.round(baseMin * bufferPct);
   const availableProjectMin = Math.max(0, baseMin - routineMin - fixedMin - bufferMin);
-  const plannedProjectMin = plannedProjectMinForDate(entries, date);
+  const plannedProjectMin = plannedProjectMinForDate(entries, date, off);
   const overMin = Math.max(0, plannedProjectMin - availableProjectMin);
   return { date, baseMin, routineMin, fixedMin, bufferMin, availableProjectMin, plannedProjectMin, overMin };
 }
