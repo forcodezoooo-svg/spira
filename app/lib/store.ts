@@ -107,6 +107,32 @@ export function sanitizeDuplicateIds(data: AppData): AppData {
   };
 }
 
+// 반복(매주) 업무 복구: 예전 버그로 기한 입력이 시작일(date)까지 마감(deadline)과 똑같이 덮어써
+// 반복 업무 시작일이 미래로 밀려 오늘 목록에서 사라졌던 것을 되돌린다.
+// date === deadline 인 반복 업무는 그 date를 '시작일'로 의도한 게 아니라 마감을 넣은 것이므로 시작일을 비운다(처음부터 반복 표시, 마감 유지).
+// (한 번 비우면 date !== deadline 이 되어 다시 트리거되지 않음 — 멱등)
+export function fixRecurringStartDates(data: AppData): AppData {
+  if (!data?.workspaces?.length) return data;
+  let changed = false;
+  const workspaces = data.workspaces.map(e => ({
+    ...e,
+    programs: (e.programs ?? []).map(p => ({
+      ...p,
+      deadlines: (p.deadlines ?? []).map(dl => ({
+        ...dl,
+        todos: (dl.todos ?? []).map(t => ({
+          ...t,
+          subtasks: (t.subtasks ?? []).map(s => {
+            if ((s.days?.length ?? 0) > 0 && s.date && s.deadline && s.date === s.deadline) { changed = true; return { ...s, date: undefined }; }
+            return s;
+          }),
+        })),
+      })),
+    })),
+  }));
+  return changed ? { ...data, workspaces } : data;
+}
+
 export function load(): AppData {
   if (typeof window === 'undefined') return empty;
   try {
@@ -166,7 +192,7 @@ export function load(): AppData {
       });
     }
 
-    return sanitizeDuplicateIds({ ...empty, ...parsed });
+    return fixRecurringStartDates(sanitizeDuplicateIds({ ...empty, ...parsed }));
   } catch {
     return empty;
   }

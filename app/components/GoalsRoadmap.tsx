@@ -941,7 +941,12 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   };
   const kbCreateUnit = (col: KbCol, s: Sub, name: string, durMin?: number) => updateSub(col, s.id, { units: [...(s.units ?? []), { id: uid(), name, done: false, durationMin: durMin }] });
   const kbDelUnit = (col: KbCol, s: Sub, uId: string) => updateSub(col, s.id, { units: (s.units ?? []).filter(u => u.id !== uId) });
-  const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, { date: due || undefined, deadline: due || undefined });
+  // 반복(매주) 업무: 이 날짜 칸은 '끝나는 날(마감)'만 의미 → 시작일(date)은 건드리지 않는다.
+  //   (예전엔 date까지 같이 덮어써서 시작일이 마감일로 밀려 반복업무가 오늘 안 뜨던 버그가 있었음)
+  // 일회성 업무: 하루짜리이므로 date=deadline 동일하게 설정.
+  const kbSetTaskDue = (col: KbCol, s: Sub, due: string) => updateSub(col, s.id, (s.days?.length ?? 0) > 0 ? { deadline: due || undefined } : { date: due || undefined, deadline: due || undefined });
+  // 반복(매주) 업무의 '시작 날짜'(이 날부터 매주 반복 표시) — 마감은 건드리지 않음
+  const kbSetTaskStart = (col: KbCol, s: Sub, start: string) => updateSub(col, s.id, { date: start || undefined });
   // 카테고리(산출물)의 날짜 칸 클릭 → 로드맵을 열고 그 산출물 막대로 스코프 + task는 그 카테고리 하나만.
   // 렌더/슬라이드-인 후 막대 DOM을 찾아: 가로는 막대 '시작점'이 보이는 영역 좌측에 오게(슬라이드 -308·라벨열 240 감안한 레이아웃 계산),
   // 세로는 상단에서 여유를 두어 맨 아래에 걸리지 않게 스크롤한다.
@@ -1217,8 +1222,17 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
           <button onClick={() => kbEditTask(col, s)} title="task 수정 (이름·소요시간·성격·우선순위)" className="font-semibold flex-1 min-w-0 break-words text-left" style={{ fontSize: 13, color: showDone ? '#9AA39D' : '#16211E', textDecoration: showDone ? 'line-through' : 'none' }}>{s.name}</button>
           <button onClick={() => kbDel(col, s.id)} className="text-neutral-300 hover:text-red-500 text-xs flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="삭제">×</button>
         </div>
-        <div className="mt-1 ml-6">
-          <input type="date" value={s.deadline ?? ''} onChange={e => kbSetTaskDue(col, s, e.target.value)} title="task 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+        <div className="mt-1 ml-6 flex flex-wrap items-center gap-1">
+          {(s.days?.length ?? 0) > 0 ? (
+            <>
+              <span className="text-[9px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>시작</span>
+              <input type="date" value={s.date ?? ''} onChange={e => kbSetTaskStart(col, s, e.target.value)} title="반복 시작일 (이 날부터 매주 반복)" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+              <span className="text-[9px] font-semibold flex-shrink-0 ml-0.5" style={{ color: '#9AA39D' }}>끝</span>
+              <input type="date" value={s.deadline ?? ''} min={s.date || undefined} onChange={e => kbSetTaskDue(col, s, e.target.value)} title="반복 끝나는 날 (이 날까지 매주 반복)" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+            </>
+          ) : (
+            <input type="date" value={s.deadline ?? ''} onChange={e => kbSetTaskDue(col, s, e.target.value)} title="task 기한" className="text-[10px] tabular-nums bg-white border rounded px-1 py-0.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)', color: '#5B6560' }} />
+          )}
         </div>
         {units.length > 0 && (
           <div className="mt-1.5 ml-5 space-y-0.5">
