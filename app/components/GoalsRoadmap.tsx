@@ -100,6 +100,13 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [kbBiz, setKbBiz] = useState<string | null>(null); // Task 보드 비즈니스 필터 (null=전체)
   const [dateEditFor, setDateEditFor] = useState<string | null>(null); // 카테고리 날짜 편집 중인 todoId (달력 아이콘)
+  const [dateDraft, setDateDraft] = useState<{ start: string; end: string }>({ start: '', end: '' }); // 편집 중 임시 날짜(적용 전엔 보드 순서 안 바뀜)
+  const scrollToTodoRef = useRef<string | null>(null); // 날짜 변경으로 보드가 재정렬된 뒤 이 카테고리로 스크롤
+  useEffect(() => {
+    const id = scrollToTodoRef.current; if (!id) return;
+    const el = boardRef.current?.querySelector(`[data-col-todo="${id}"]`);
+    if (el) { el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); scrollToTodoRef.current = null; }
+  });
   const [kbFlat, setKbFlat] = useState(false); // Task 보드 뷰: false=업무영역별, true=날짜순 목록
   const [flagTodo, setFlagTodo] = useState<string | null>(null); // Home에서 넘어와 강조·스크롤할 카테고리(todoId)
   const [groupSaveOpen, setGroupSaveOpen] = useState(false); // 그룹 저장: 이름 설정 팝업
@@ -1630,29 +1637,37 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M8 1.5a5 5 0 0 0-5 5c0 3.3 5 8 5 8s5-4.7 5-8a5 5 0 0 0-5-5z" strokeLinejoin="round" /><circle cx="8" cy="6.5" r="1.6" /></svg>
                       {col.due ? (() => { const d = new Date(col.due + 'T00:00:00'); return `${d.getMonth() + 1}월 ${d.getDate()}일`; })() : '기한 없음'}
                     </span>
-                    <DdayBadge d={col.due} />
                   </button>
-                  <button onClick={() => setDateEditFor(dateEditFor === col.todoId ? null : col.todoId)} title="날짜 직접 수정 (로드맵 안 열림)" className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors" style={dateEditFor === col.todoId ? { backgroundColor: '#EDE9FB', color: '#5B3FBF' } : { backgroundColor: '#F0F0EA', color: '#8D9A8D' }}>
+                  <button onClick={() => { if (dateEditFor === col.todoId) setDateEditFor(null); else { setDateDraft({ start: col.start || '', end: col.due || '' }); setDateEditFor(col.todoId); } }} title="날짜 직접 수정 (로드맵 안 열림)" className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors" style={dateEditFor === col.todoId ? { backgroundColor: '#EDE9FB', color: '#5B3FBF' } : { backgroundColor: '#F0F0EA', color: '#8D9A8D' }}>
                     <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="3" width="12" height="11" rx="2" /><path d="M2 6h12M5.5 1.5v3M10.5 1.5v3" strokeLinecap="round" /></svg>
                   </button>
+                  <DdayBadge d={col.due} />
                   {col.projectId && (() => { const meta = STATUS_META[col.status || 'planned'] ?? STATUS_META.planned; return (
                     <select value={col.status || 'planned'} onChange={e => kbSetStatus(col, e.target.value)} title="프로젝트 상태" className="text-[10px] font-bold rounded-full pl-2 pr-1 py-0.5 border-0 outline-none cursor-pointer appearance-none flex-shrink-0 ml-auto" style={{ backgroundColor: meta.bg, color: meta.color }}>
                       <option value="planned">예정</option><option value="active">진행중</option><option value="done">완료</option><option value="onhold">보류</option>
                     </select>
                   ); })()}
                 </div>
-                {dateEditFor === col.todoId && (
+                {dateEditFor === col.todoId && (() => {
+                  const commit = () => {
+                    kbSetTodoDates(col, { date: dateDraft.start, deadline: dateDraft.end });
+                    scrollToTodoRef.current = col.todoId; // 재정렬 후 이 보드로 스크롤 따라가기
+                    setDateEditFor(null);
+                  };
+                  return (
                   <div className="mt-1.5 ml-3.5 p-2 rounded-lg border flex flex-col gap-1.5" style={{ borderColor: '#E3DEF7', backgroundColor: '#FAF8FF' }} onClick={e => e.stopPropagation()}>
                     <label className="flex items-center justify-between gap-2 text-[10px] font-bold" style={{ color: '#5B6560' }}>
                       <span>시작 날짜</span>
-                      <input type="date" value={col.start || ''} onChange={e => kbSetTodoDates(col, { date: e.target.value })} className="text-[11px] tabular-nums bg-white border rounded px-1.5 py-0.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#16211E' }} />
+                      <input type="date" value={dateDraft.start} onChange={e => setDateDraft(d => ({ ...d, start: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') commit(); }} className="text-[11px] tabular-nums bg-white border rounded px-1.5 py-0.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#16211E' }} />
                     </label>
                     <label className="flex items-center justify-between gap-2 text-[10px] font-bold" style={{ color: '#5B6560' }}>
                       <span>끝나는 날짜</span>
-                      <input type="date" value={col.due || ''} onChange={e => kbSetTodoDates(col, { deadline: e.target.value })} className="text-[11px] tabular-nums bg-white border rounded px-1.5 py-0.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#16211E' }} />
+                      <input type="date" value={dateDraft.end} min={dateDraft.start || undefined} onChange={e => setDateDraft(d => ({ ...d, end: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') commit(); }} className="text-[11px] tabular-nums bg-white border rounded px-1.5 py-0.5 outline-none" style={{ borderColor: 'var(--spira-border)', color: '#16211E' }} />
                     </label>
+                    <button onClick={commit} className="mt-0.5 text-[11px] font-bold rounded-md px-2 py-1 text-white" style={{ backgroundColor: '#3E6B1F' }}>완료</button>
                   </div>
-                )}
+                  );
+                })()}
               </div>
               {/* 태스크 */}
               <div className="flex-1 min-h-0 overflow-y-auto p-2">
