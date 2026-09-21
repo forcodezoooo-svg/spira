@@ -214,6 +214,8 @@ export interface ProgramSubtask {   // 4단계: 영역별 산출물(Todo) 하위
   actualMin?: number;   // 실제 소요 시간(분) — 완료 시 기록 (P2)
   days?: number[];      // 매주 반복 요일 (0=일 ~ 6=토). 있으면 반복 task
   doneDates?: string[]; // 반복 task의 날짜별 완료 기록 "YYYY-MM-DD"
+  skipDates?: string[]; // 반복 task에서 이 날짜의 occurrence는 건너뜀(숨김) "YYYY-MM-DD" — '내일로' 이동 시 사용
+  extraDates?: string[]; // 반복 요일이 아니어도 이 날짜엔 1회 추가 표시 "YYYY-MM-DD" — '내일로' 이동 시 사용
 }
 
 // 카테고리 보드 템플릿 — 산출물(카테고리) 하나 + 그 안의 task/세부작업을 한 세트로 저장·재사용
@@ -238,6 +240,8 @@ export interface ProgramTodo {
   record?: TodoRecord; // 완수 기록
   doneDates?: string[]; // 매주 반복 업무의 날짜별 완료 기록 (YYYY-MM-DD)
   doneDate?: string; // 단발성 업무를 완료한 날짜 (완료일 이후 목록에서 숨김)
+  skipDates?: string[]; // 반복 업무에서 이 날짜의 occurrence는 건너뜀(숨김) — '내일로' 이동 시 사용
+  extraDates?: string[]; // 반복 요일이 아니어도 이 날짜엔 1회 추가 표시 — '내일로' 이동 시 사용
   starred?: boolean; // 중요 표시 (별표)
   light?: boolean; // 가벼운 작업(외부에서도 가능). 기본 false = 무거운 작업(작업실 필요)
   startTime?: string; // 시작 예정 시각 "HH:MM"

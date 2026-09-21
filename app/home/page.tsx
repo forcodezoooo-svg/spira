@@ -146,6 +146,13 @@ export default function Home() {
   };
   // 오늘 작업하던 업무를 내일로 이어서 옮기기
   const moveGoalToTomorrow = (t: GoalTask) => {
+    if (t.days?.length) {
+      // 반복(루틴): 오늘 occurrence 건너뛰고 내일에 1회 추가 (자동 아님 — 버튼 눌렀을 때만)
+      const skip = [...new Set([...(t.skipDates ?? []), dateStr])].filter(d => d !== tomorrowStr);
+      const extra = [...new Set([...(t.extraDates ?? []).filter(d => d !== dateStr), tomorrowStr])];
+      store.updateProgramTodo(t.wsId, t.programId, t.deadlineId, t.todoId, { skipDates: skip, extraDates: extra });
+      return;
+    }
     const patch: Partial<ProgramTodo> = { date: tomorrowStr };
     // 시작 날짜가 내일이면 기한도 내일 이후가 되도록 보정 (안 그러면 내일에 안 보임)
     if (!t.deadline || t.deadline < tomorrowStr) patch.deadline = tomorrowStr;
@@ -178,9 +185,16 @@ export default function Home() {
   // 다른 날짜의 task를 오늘로 옮기기
   const moveSubtaskToToday = (t: SubtaskTask) =>
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: dateStr, deadline: dateStr });
-  // 오늘 task를 내일로 옮기기
-  const moveSubtaskToTomorrow = (t: SubtaskTask) =>
+  // 오늘 task를 내일로 옮기기 (반복 task는 오늘 건너뛰고 내일 1회 추가 — 자동 아님, 버튼 눌렀을 때만)
+  const moveSubtaskToTomorrow = (t: SubtaskTask) => {
+    if (t.days?.length) {
+      const skip = [...new Set([...(t.skipDates ?? []), dateStr])].filter(d => d !== tomorrowStr);
+      const extra = [...new Set([...(t.extraDates ?? []).filter(d => d !== dateStr), tomorrowStr])];
+      store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { skipDates: skip, extraDates: extra });
+      return;
+    }
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: tomorrowStr, deadline: tomorrowStr });
+  };
   // task의 세부작업(unit) 완료 토글
   const toggleSubtaskUnit = (t: SubtaskTask, unitId: string) =>
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { units: (t.units ?? []).map(u => {
@@ -505,11 +519,11 @@ export default function Home() {
           </span>
         )}
         <TaskTimerButton taskId={t.key} done={t.done} />
-        {!t.recurring && !t.done && (
+        {!t.done && (
           <button
             onClick={() => moveGoalToTomorrow(t)}
             className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
-            title="내일 이어서 하기"
+            title={t.recurring ? '오늘은 건너뛰고 내일 하기' : '내일 이어서 하기'}
           >
             내일 ↪
           </button>
@@ -632,11 +646,11 @@ export default function Home() {
           </span>
         )}
         <TaskTimerButton taskId={t.key} done={t.done} />
-        {!t.done && !(t.days?.length) && (
+        {!t.done && (
           <button
             onClick={() => moveSubtaskToTomorrow(t)}
             className="text-[10px] text-neutral-400 hover:text-violet-800 flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
-            title="내일 이어서 하기"
+            title={t.days?.length ? '오늘은 건너뛰고 내일 하기' : '내일 이어서 하기'}
           >
             내일 ↪
           </button>

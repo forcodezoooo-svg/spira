@@ -43,6 +43,8 @@ export interface GoalTask {
   date?: string;
   deadline?: string;
   days?: number[];
+  skipDates?: string[];  // 반복 occurrence 건너뛴 날짜 ('내일로' 이동)
+  extraDates?: string[]; // 반복 요일 아니어도 1회 추가 표시 날짜 ('내일로' 이동)
   record?: TodoRecord;
   recurring: boolean; // 매주 반복 여부 (완료가 날짜별로 관리됨)
   starred: boolean;
@@ -86,10 +88,11 @@ export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, 
           let show: boolean;
           let done: boolean;
           if (hasDays) {
-            // 매주 반복: 구간 내 해당 요일에 표시, 완료는 날짜별(doneDates)
+            // 매주 반복: 구간 내 해당 요일에 표시(+extraDates 1회, −skipDates 건너뜀), 완료는 날짜별(doneDates)
             const afterStart = !ownStart || ownStart <= dateStr;
             const beforeDeadline = !effDeadline || effDeadline >= dateStr;
-            show = afterStart && beforeDeadline && t.days!.includes(dow);
+            const recMatch = afterStart && beforeDeadline && t.days!.includes(dow);
+            show = (recMatch || (t.extraDates ?? []).includes(dateStr)) && !(t.skipDates ?? []).includes(dateStr);
             done = (t.doneDates ?? []).includes(dateStr);
           } else if (t.done) {
             // 단발 완료: 완료한 날에만 표시 (그 다음날부터 숨김)
@@ -125,6 +128,8 @@ export function getGoalTasksForDate(entries: WorkspaceEntry[], dateStr: string, 
               date: t.date,
               deadline: effDeadline,
               days: t.days,
+              skipDates: t.skipDates,
+              extraDates: t.extraDates,
               record: t.record,
               recurring: hasDays,
               starred: !!t.starred,
@@ -170,6 +175,8 @@ export interface SubtaskTask {
   units?: { id: string; name: string; done: boolean; durationMin?: number; doneDates?: string[] }[]; // 세부 작업(체크리스트)
   days?: number[];            // 매주 반복 요일 (있으면 반복 task)
   doneDates?: string[];       // 반복 task의 날짜별 완료 기록
+  skipDates?: string[];       // 반복 occurrence 건너뛴 날짜 ('내일로' 이동)
+  extraDates?: string[];      // 반복 요일 아니어도 1회 추가 표시 날짜 ('내일로' 이동)
 }
 
 // 특정 날짜에 캘린더에 배치된 task(ProgramSubtask) 목록 — Home 캘린더와 동일 소스(fromPlan)
@@ -196,7 +203,9 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               // 반복(매주)은 시작일이 미래여도 오늘 이후의 해당 요일엔 표시 (과거 날짜만 시작일 기준으로 가림)
               const afterStart = !s.date || s.date <= dateStr || dateStr >= todayS;
               const beforeEnd = !s.deadline || s.deadline >= dateStr;
-              if (!(afterStart && beforeEnd && s.days!.includes(dow))) continue;
+              const recMatch = afterStart && beforeEnd && s.days!.includes(dow);
+              // extraDates: 반복 요일 아니어도 1회 추가 / skipDates: 그 날 occurrence 건너뜀 ('내일로' 이동)
+              if (!((recMatch || (s.extraDates ?? []).includes(dateStr)) && !(s.skipDates ?? []).includes(dateStr))) continue;
               done = (s.doneDates ?? []).includes(dateStr);
             } else {
               const a = s.date, b = s.deadline;
@@ -221,7 +230,7 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               programName: p.name, deliverableName: t.name, date: s.date, deadline: s.deadline, durationMin: s.durationMin,
               schedulingType: s.schedulingType, priority: s.priority,
               dependsOn: s.dependsOn, projectDeadline: dl.date || undefined, projectName: dl.name,
-              actualMin: s.actualMin, units: s.units, days: s.days, doneDates: s.doneDates,
+              actualMin: s.actualMin, units: s.units, days: s.days, doneDates: s.doneDates, skipDates: s.skipDates, extraDates: s.extraDates,
             });
           }
         }
