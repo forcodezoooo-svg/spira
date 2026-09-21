@@ -209,6 +209,8 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
   const store = useStore();
   const cats = allCategories(store);
   const monthExpenses = allRes(store).filter(e => e.type === 'expense' && e.date.startsWith(month)); // 이번 달 실제 지출
+  // 프로젝트별 투자 상한선(그룹키로 저장) — projectInvestPlan 재사용
+  const capOf = (wsId: string, key: string): number => (store.allWorkspacesEntries.find(e => e.workspace.id === wsId)?.projectInvestPlan ?? {})[key] ?? 0;
   const [spendFor, setSpendFor] = useState<string | null>(null);
   const [spName, setSpName] = useState(''); const [spAmt, setSpAmt] = useState('');
   const addSpend = (c: Category) => { const n = Number(spAmt.replace(/,/g, '')); if (!n || !spName.trim()) return; store.addResourceInWs(c.wsId, { type: 'expense', amount: n, description: spName.trim(), date: dateFor(month), todoId: c.todoId, ...(c.projectId ? { projectId: c.projectId } : {}) }); setSpName(''); setSpAmt(''); setSpendFor(null); };
@@ -269,11 +271,26 @@ function InvestSection({ month, catSpent }: { month: string; catSpent: (todoId: 
             const color = workspaceColor(store.allWorkspacesEntries, g.wsId);
             return (
               <div key={g.key}>
-                <div className="flex items-center gap-1.5 mb-1.5">
+                <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                   <span className="text-[11px] font-bold" style={{ color }}>{g.wsName}</span>
-                  <span className="text-[13px] font-black truncate" style={{ color: '#16211E' }}>{g.projectName}</span>
+                  <span className="text-[13px] font-black truncate min-w-0" style={{ color: '#16211E' }}>{g.projectName}</span>
+                  <span className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                    <span className="text-[11px]" style={{ color: '#9AA39D' }}>투자 상한선</span>
+                    <input type="number" value={capOf(g.wsId, g.key) || ''} onChange={e => store.setProjectInvestInWs(g.wsId, g.key, Number(e.target.value) || 0)} placeholder="0" className="w-28 text-[12px] tabular-nums text-right bg-white border rounded-lg px-2 py-1 outline-none focus:border-neutral-400" style={{ borderColor: 'var(--spira-border)' }} />
+                  </span>
                 </div>
+                {(() => { const cap = capOf(g.wsId, g.key); const spent = g.items.reduce((s, c) => s + catSpent(c.todoId), 0); if (cap <= 0) return null; const over = spent > cap; return (
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span style={{ color: over ? '#C0392B' : '#9AA39D' }}>지출 <b className="tabular-nums" style={{ color: over ? '#C0392B' : '#16211E' }}>{won(spent)}</b> / 상한 <b className="tabular-nums" style={{ color: '#5B6560' }}>{won(cap)}</b></span>
+                      {over ? <span className="font-bold" style={{ color: '#C0392B' }}>상한 초과 +{won(spent - cap)}</span> : <span style={{ color: '#9AA39D' }}>남음 {won(cap - spent)}</span>}
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#F0F0EA' }}>
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, (spent / cap) * 100)}%`, backgroundColor: over ? '#C0392B' : color }} />
+                    </div>
+                  </div>
+                ); })()}
                 <div className="space-y-2">{g.items.map(catRow)}</div>
               </div>
             );
