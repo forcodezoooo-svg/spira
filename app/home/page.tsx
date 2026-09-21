@@ -56,6 +56,7 @@ export default function Home() {
   const [addUnitKey, setAddUnitKey] = useState<string | null>(null); // 상세업무 추가 입력 중인 task key
   const [addUnitText, setAddUnitText] = useState('');
   const [clockDismissed, setClockDismissed] = useState(false); // '나중에'로 이번 세션 출근 모달 닫음
+  const [clockPromptSeen, setClockPromptSeen] = useState(true); // 오늘 이미 출근 팝업을 봤는지(하루 첫 새로고침에만 표시). 기본 true → 판별 전 깜빡임 방지
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
@@ -64,6 +65,13 @@ export default function Home() {
     /* eslint-disable react-hooks/set-state-in-effect */
     try { setHomeOrder(JSON.parse(localStorage.getItem('spira_home_task_order') ?? '[]')); }
     catch { setHomeOrder([]); }
+    // 출근 팝업은 '그날 첫 새로고침'에만 — localStorage에 오늘 날짜가 이미 기록돼 있으면 다시 안 뜬다.
+    const n = new Date();
+    const ds = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+    let seen = false;
+    try { seen = localStorage.getItem('spira_clockin_prompt') === ds; } catch { /* ignore */ }
+    setClockPromptSeen(seen);
+    if (!seen) { try { localStorage.setItem('spira_clockin_prompt', ds); } catch { /* ignore */ } } // 오늘 첫 표시 → 기록해서 이후 새로고침엔 안 뜨게
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
@@ -138,7 +146,7 @@ export default function Home() {
   // (계획 검토 알림은 Process 페이지로 이동)
   // 출근 체크: 오늘 아직 출근(attendance.in) 안 했으면 모달 노출. attendance는 appData에 저장돼 기기 간 동기화 + 저장 실패에 견고.
   const clockedInToday = !!store.attendance[dateStr]?.in;
-  const needClockIn = store.ready && !clockedInToday && !clockDismissed;
+  const needClockIn = store.ready && !clockedInToday && !clockDismissed && !clockPromptSeen;
   const clockIn = () => {
     store.setClock(dateStr, 'in', Date.now());
     const h = new Date().getHours();
