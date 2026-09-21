@@ -370,8 +370,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       setSelectedKey(null); setBarScope(null);
       // 스코프 해제로 전체 보드가 다시 그려진 뒤, 보던 카테고리 위치로 스크롤 (없으면 맨 왼쪽)
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        const el = tid ? boardRef.current?.querySelector(`[data-col-todo="${tid}"]`) : null;
-        if (el) el.scrollIntoView({ inline: 'center', block: 'nearest' });
+        const el = tid ? boardRef.current?.querySelector(`[data-col-todo="${tid}"]`) as HTMLElement | null : null;
+        if (el && boardRef.current) boardRef.current.scrollLeft += el.getBoundingClientRect().left - boardRef.current.getBoundingClientRect().left; // 보던 보드를 맨 왼쪽에
         else if (boardRef.current) boardRef.current.scrollLeft = 0;
       }));
     }
