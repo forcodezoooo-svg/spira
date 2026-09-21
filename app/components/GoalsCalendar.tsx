@@ -315,9 +315,10 @@ const GoalsCalendar = forwardRef<GoalsCalendarHandle, Props>(function GoalsCalen
               // 반복(주기적) 업무: 이 달의 '반복 요일'마다 하루짜리 막대 — 밑의 날짜별 리스트 로직과 동일하게 표시
               for (const ds of monthDays) {
                 const dow = new Date(ds + 'T00:00:00').getDay();
-                const afterStart = !s.date || s.date <= ds || ds >= todayKey;
+                const afterStart = !s.date || s.date <= ds; // 지정한 시작 날짜부터 표시
                 const beforeEnd = !s.deadline || s.deadline >= ds;
-                if (!(afterStart && beforeEnd && s.days!.includes(dow))) continue;
+                const recMatch = afterStart && beforeEnd && s.days!.includes(dow);
+                if (!((recMatch || (s.extraDates ?? []).includes(ds)) && !(s.skipDates ?? []).includes(ds))) continue;
                 const dOne = (s.doneDates ?? []).includes(ds);
                 real.push({ key: `s-${s.id}-${ds}`, level: 'subtask', start: ds, end: ds, name: s.name, wsId: p.wsId, programId: p.id, deadlineId: dl.id, todoId: t.id, subtaskId: s.id, color: dOne ? '#C7CEC7' : pColor, done: dOne, readOnly: true, recurring: true });
               }

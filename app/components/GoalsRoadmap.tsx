@@ -95,6 +95,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   const [formPriority, setFormPriority] = useState(2); // task 우선순위 (1낮음~4긴급)
   const [formDeps, setFormDeps] = useState<string[]>([]); // 선행 task id 목록
   const [formDays, setFormDays] = useState<number[]>([]); // 매주 반복 요일 (비어있으면 단발)
+  const [formStart, setFormStart] = useState(''); // 반복 업무 시작 날짜 (이 날부터 캘린더에 등록)
   const [actualTarget, setActualTarget] = useState<{ col: KbCol; s: Sub } | null>(null); // 완료 시 실제시간 입력
   const [catPanel, setCatPanel] = useState(false); // 새 카테고리 추가/템플릿 패널
   const [kbBiz, setKbBiz] = useState<string | null>(null); // Task 보드 비즈니스 필터 (null=전체)
@@ -899,11 +900,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, subtasks: (t.subtasks ?? []).map(s => s.id !== sId ? s : { ...s, ...patch }) }) }) });
   };
   // task/세부작업 추가는 팝업 폼으로 (이름 + 소요 시간). task 날짜는 자동 지정
-  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[]) => {
+  const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[], startDate?: string) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
     posthog.capture('task_added', { source: 'manual' });
     const recurring = !!days?.length;
-    const d = colStartAnchor(col); // 카테고리 시작일(미래면 그 날, 아니면 오늘)부터 배치
+    const d = (recurring && startDate) ? startDate : colStartAnchor(col); // 반복이면 지정한 시작일부터, 아니면 카테고리 시작일(미래면 그 날, 아니면 오늘)
     const sub = recurring
       ? { id: uid(), name, done: false, date: d, durationMin: durMin, schedulingType, priority, days, dependsOn: dependsOn?.length ? dependsOn : undefined }
       : { id: uid(), name, done: false, date: d, deadline: d, durationMin: durMin, schedulingType, priority, dependsOn: dependsOn?.length ? dependsOn : undefined };
@@ -973,8 +974,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     store.updateProgramInWs(p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(d => d.id === dlId ? { ...d, done: false, doneAt: undefined } : d) });
     if (projectId) store.updateProject(p.wsId, projectId, { status: 'active' });
   };
-  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); setFormDays([]); };
-  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); setFormDays(s.days ?? []); };
+  const kbAddTask = (col: KbCol) => { setKbForm({ mode: 'task', col }); setFormName(''); setFormDur(''); setFormType('flexible'); setFormPriority(2); setFormDeps([]); setFormDays([]); setFormStart(''); };
+  const kbEditTask = (col: KbCol, s: Sub) => { setKbForm({ mode: 'task', col, editTaskId: s.id }); setFormName(s.name); setFormDur(s.durationMin ? String(s.durationMin) : ''); setFormType(s.schedulingType ?? 'flexible'); setFormPriority(s.priority ?? 2); setFormDeps(s.dependsOn ?? []); setFormDays(s.days ?? []); setFormStart(s.date ?? ''); };
   const kbSubmitForm = () => {
     const n = formName.trim(); if (!n || !kbForm) return;
     const d = Number(formDur); const dur = Number.isFinite(d) && d > 0 ? d : undefined;
@@ -983,11 +984,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       if (kbForm.editTaskId) {
         const cur = kbForm.col.subtasks.find(x => x.id === kbForm.editTaskId);
         const patch: Partial<Sub> = { name: n, durationMin: dur, schedulingType: formType, priority: formPriority, dependsOn: formDeps.length ? formDeps : undefined, days };
-        if (days) { patch.deadline = undefined; patch.date = cur?.date && cur.date <= todayStr ? cur.date : todayStr; } // 반복: 시작일 미래면 오늘부터(오늘 요일 바로 뜨게)·기한 제거
+        if (days) { patch.deadline = undefined; patch.date = formStart || cur?.date || todayStr; } // 반복: 지정한 시작일(이 날부터 캘린더에 등록)·기한 제거
         else { const dd = cur?.date || cur?.deadline || todayStr; patch.date = dd; patch.deadline = dd; } // 단발: 기존 날짜 유지
         updateSub(kbForm.col, kbForm.editTaskId, patch);
       }
-      else kbCreateTask(kbForm.col, n, dur, formType, formPriority, formDeps, days);
+      else kbCreateTask(kbForm.col, n, dur, formType, formPriority, formDeps, days, formStart || undefined);
     }
     else if (kbForm.s) { if (kbForm.editUnitId) kbUpdateUnit(kbForm.col, kbForm.s, kbForm.editUnitId, n, dur); else kbCreateUnit(kbForm.col, kbForm.s, n, dur); }
     setKbForm(null);
@@ -1546,7 +1547,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                       {wk.map(day => {
                         const isToday = day.ymd === todayStr;
                         const dn = day.date.getDate(); const dowN = day.date.getDay();
-                        const items = [...(byDate.get(day.ymd) ?? []), ...recurring.filter(x => (x.s.days ?? []).includes(dowN))];
+                        const items = [...(byDate.get(day.ymd) ?? []), ...recurring.filter(x => (x.s.days ?? []).includes(dowN) && (!x.s.date || x.s.date <= day.ymd) && (!x.s.deadline || x.s.deadline >= day.ymd))];
                         return (
                           <div key={day.ymd} data-cal-day={day.ymd} onDragOver={e => { if (kbDrag) e.preventDefault(); }} onDrop={() => { if (kbDrag) { const ymd = day.ymd; kbMoveTaskToDate(kbDrag, ymd); setKbDrag(null); requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-cal-day="${ymd}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }))); } }}
                             className="border-b border-r p-1 min-h-[116px] flex flex-col gap-1 min-w-0" style={{ borderColor: '#EEEEE8', backgroundColor: isToday ? '#F5FBEC' : (dowN === 0 || dowN === 6) ? '#FBFBF9' : '#fff' }}>
@@ -1813,12 +1814,19 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
                   })}
                 </div>
                 <label className="text-[11px] font-semibold" style={{ color: '#9AA39D' }}>매주 반복 {formDays.length > 0 && <span style={{ color: '#7C3AED' }}>· 반복 업무</span>}</label>
-                <div className="flex gap-1 mt-1 mb-4">
+                <div className="flex gap-1 mt-1 mb-2">
                   {['일', '월', '화', '수', '목', '금', '토'].map((label, dow) => {
                     const on = formDays.includes(dow);
                     return <button key={dow} onClick={() => setFormDays(prev => on ? prev.filter(x => x !== dow) : [...prev, dow])} className="flex-1 text-[12px] font-bold rounded-lg py-1.5 border transition-colors" style={on ? { backgroundColor: '#F3F0FF', borderColor: '#C9BCF0', color: '#7C3AED' } : { backgroundColor: '#fff', borderColor: 'var(--spira-border)', color: '#C4CCC4' }}>{label}</button>;
                   })}
                 </div>
+                {formDays.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: '#9AA39D' }}>시작 날짜</span>
+                    <input type="date" value={formStart} onChange={e => setFormStart(e.target.value)} className="text-[12px] tabular-nums bg-white border rounded-lg px-2 py-1.5 outline-none focus:border-violet-400" style={{ borderColor: 'var(--spira-border)' }} />
+                    <span className="text-[10px]" style={{ color: '#C4CCC4' }}>이 날부터 캘린더에 반복 등록 (비우면 오늘부터)</span>
+                  </div>
+                )}
                 {(() => {
                   const cands = depCandidates(kbForm.col, kbForm.editTaskId);
                   if (!cands.length) return null;

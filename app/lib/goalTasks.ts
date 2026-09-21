@@ -201,7 +201,7 @@ export function getSubtaskTasksForDate(entries: WorkspaceEntry[], dateStr: strin
               // 매주 반복: 시작일 이후 & (기한 없거나 이전) & 해당 요일에 표시. 완료는 날짜별(doneDates)
               const dow = new Date(dateStr + 'T00:00:00').getDay();
               // 반복(매주)은 시작일이 미래여도 오늘 이후의 해당 요일엔 표시 (과거 날짜만 시작일 기준으로 가림)
-              const afterStart = !s.date || s.date <= dateStr || dateStr >= todayS;
+              const afterStart = !s.date || s.date <= dateStr; // 시작 날짜부터 표시 (지정한 시작일 존중)
               const beforeEnd = !s.deadline || s.deadline >= dateStr;
               const recMatch = afterStart && beforeEnd && s.days!.includes(dow);
               // extraDates: 반복 요일 아니어도 1회 추가 / skipDates: 그 날 occurrence 건너뜀 ('내일로' 이동)
