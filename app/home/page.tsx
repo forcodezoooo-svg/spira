@@ -195,9 +195,11 @@ export default function Home() {
   const deleteSubtask = (t: SubtaskTask) => {
     if (t.days?.length) {
       stopTaskTimer(t.key);
-      const skip = [...new Set([...(t.skipDates ?? []), dateStr])];        // 오늘 occurrence 건너뜀
-      const extra = (t.extraDates ?? []).filter(d => d !== dateStr);       // 내일하기로 옮겨온 오늘 표시가 있었으면 제거
+      const prevSkip = t.skipDates ?? [], prevExtra = t.extraDates ?? [];  // 되돌리기용 이전 상태
+      const skip = [...new Set([...prevSkip, dateStr])];                   // 오늘 occurrence 건너뜀
+      const extra = prevExtra.filter(d => d !== dateStr);                  // 내일하기로 옮겨온 오늘 표시가 있었으면 제거
       store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { skipDates: skip, extraDates: extra });
+      toast(`'${t.name}' 오늘 목록에서 제거했어요`, 'info', { label: '되돌리기', onClick: () => store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { skipDates: prevSkip, extraDates: prevExtra }) });
       return;
     }
     if (!window.confirm(`'${t.name}' 업무를 삭제할까요?\n되돌릴 수 없어요.`)) return;

@@ -2,10 +2,11 @@
 import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 
 type ToastType = 'error' | 'success' | 'info';
-interface ToastItem { id: number; message: string; type: ToastType; }
+interface ToastAction { label: string; onClick: () => void }
+interface ToastItem { id: number; message: string; type: ToastType; action?: ToastAction; }
 
 interface ToastCtx {
-  toast: (message: string, type?: ToastType) => void;
+  toast: (message: string, type?: ToastType, action?: ToastAction) => void;
   dismiss: (key: string) => void;
   /** 같은 key의 토스트가 이미 떠 있으면 중복 표시하지 않음 (예: 저장 실패 반복) */
   toastOnce: (key: string, message: string, type?: ToastType) => void;
@@ -29,15 +30,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     for (const [k, v] of activeKeys.current) if (v === id) activeKeys.current.delete(k);
   }, []);
 
-  const push = useCallback((message: string, type: ToastType, key?: string) => {
+  const push = useCallback((message: string, type: ToastType, key?: string, action?: ToastAction) => {
     const id = nextId++;
     if (key) activeKeys.current.set(key, id);
-    setToasts(t => [...t, { id, message, type }]);
-    setTimeout(() => remove(id), type === 'error' ? 5200 : 3000);
+    setToasts(t => [...t, { id, message, type, action }]);
+    setTimeout(() => remove(id), action ? 6000 : type === 'error' ? 5200 : 3000); // 되돌리기 등 액션이 있으면 조금 더 오래
     return id;
   }, [remove]);
 
-  const toast = useCallback((message: string, type: ToastType = 'info') => { push(message, type); }, [push]);
+  const toast = useCallback((message: string, type: ToastType = 'info', action?: ToastAction) => { push(message, type, undefined, action); }, [push]);
   const toastOnce = useCallback((key: string, message: string, type: ToastType = 'info') => {
     if (activeKeys.current.has(key)) return;
     push(message, type, key);
@@ -55,13 +56,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           const v = VARIANT[t.type];
           return (
             <div key={t.id} onClick={() => remove(t.id)}
-              className="pointer-events-auto flex items-center gap-2.5 pl-3 pr-4 py-2.5 rounded-full shadow-lg cursor-pointer max-w-[90vw]"
+              className={`pointer-events-auto flex items-center gap-2.5 pl-3 ${t.action ? 'pr-2' : 'pr-4'} py-2.5 rounded-full shadow-lg cursor-pointer max-w-[90vw]`}
               style={{ backgroundColor: v.bg, color: v.color, boxShadow: '0 10px 30px rgba(0,0,0,0.18)' }}>
               <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 flex-shrink-0">
                 <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.3" opacity="0.5" />
                 {v.icon}
               </svg>
               <span className="text-[13px] font-semibold leading-snug">{t.message}</span>
+              {t.action && (
+                <button onClick={e => { e.stopPropagation(); t.action!.onClick(); remove(t.id); }}
+                  className="ml-1 flex-shrink-0 text-[12px] font-black rounded-full px-3 py-1 transition-transform hover:-translate-y-px"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.14)', color: v.color }}>{t.action.label}</button>
+              )}
             </div>
           );
         })}
