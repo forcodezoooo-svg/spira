@@ -994,10 +994,27 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // '시작일을 옮겼는데 반복업무가 여전히 오늘 뜨는' 문제를 없앤다. (해당 카테고리 안에서만 — 다른 카테고리는 절대 건드리지 않음)
   const kbSetTodoDates = (col: KbCol, patch: { date?: string; deadline?: string }) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    const patchRecurringSub = (s: import('../lib/types').ProgramSubtask) => (s.days?.length ?? 0) > 0
+    const t0 = rawTodo(col); if (!t0) return;
+    // 카테고리(산출물) 기간의 이전/새 값 — 하위 일회성 task는 이 기간 안에서의 '위치(offset)·기간'을 유지한 채 함께 이동한다.
+    // (상위 프로젝트를 옮기면 산출물이 비례 이동하는 것과 동일 원리 — applyBarRange의 mapDate와 같은 방식)
+    const oldStart = t0.date, oldEnd = t0.deadline || t0.date;
+    const newStart = 'date' in patch ? (patch.date || undefined) : t0.date;
+    const newEnd = ('deadline' in patch ? (patch.deadline || undefined) : t0.deadline) || newStart;
+    const canRemap = !!(oldStart && newStart);
+    const oSpan = (oldStart && oldEnd) ? daysBetween(oldStart, oldEnd) : 0;
+    const nSpan = (newStart && newEnd) ? daysBetween(newStart, newEnd) : 0;
+    const remap = (x?: string) => {
+      if (!x || !canRemap) return x;
+      if (oSpan <= 0) return addDaysStr(x, daysBetween(oldStart!, newStart!)); // 폭 0(기간 미설정)이면 단순 이동
+      const off = daysBetween(oldStart!, x);
+      return addDaysStr(newStart!, Math.round((off * nSpan) / oSpan));
+    };
+    const mapSub = (s: import('../lib/types').ProgramSubtask) => (s.days?.length ?? 0) > 0
+      // 반복(매주) 업무: 요일 기준이라 위치 이동이 아니라 카테고리 시작/끝 경계에 맞춰 창(window)만 이동
       ? { ...s, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}) }
-      : s;
-    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}), subtasks: (t.subtasks ?? []).map(patchRecurringSub) }) }) });
+      // 일회성 업무: 기간 안에서의 위치·소요를 유지한 채 비례 이동 (세부작업 unit도 함께)
+      : { ...s, date: remap(s.date), deadline: remap(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: remap(u.date), deadline: remap(u.deadline) })) };
+    store.updateProgramInWs(col.p.wsId, { ...prog, deadlines: (prog.deadlines ?? []).map(dl => dl.id !== col.dlId ? dl : { ...dl, todos: dl.todos.map(t => t.id !== col.todoId ? t : { ...t, ...('date' in patch ? { date: patch.date || undefined } : {}), ...('deadline' in patch ? { deadline: patch.deadline || undefined } : {}), subtasks: (t.subtasks ?? []).map(mapSub) }) }) });
   };
   const kbSetStatus = (col: KbCol, status: string) => {
     if (!col.projectId) return;
