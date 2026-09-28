@@ -214,7 +214,8 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
       }
       const newTodos = dl.todos.map(td => {
         if (td.id !== t.todoId) return td;
-        if (t.level === 'todo') return { ...td, date: newStart, deadline: newEnd };
+        // 산출물(todo) 막대를 옮기면 하위 일회성 task도 기간에 맞춰 비례 이동(반복=매주는 요일 기준이라 유지). 상위→하위 동일 원리.
+        if (t.level === 'todo') return { ...td, date: newStart, deadline: newEnd, subtasks: (td.subtasks ?? []).map(s => (s.days?.length ?? 0) > 0 ? s : ({ ...s, date: mapDate(s.date), deadline: mapDate(s.deadline), units: (s.units ?? []).map(u => ({ ...u, date: mapDate(u.date), deadline: mapDate(u.deadline) })) })) };
         return { ...td, subtasks: (td.subtasks ?? []).map(s => {
           if (s.id !== t.subtaskId) return s;
           if (t.level === 'subtask') return { ...s, date: newStart, deadline: newEnd };
@@ -994,15 +995,24 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // '시작일을 옮겼는데 반복업무가 여전히 오늘 뜨는' 문제를 없앤다. (해당 카테고리 안에서만 — 다른 카테고리는 절대 건드리지 않음)
   const kbSetTodoDates = (col: KbCol, patch: { date?: string; deadline?: string }) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    const t0 = rawTodo(col); if (!t0) return;
+    const dl0 = (prog.deadlines ?? []).find(d => d.id === col.dlId);
+    const t0 = dl0?.todos?.find(t => t.id === col.todoId); if (!t0) return;
     // 카테고리(산출물) 기간의 이전/새 값 — 하위 일회성 task는 이 기간 안에서의 '위치(offset)·기간'을 유지한 채 함께 이동한다.
     // (상위 프로젝트를 옮기면 산출물이 비례 이동하는 것과 동일 원리 — applyBarRange의 mapDate와 같은 방식)
-    const oldStart = t0.date, oldEnd = t0.deadline || t0.date;
-    const newStart = 'date' in patch ? (patch.date || undefined) : t0.date;
-    const newEnd = ('deadline' in patch ? (patch.deadline || undefined) : t0.deadline) || newStart;
-    const canRemap = !!(oldStart && newStart);
+    // 카테고리 자체 날짜(t.date)가 비어 있어도 하위 task가 실제로 놓인 구간(최소~최대)을 기준으로 잡아 이동이 항상 걸리게 한다.
+    const subDates = (t0.subtasks ?? []).flatMap(s => [s.date, s.deadline]).filter((x): x is string => !!x).sort();
+    // 기준 시작 = (카테고리 선언 시작 t.date)와 (하위 task 실제 최소일) 중 더 이른 날.
+    //   이렇게 해야 이전에 카테고리만 옮겨져 t.date와 하위 task가 어긋난 경우에도, 다시 옮기면 하위 task가 제대로 따라온다.
+    const startCand = [t0.date, subDates[0]].filter((x): x is string => !!x).sort();
+    const oldStart = startCand[0] || dl0?.startDate;
+    const endCand = [t0.deadline, subDates[subDates.length - 1]].filter((x): x is string => !!x).sort();
+    const oldEnd = endCand[endCand.length - 1] || oldStart;
+    const newStart = ('date' in patch ? (patch.date || undefined) : t0.date) || oldStart;
     const oSpan = (oldStart && oldEnd) ? daysBetween(oldStart, oldEnd) : 0;
+    // 끝을 따로 안 바꿨으면 기간 길이를 유지(순수 이동) — 안 그러면 nSpan=0으로 하위 task가 한 점에 붕괴됨
+    const newEnd = ('deadline' in patch ? (patch.deadline || undefined) : undefined) || (newStart ? addDaysStr(newStart, oSpan) : undefined);
     const nSpan = (newStart && newEnd) ? daysBetween(newStart, newEnd) : 0;
+    const canRemap = !!(oldStart && newStart);
     const remap = (x?: string) => {
       if (!x || !canRemap) return x;
       if (oSpan <= 0) return addDaysStr(x, daysBetween(oldStart!, newStart!)); // 폭 0(기간 미설정)이면 단순 이동
