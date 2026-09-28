@@ -409,6 +409,19 @@ export function useStore() {
       }),
     }));
 
+  // Task(ProgramSubtask) 삭제 — Home/카테고리 보드 공용 (되돌릴 수 없음)
+  const deleteProgramSubtask = (wsId: string, programId: string, deadlineId: string, todoId: string, subtaskId: string) =>
+    updateWorkspace(wsId, e => ({
+      ...e,
+      programs: e.programs.map(p => p.id !== programId ? p : {
+        ...p,
+        deadlines: (p.deadlines ?? []).map(d => d.id !== deadlineId ? d : {
+          ...d,
+          todos: d.todos.map(t => t.id !== todoId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(s => s.id !== subtaskId) }),
+        }),
+      }),
+    }));
+
   // 완수한 할일에 기록(메모/이미지/링크) 저장
   const setProgramTodoRecord = (wsId: string, programId: string, deadlineId: string, todoId: string, record: import('./types').TodoRecord | undefined) =>
     updateWorkspace(wsId, e => ({
@@ -889,7 +902,7 @@ export function useStore() {
     addProgramToWs, updateProgramInWs, deleteProgramInWs, reorderProgramsInWs, applyAreaEstimate,
     setAnnualGoalInWs, advanceGrowthStage, setGrowthStageIndex, toggleAreaGoalAchieved, toggleDeadlineDone, shiftAllSchedulesAfter,
     journeyFlags: appData.journeyFlags ?? [],
-    setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask,
+    setWorkspaceColor, toggleProgramTodo, toggleProgramTodoDate, toggleProgramTodoStar, toggleProgramTodoLight, setProgramTodoRecord, updateProgramTodo, updateProgramSubtask, deleteProgramSubtask,
     offDays, isOffDay, toggleOffDay, isNonWorkingDay,
     workSchedule, setWorkDay,
     capacity, setBufferPercent, setDateCapacityOverride, setOffPeriod, setWeekWorkDay, resetWeekSchedule,

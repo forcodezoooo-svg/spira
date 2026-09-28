@@ -191,6 +191,12 @@ export default function Home() {
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
     if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };
+  // 업무 삭제 (영구 — 카테고리 보드/캘린더에서도 사라짐). 반복 업무는 모든 반복이 삭제됨.
+  const deleteSubtask = (t: SubtaskTask) => {
+    if (!window.confirm(`'${t.name}' 업무를 삭제할까요?${t.days?.length ? '\n(매주 반복 업무 전체가 삭제됩니다)' : ''}\n되돌릴 수 없어요.`)) return;
+    stopTaskTimer(t.key);
+    store.deleteProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId);
+  };
   // 다른 날짜의 task를 오늘로 옮기기
   const moveSubtaskToToday = (t: SubtaskTask) =>
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { date: dateStr, deadline: dateStr });
@@ -665,6 +671,13 @@ export default function Home() {
             내일 ↪
           </button>
         )}
+        <button
+          onClick={() => deleteSubtask(t)}
+          title="업무 삭제 (영구 — 카테고리 보드에서도 사라짐)"
+          className="text-neutral-300 hover:text-red-500 text-sm flex-shrink-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all"
+        >
+          ×
+        </button>
         {(t.units?.length ?? 0) > 0 && (
           <ul className="w-full mt-1 ml-7 space-y-1">
             {t.units!.map(u => { const ud = unitDoneToday(t, u); return (
