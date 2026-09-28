@@ -354,16 +354,21 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   useEffect(() => { try {
     if (localStorage.getItem('spira_open_task_board')) { localStorage.removeItem('spira_open_task_board'); setKanban(true); }
     const todo = localStorage.getItem('spira_open_task_todo');
-    if (todo) { localStorage.removeItem('spira_open_task_todo'); setKanban(true); setKbFlat(false); setFlagTodo(todo); }
+    if (todo) { localStorage.removeItem('spira_open_task_todo'); setKanban(true); setKbFlat(false); setKbBiz(null); setSelectedKey(null); setFlagTodo(todo); } // 필터·스코프 초기화해 그 카테고리가 항상 보이게
   } catch { /* empty */ } }, []);
   // Home에서 특정 카테고리로 넘어오면 그 카테고리 칼럼으로 스크롤 + 잠시 강조
   useEffect(() => {
     if (!flagTodo || !kanban) return;
-    let tries = 0;
-    const tick = () => { const el = boardRef.current?.querySelector(`[data-col-todo="${flagTodo}"]`) as HTMLElement | null; if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); else if (tries++ < 40) requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-    const t = setTimeout(() => setFlagTodo(null), 2600);
-    return () => clearTimeout(t);
+    // 스토어 동기화/렌더 지연으로 칼럼이 늦게 그려질 수 있어 ~4초까지 시간 기준으로 재시도(고정 프레임 수는 데이터 로드가 느리면 놓침)
+    let raf = 0; const deadline = Date.now() + 4000;
+    const tick = () => {
+      const el = boardRef.current?.querySelector(`[data-col-todo="${flagTodo}"]`) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      else if (Date.now() < deadline) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const t = setTimeout(() => setFlagTodo(null), 4600); // 강조 유지 시간(데이터 로드 지연 감안)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
   }, [flagTodo, kanban]);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
@@ -638,10 +643,11 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   for (const p of programs) {
     if (kbScope.program && kbScope.program.id !== p.id) continue;
     for (const dl of (p.deadlines ?? [])) {
-      if (!dlVisible(p.wsId, dl)) continue; // 완료 처리한 프로젝트(데드라인)는 숨김
+      // 완료 처리한 프로젝트(데드라인)는 숨김 — 단, Home/캘린더에서 이 산출물로 넘어와 강조 중(flagTodo)이면 표시
+      if (!dlVisible(p.wsId, dl) && !(flagTodo && dl.todos.some(t => t.id === flagTodo))) continue;
       if (kbScope.deadlineId && kbScope.deadlineId !== dl.id) continue;
       for (const t of dl.todos) {
-        if (t.done) continue; // 완료된 산출물은 카테고리 보드에서 숨김
+        if (t.done && t.id !== flagTodo) continue; // 완료된 산출물은 숨김 — 단, 강조 중인 산출물은 표시
         if (kbScope.todoId && kbScope.todoId !== t.id) continue;
         const { area, goalSub } = parseArea(t.name);
         // 완료는 뒤로 → 매주 반복 task 최상단 → 그 다음 디데이(기한) 순 (기한 없는 건 맨 뒤)
