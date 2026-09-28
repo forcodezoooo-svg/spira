@@ -1024,7 +1024,7 @@ export default function Home() {
                           {t.done && <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="#16211E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                         </button>
                         <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-                        <span className="text-[13px] font-semibold flex-1 min-w-0 truncate" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>{t.name}</span>
+                        <button onClick={() => { try { localStorage.setItem('spira_open_task_todo', t.todoId); } catch { /* empty */ } router.push('/programs'); }} title="Process에서 이 카테고리 열기" className="text-[13px] font-semibold flex-1 min-w-0 truncate text-left cursor-pointer hover:underline" style={{ color: t.done ? '#9AA39D' : '#16211E', textDecoration: t.done ? 'line-through' : 'none' }}>{t.name}</button>
                         {t.durationMin ? <span className="text-[10px] font-semibold flex-shrink-0" style={{ color: '#7C3AED' }}>{fmtDur(t.durationMin)}</span> : null}
                         {dday && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style={dday.urgent ? { color: '#fff', backgroundColor: '#FF696C' } : dday.overdue ? { color: '#5B6560', backgroundColor: '#F0F0EA' } : { color: '#3E7A2E', backgroundColor: '#DDF4C4' }}>{dday.label}</span>}
                         {!t.done && selectedCalDate !== dateStr && (
