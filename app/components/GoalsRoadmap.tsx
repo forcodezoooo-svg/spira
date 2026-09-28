@@ -354,21 +354,29 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   useEffect(() => { try {
     if (localStorage.getItem('spira_open_task_board')) { localStorage.removeItem('spira_open_task_board'); setKanban(true); }
     const todo = localStorage.getItem('spira_open_task_todo');
-    if (todo) { localStorage.removeItem('spira_open_task_todo'); setKanban(true); setKbFlat(false); setKbBiz(null); setSelectedKey(null); setFlagTodo(todo); } // 필터·스코프 초기화해 그 카테고리가 항상 보이게
+    // 필터·스코프 초기화해 그 카테고리가 항상 보이게. 스크롤은 아래 flagTodo effect가 전담(중앙 정렬).
+    if (todo) { localStorage.removeItem('spira_open_task_todo'); setKanban(true); setKbFlat(false); setKbBiz(null); setSelectedKey(null); setFlagTodo(todo); }
   } catch { /* empty */ } }, []);
-  // Home에서 특정 카테고리로 넘어오면 그 카테고리 칼럼으로 스크롤 + 잠시 강조
+  // Home에서 특정 카테고리로 넘어오면 그 카테고리 칼럼으로 스크롤(가로 보드 컨테이너를 직접 이동) + 잠시 강조
   useEffect(() => {
     if (!flagTodo || !kanban) return;
-    // 스토어 동기화/렌더 지연으로 칼럼이 늦게 그려질 수 있어 ~4초까지 시간 기준으로 재시도(고정 프레임 수는 데이터 로드가 느리면 놓침)
-    let raf = 0; const deadline = Date.now() + 4000;
+    let raf = 0; const deadline = Date.now() + 4000; const timers: ReturnType<typeof setTimeout>[] = [];
+    // 보드(가로 스크롤 컨테이너)에서 해당 칼럼이 화면 중앙에 오도록 scrollLeft를 직접 계산해 이동. scrollIntoView는 엉뚱한 조상을 스크롤하기도 해서 사용 안 함.
+    const doScroll = () => {
+      const board = boardRef.current;
+      const el = board?.querySelector(`[data-col-todo="${flagTodo}"]`) as HTMLElement | null;
+      if (!board || !el) return false;
+      const target = board.scrollLeft + (el.getBoundingClientRect().left - board.getBoundingClientRect().left) - (board.clientWidth - el.clientWidth) / 2;
+      board.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+      return true;
+    };
     const tick = () => {
-      const el = boardRef.current?.querySelector(`[data-col-todo="${flagTodo}"]`) as HTMLElement | null;
-      if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      if (doScroll()) { timers.push(setTimeout(doScroll, 220), setTimeout(doScroll, 600)); } // 레이아웃 정착 후 한두 번 보정
       else if (Date.now() < deadline) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     const t = setTimeout(() => setFlagTodo(null), 4600); // 강조 유지 시간(데이터 로드 지연 감안)
-    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); timers.forEach(clearTimeout); };
   }, [flagTodo, kanban]);
   // 카테고리 보드 진입 시 가로 스크롤을 맨 왼쪽으로 + 뷰 전환 시 선택 초기화
   // (selectedKey를 비워 특정 항목으로 스코프가 좁혀져 다른 카테고리가 안 보이는 문제 방지 — 보드는 항상 전체 카테고리 표시)
@@ -376,14 +384,16 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if (kanban) {
       const tid = scrollToTodoRef.current; scrollToTodoRef.current = null;
       setSelectedKey(null); setBarScope(null);
-      // 스코프 해제로 전체 보드가 다시 그려진 뒤, 보던 카테고리 위치로 스크롤 (없으면 맨 왼쪽)
-      requestAnimationFrame(() => requestAnimationFrame(() => {
+      // 스코프 해제로 전체 보드가 다시 그려진 뒤, 보던 카테고리 위치로 스크롤 (없으면 맨 왼쪽).
+      // 단 Home/캘린더에서 특정 카테고리로 넘어오는 중(flagTodo)이면 그쪽 effect가 중앙 정렬 스크롤을 전담하므로 여기선 0으로 리셋하지 않음.
+      if (!flagTodo) requestAnimationFrame(() => requestAnimationFrame(() => {
         const el = tid ? boardRef.current?.querySelector(`[data-col-todo="${tid}"]`) as HTMLElement | null : null;
         if (el && boardRef.current) boardRef.current.scrollLeft += el.getBoundingClientRect().left - boardRef.current.getBoundingClientRect().left; // 보던 보드를 맨 왼쪽에
         else if (boardRef.current) boardRef.current.scrollLeft = 0;
       }));
     }
     setSel(new Map()); setSelMode(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kanban]);
 
   // Goals 티칭 투어: 카테고리 보드 뷰 전환 / 우클릭 팝업 닫기 요청
