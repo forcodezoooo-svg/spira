@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import posthog from 'posthog-js';
 import { useStore } from '../lib/useStore';
 import { uid } from '../lib/store';
 import { DashboardSkeleton } from '../components/Skeleton';
@@ -184,10 +185,12 @@ export default function Home() {
       const has = (t.doneDates ?? []).includes(forDate);
       const next = has ? (t.doneDates ?? []).filter(d => d !== forDate) : [...(t.doneDates ?? []), forDate];
       store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { doneDates: next });
+      if (!has) posthog.capture('task_completed', { source: 'home', recurring: true }); // 유저가 만든 task를 완료했는지 추적
       return;
     }
     const nowDone = !t.done;
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? forDate : undefined });
+    if (nowDone) posthog.capture('task_completed', { source: 'home', recurring: false }); // 유저가 만든 task를 완료했는지 추적
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
     if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };
