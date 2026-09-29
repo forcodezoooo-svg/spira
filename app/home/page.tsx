@@ -19,7 +19,7 @@ import PullForwardModal from '../components/PullForwardModal';
 import ActualTimeModal from '../components/ActualTimeModal';
 import { useTimer } from '../lib/TimerContext';
 import { useAuth } from '../components/AuthProvider';
-import { bumpSurveyAction } from '../lib/survey';
+import { recordMeaningfulAction } from '../lib/analytics';
 import { ProgramTodo } from '../lib/types';
 import { computeDayCapacity, proposeReplan, proposePullForward, buildSubIndex, earliestFromDeps, estimateAccuracy, fmtMin, nextWorkingDay, isWorkingDay, ReplanProposal, ReplanMove, PullProposal } from '../lib/capacity';
 
@@ -188,12 +188,12 @@ export default function Home() {
       const has = (t.doneDates ?? []).includes(forDate);
       const next = has ? (t.doneDates ?? []).filter(d => d !== forDate) : [...(t.doneDates ?? []), forDate];
       store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { doneDates: next });
-      if (!has) { posthog.capture('task_completed', { source: 'home', recurring: true }); bumpSurveyAction(user?.id); } // 유저가 만든 task를 완료했는지 추적
+      if (!has) { posthog.capture('task_completed', { source: 'home', recurring: true }); recordMeaningfulAction('task_completed', user?.id); } // 유저가 만든 task를 완료했는지 추적
       return;
     }
     const nowDone = !t.done;
     store.updateProgramSubtask(t.wsId, t.programId, t.deadlineId, t.todoId, t.subtaskId, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? forDate : undefined });
-    if (nowDone) { posthog.capture('task_completed', { source: 'home', recurring: false }); bumpSurveyAction(user?.id); } // 유저가 만든 task를 완료했는지 추적
+    if (nowDone) { posthog.capture('task_completed', { source: 'home', recurring: false }); recordMeaningfulAction('task_completed', user?.id); } // 유저가 만든 task를 완료했는지 추적
     // 완료로 표시할 때 실제 소요시간을 아직 안 적었으면 물어본다 (§14, 강제 아님)
     if (nowDone && t.actualMin === undefined) setActualTarget(t);
   };

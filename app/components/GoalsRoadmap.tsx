@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '../lib/useStore';
 import { useToast } from '../lib/ToastContext';
 import { useAuth } from './AuthProvider';
-import { bumpSurveyAction } from '../lib/survey';
+import { recordMeaningfulAction } from '../lib/analytics';
 import { uid } from '../lib/store';
 import LevelBadge from './LevelBadge';
 import type { Program, ProjectStatus } from '../lib/types';
@@ -951,7 +951,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
   // task/세부작업 추가는 팝업 폼으로 (이름 + 소요 시간). task 날짜는 자동 지정
   const kbCreateTask = (col: KbCol, name: string, durMin?: number, schedulingType?: 'fixed' | 'due' | 'flexible', priority?: number, dependsOn?: string[], days?: number[], startDate?: string) => {
     const prog = findProg(col.p.wsId, col.p.id); if (!prog) return;
-    posthog.capture('task_added', { source: 'manual' }); bumpSurveyAction(user?.id);
+    posthog.capture('task_added', { source: 'manual' }); recordMeaningfulAction('task_added', user?.id);
     const recurring = !!days?.length;
     const d = (recurring && startDate) ? startDate : colStartAnchor(col); // 반복이면 지정한 시작일부터, 아니면 카테고리 시작일(미래면 그 날, 아니면 오늘)
     const sub = recurring
@@ -1130,7 +1130,7 @@ const GoalsRoadmap = forwardRef<GoalsRoadmapHandle, Props>(function GoalsRoadmap
     if ((s.days?.length ?? 0) > 0) return; // 반복 업무는 카테고리보드에서 완료 체크하지 않음(요일별로 Home에서 관리)
     const nowDone = !s.done;
     updateSub(col, s.id, { done: nowDone, status: nowDone ? 'done' : 'todo', doneDate: nowDone ? todayStr : undefined });
-    if (nowDone) { posthog.capture('task_completed', { source: 'board', recurring: false }); bumpSurveyAction(user?.id); } // 유저가 만든 task를 완료했는지 추적
+    if (nowDone) { posthog.capture('task_completed', { source: 'board', recurring: false }); recordMeaningfulAction('task_completed', user?.id); } // 유저가 만든 task를 완료했는지 추적
     if (nowDone && s.actualMin === undefined && !(s.days?.length)) setActualTarget({ col, s }); // 실제 소요시간 물어보기 (§14, 반복 제외)
   };
   const kbAddUnit = (col: KbCol, s: Sub) => { setKbForm({ mode: 'subtask', col, s }); setFormName(''); setFormDur(''); };
